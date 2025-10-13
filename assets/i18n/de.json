@@ -10,7 +10,6 @@
 
   "table.filter.placeholder": "Filtern …",
   "table.col.date": "Rechnungsdatum",
-  "table.col.dateDE": "Datum (DE)",
   "table.col.year": "Jahr",
   "table.col.month": "Monat",
   "table.col.company": "Firmenname",
@@ -38,8 +37,7 @@
   "field.company": "Firmenname",
   "field.shortdesc": "Kurzbezeichnung (max. 80 Zeichen)",
   "field.invoicenumber": "Rechnungsnummer",
-  "field.invoiceDate": "Rechnungsdatum (YYYY-MM-DD)",
-  "field.dateDE": "Datum (DE)",
+  "field.invoiceDate": "Rechnungsdatum (DD.MM.YYYY)",
   "field.net": "Betrag netto",
   "field.vatPercent": "Steuersatz in %",
   "field.vatAmount": "Steuerbetrag",
@@ -47,7 +45,7 @@
   "field.currency": "Währung",
   "field.account": "Gegenkonto",
   "field.bankAccount": "Bankkonto",
-  "field.paymentDate": "Bezahldatum (YYYY-MM-DD)",
+  "field.paymentDate": "Bezahldatum (DD.MM.YYYY)",
   "field.partialPayment": "Teilzahlung",
 
   "checkbox.rememberMap": "Diese Zuordnung (Firma→Konto) merken",

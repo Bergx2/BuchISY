@@ -13,7 +13,6 @@ import (
 var DefaultCSVColumns = []string{
 	"Dateiname",
 	"Rechnungsdatum",
-	"Datum_Deutsch",
 	"Jahr",
 	"Monat",
 	"Firmenname",
@@ -34,7 +33,6 @@ var DefaultCSVColumns = []string{
 var ColumnDisplayNames = map[string]string{
 	"Dateiname":          "Dateiname",
 	"Rechnungsdatum":     "Rechnungsdatum",
-	"Datum_Deutsch":      "Datum (DE)",
 	"Jahr":               "Jahr",
 	"Monat":              "Monat",
 	"Firmenname":         "Firmenname",
@@ -55,7 +53,6 @@ var ColumnDisplayNames = map[string]string{
 var ColumnTranslationKeys = map[string]string{
 	"Dateiname":          "table.col.filename",
 	"Rechnungsdatum":     "table.col.date",
-	"Datum_Deutsch":      "table.col.dateDE",
 	"Jahr":               "table.col.year",
 	"Monat":              "table.col.month",
 	"Firmenname":         "table.col.company",
@@ -144,7 +141,6 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 		row := CSVRow{
 			Dateiname:         valueForColumn(record, headerMap, "Dateiname"),
 			Rechnungsdatum:    valueForColumn(record, headerMap, "Rechnungsdatum"),
-			DatumDeutsch:      valueForColumn(record, headerMap, "Datum_Deutsch"),
 			Jahr:              valueForColumn(record, headerMap, "Jahr"),
 			Monat:             valueForColumn(record, headerMap, "Monat"),
 			Firmenname:        valueForColumn(record, headerMap, "Firmenname"),
@@ -274,7 +270,6 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 	valueMap := map[string]string{
 		"Dateiname":          row.Dateiname,
 		"Rechnungsdatum":     row.Rechnungsdatum,
-		"Datum_Deutsch":      row.DatumDeutsch,
 		"Jahr":               row.Jahr,
 		"Monat":              row.Monat,
 		"Firmenname":         row.Firmenname,

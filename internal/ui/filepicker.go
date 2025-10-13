@@ -59,11 +59,11 @@ func (a *App) processPDFAsync(path string) {
 		// Extract and process (background work)
 		meta, err := a.extractPDFData(ctx, path)
 
-		// Small delay to ensure progress dialog is fully hidden before showing next dialog
-		time.Sleep(50 * time.Millisecond)
-
 		// UI operations in Fyne v2 are thread-safe and can be called from goroutines
 		progress.Hide()
+
+		// Wait for progress dialog to fully hide before showing next dialog
+		time.Sleep(150 * time.Millisecond)
 
 		if err != nil {
 			a.logger.Error("Failed to process PDF: %v", err)

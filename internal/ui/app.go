@@ -225,7 +225,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	// Build the full string to match the dropdown options (e.g., "09 - September")
 	monthKey := fmt.Sprintf("month.%02d", a.currentMonth)
 	monthName := a.bundle.T(monthKey)
-	currentMonthStr := fmt.Sprintf("%02d - %s", a.currentMonth, monthName)
+	currentMonthStr := fmt.Sprintf("%02d - %-12s", a.currentMonth, monthName)
 
 	a.monthSelect = widget.NewSelect(months, func(selected string) {
 		var month int
@@ -235,9 +235,8 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	})
 	a.monthSelect.SetSelected(currentMonthStr)
 
-	// Wrap month select in a container with fixed width for full month names
-	monthContainer := container.NewMax(a.monthSelect)
-	monthContainer.Resize(fyne.NewSize(220, 40))
+	// Wrap month select in a container with minimum width
+	monthContainer := container.NewStack(a.monthSelect)
 
 	// Open folder button
 	openFolderBtn := widget.NewButton(a.bundle.T("menu.openTarget"), func() {
@@ -369,7 +368,14 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 	if !hasText {
 		a.logger.Warn("No text found in PDF (length: %d, might be scanned image)", len(text))
 		a.logger.Debug("Full text content: '%s'", text)
-		// Return empty meta, caller will handle "no text" case
+
+		// If using Claude mode, try vision extraction
+		if a.settings.ProcessingMode == "claude" {
+			a.logger.Info("Attempting vision extraction with Claude...")
+			return a.extractPDFWithVision(ctx, path)
+		}
+
+		// For local mode, we can't process images
 		return core.Meta{}, fmt.Errorf("no text found in PDF")
 	}
 
@@ -405,6 +411,62 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 		a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
 		a.logger.Debug("Net: %.2f", meta.BetragNetto)
 		a.logger.Debug("Tax: %.2f%% (%.2f)", meta.SteuersatzProzent, meta.SteuersatzBetrag)
+	}
+
+	// Suggest account
+	if a.settings.AutoSelectAccount && meta.Firmenname != "" {
+		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+			meta.Gegenkonto = account
+		} else {
+			meta.Gegenkonto = a.settings.DefaultAccount
+		}
+	} else {
+		meta.Gegenkonto = a.settings.DefaultAccount
+	}
+
+	return meta, nil
+}
+
+// extractPDFWithVision extracts metadata from a PDF using Claude's vision API.
+func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta, error) {
+	a.logger.Info("=== PDF VISION EXTRACTION START ===")
+	a.logger.Info("File: %s", path)
+
+	// Convert PDF first page to PNG image
+	imageBase64, mediaType, err := core.PDFToImageBase64(path)
+	if err != nil {
+		a.logger.Error("Failed to convert PDF to image: %v", err)
+		return core.Meta{}, fmt.Errorf("failed to render PDF for vision: %w", err)
+	}
+
+	a.logger.Info("PDF page rendered to %s, base64 size: %d bytes", mediaType, len(imageBase64))
+
+	// Get API key from keyring
+	apiKey, err := keyring.Get("BuchISY", a.settings.AnthropicAPIKeyRef)
+	if err != nil {
+		return core.Meta{}, fmt.Errorf("failed to get API key: %w", err)
+	}
+
+	// Extract using vision API
+	meta, confidence, err := a.anthropicExtractor.ExtractFromImage(
+		ctx,
+		apiKey,
+		a.settings.AnthropicModel,
+		imageBase64,
+		mediaType,
+	)
+	if err != nil {
+		return core.Meta{}, fmt.Errorf("Claude vision extraction failed: %w", err)
+	}
+
+	a.logger.Info("Vision extraction succeeded with confidence %.2f", confidence)
+
+	if a.settings.DebugMode {
+		a.logger.Debug("=== EXTRACTED METADATA (VISION) ===")
+		a.logger.Debug("Company: %s", meta.Firmenname)
+		a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
+		a.logger.Debug("Date: %s", meta.Rechnungsdatum)
+		a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
 	}
 
 	// Suggest account
@@ -460,7 +522,8 @@ func generateMonthOptions(bundle *i18n.Bundle) []string {
 	for i := 1; i <= 12; i++ {
 		monthKey := fmt.Sprintf("month.%02d", i)
 		monthName := bundle.T(monthKey)
-		months[i-1] = fmt.Sprintf("%02d - %s", i, monthName)
+		// Add padding to prevent truncation of longer month names
+		months[i-1] = fmt.Sprintf("%02d - %-12s", i, monthName)
 	}
 	return months
 }

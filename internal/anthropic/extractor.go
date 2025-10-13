@@ -23,8 +23,7 @@ Ziel: Liefere ausschließlich ein strenges JSON-Objekt mit genau diesen Schlüss
   "steuersatz_betrag": 0.0,
   "bruttobetrag": 0.0,
   "waehrung": "EUR|USD|andere ISO4217 oder null",
-  "rechnungsdatum": "YYYY-MM-DD oder null",
-  "datum_deutsch": "dd.MM.yyyy oder null",
+  "rechnungsdatum": "dd.MM.yyyy oder null",
   "jahr": "YYYY oder null",
   "monat": "MM oder null"
 }
@@ -34,8 +33,7 @@ Regeln:
 - Antworte nur mit JSON, ohne Prosa.
 - Wenn unsicher: Feld auf null setzen, nicht raten.
 - firmenname: Verwende den Aussteller (Vendor), nicht den Rechnungsempfänger.
-- rechnungsdatum: Bevorzuge das Feld nahe "Rechnung/Rechnungsdatum/Datum". Normalisiere nach YYYY-MM-DD.
-- datum_deutsch: gleiche Bedeutung wie rechnungsdatum, aber formatiert als dd.MM.yyyy.
+- rechnungsdatum: Bevorzuge das Feld nahe "Rechnung/Rechnungsdatum/Datum". Normalisiere nach dd.MM.yyyy (deutsches Format).
 - betragnetto / steuersatz_prozent / steuersatz_betrag / bruttobetrag:
   - bruttobetrag = Gesamtbetrag / Total / Rechnungsbetrag.
   - Nutze Punkt als Dezimaltrennzeichen in JSON (56.23) und entferne Tausendertrennzeichen.
@@ -65,6 +63,48 @@ func NewExtractor(logger *logging.Logger, debug bool) *Extractor {
 // SetDebug enables or disables debug logging.
 func (e *Extractor) SetDebug(debug bool) {
 	e.debug = debug
+}
+
+// ExtractFromImage extracts invoice metadata from a PDF image using Claude Vision API.
+func (e *Extractor) ExtractFromImage(ctx context.Context, apiKey, model, imageBase64, mediaType string) (core.Meta, float64, error) {
+	// Simplified prompt for vision - Claude can see the invoice directly
+	visionPrompt := "Bitte extrahiere die Rechnungsinformationen aus diesem Dokument."
+
+	// Debug logging: log request
+	if e.debug && e.logger != nil {
+		e.logger.Debug("=== CLAUDE VISION API REQUEST ===")
+		e.logger.Debug("Model: %s", model)
+		e.logger.Debug("Image size: %d bytes (base64)", len(imageBase64))
+		e.logger.Debug("Media type: %s", mediaType)
+	}
+
+	// Send request with image
+	response, err := e.client.SendWithImage(ctx, apiKey, model, systemPrompt, visionPrompt, imageBase64, mediaType)
+	if err != nil {
+		if e.debug && e.logger != nil {
+			e.logger.Debug("=== CLAUDE VISION API ERROR ===")
+			e.logger.Debug("Error: %v", err)
+		}
+		return core.Meta{}, 0, fmt.Errorf("Vision API request failed: %w", err)
+	}
+
+	// Debug logging: log response
+	if e.debug && e.logger != nil {
+		e.logger.Debug("=== CLAUDE VISION API RESPONSE ===")
+		e.logger.Debug("Response length: %d chars", len(response))
+		e.logger.Debug("Full response: %s", response)
+	}
+
+	// Parse the JSON response (same as text extraction)
+	meta, err := parseExtractionResponse(response)
+	if err != nil {
+		return core.Meta{}, 0, err
+	}
+
+	// Confidence is high for Claude Vision (assume 0.95 for vision)
+	confidence := 0.95
+
+	return meta, confidence, nil
 }
 
 // Extract extracts invoice metadata from text using Claude API.
@@ -99,6 +139,23 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string) (co
 		e.logger.Debug("Full response: %s", response)
 	}
 
+	// Parse the JSON response
+	meta, err := parseExtractionResponse(response)
+	if err != nil {
+		return core.Meta{}, 0, err
+	}
+
+	// Confidence is high for Claude (assume 0.9 if we got a response)
+	confidence := 0.9
+
+	return meta, confidence, nil
+}
+
+// parseExtractionResponse parses the JSON response from Claude API.
+func parseExtractionResponse(response string) (core.Meta, error) {
+	// Clean response (remove any markdown code blocks if present)
+	response = cleanJSONResponse(response)
+
 	// Parse JSON response
 	var result struct {
 		Firmenname        *string  `json:"firmenname"`
@@ -110,16 +167,12 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string) (co
 		Bruttobetrag      *float64 `json:"bruttobetrag"`
 		Waehrung          *string  `json:"waehrung"`
 		Rechnungsdatum    *string  `json:"rechnungsdatum"`
-		DatumDeutsch      *string  `json:"datum_deutsch"`
 		Jahr              *string  `json:"jahr"`
 		Monat             *string  `json:"monat"`
 	}
 
-	// Clean response (remove any markdown code blocks if present)
-	response = cleanJSONResponse(response)
-
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return core.Meta{}, 0, fmt.Errorf("failed to parse JSON response: %w (response: %s)", err, response)
+		return core.Meta{}, fmt.Errorf("failed to parse JSON response: %w (response: %s)", err, response)
 	}
 
 	// Convert to Meta
@@ -152,9 +205,6 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string) (co
 	if result.Rechnungsdatum != nil {
 		meta.Rechnungsdatum = *result.Rechnungsdatum
 	}
-	if result.DatumDeutsch != nil {
-		meta.DatumDeutsch = *result.DatumDeutsch
-	}
 	if result.Jahr != nil {
 		meta.Jahr = *result.Jahr
 	}
@@ -162,10 +212,7 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string) (co
 		meta.Monat = *result.Monat
 	}
 
-	// Confidence is high for Claude (assume 0.9 if we got a response)
-	confidence := 0.9
-
-	return meta, confidence, nil
+	return meta, nil
 }
 
 // preprocessText limits and prioritizes invoice-relevant content.

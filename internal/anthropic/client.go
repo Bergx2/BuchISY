@@ -33,10 +33,24 @@ func NewClient() *Client {
 	}
 }
 
+// ContentBlock represents a block of content (text or image).
+type ContentBlock struct {
+	Type   string       `json:"type"`
+	Text   string       `json:"text,omitempty"`
+	Source *ImageSource `json:"source,omitempty"`
+}
+
+// ImageSource represents an image source.
+type ImageSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+}
+
 // Message represents a message in the conversation.
 type Message struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"` // Can be string or []ContentBlock
 }
 
 // Request represents an API request to Claude.
@@ -83,6 +97,62 @@ func (c *Client) Send(ctx context.Context, apiKey, model, systemPrompt, userMess
 			{
 				Role:    "user",
 				Content: userMessage,
+			},
+		},
+		System: systemPrompt,
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Wait before retry
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(retryDelay * time.Duration(attempt)):
+			}
+		}
+
+		resp, err := c.doRequest(ctx, apiKey, req)
+		if err == nil {
+			return resp, nil
+		}
+
+		lastErr = err
+
+		// Check if we should retry
+		if !shouldRetry(err) {
+			break
+		}
+	}
+
+	return "", fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+// SendWithImage sends a request with an image to the Claude API.
+func (c *Client) SendWithImage(ctx context.Context, apiKey, model, systemPrompt, userMessage, imageBase64, mediaType string) (string, error) {
+	content := []ContentBlock{
+		{
+			Type: "image",
+			Source: &ImageSource{
+				Type:      "base64",
+				MediaType: mediaType,
+				Data:      imageBase64,
+			},
+		},
+		{
+			Type: "text",
+			Text: userMessage,
+		},
+	}
+
+	req := Request{
+		Model:     model,
+		MaxTokens: 4096,
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: content,
 			},
 		},
 		System: systemPrompt,
