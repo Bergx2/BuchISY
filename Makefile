@@ -25,14 +25,14 @@ all: test build
 build:
 	@echo "Building for current platform..."
 	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	MACOSX_DEPLOYMENT_TARGET=15.0 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
 # Build for macOS (current architecture only, CGO required)
 build-macos:
 	@echo "Building for macOS (current architecture)..."
 	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-macos $(MAIN_PATH)
+	MACOSX_DEPLOYMENT_TARGET=15.0 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-macos $(MAIN_PATH)
 	@echo "macOS build complete: $(BUILD_DIR)/$(BINARY_NAME)-macos"
 
 # Build for Windows
@@ -46,7 +46,7 @@ build-windows:
 package-macos:
 	@echo "Packaging for macOS..."
 	@test -f ~/go/bin/fyne || (echo "Installing fyne command..." && go install fyne.io/fyne/v2/cmd/fyne@latest)
-	~/go/bin/fyne package -os darwin -name $(APP_NAME) -src $(MAIN_PATH)
+	MACOSX_DEPLOYMENT_TARGET=15.0 ~/go/bin/fyne package -os darwin -name $(APP_NAME) -src $(MAIN_PATH)
 	@echo "Copying assets into app bundle..."
 	@mkdir -p $(APP_NAME).app/Contents/Resources
 	@cp -r assets $(APP_NAME).app/Contents/Resources/

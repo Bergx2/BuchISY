@@ -302,6 +302,26 @@ func (a *App) showSettingsDialog() {
 	if len(tempColumnOrder) == 0 {
 		tempColumnOrder = make([]string, len(core.DefaultCSVColumns))
 		copy(tempColumnOrder, core.DefaultCSVColumns)
+	} else {
+		// Filter out columns that no longer exist in ColumnDisplayNames
+		validColumns := make([]string, 0, len(tempColumnOrder))
+		for _, col := range tempColumnOrder {
+			if _, ok := core.ColumnDisplayNames[col]; ok {
+				validColumns = append(validColumns, col)
+			}
+		}
+		tempColumnOrder = validColumns
+
+		// Add any missing columns from defaults (e.g., newly added fields)
+		existingCols := make(map[string]bool)
+		for _, col := range tempColumnOrder {
+			existingCols[col] = true
+		}
+		for _, col := range core.DefaultCSVColumns {
+			if !existingCols[col] {
+				tempColumnOrder = append(tempColumnOrder, col)
+			}
+		}
 	}
 
 	columnList := container.NewVBox()

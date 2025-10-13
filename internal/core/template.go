@@ -48,7 +48,6 @@ func ApplyTemplate(template string, meta Meta, opts TemplateOpts) (string, error
 		"${YYYY}":            meta.Jahr,
 		"${MM}":              meta.Monat,
 		"${DD}":              extractDay(meta.Rechnungsdatum),
-		"${DatumDeutsch}":    meta.DatumDeutsch,
 		"${Company}":         meta.Firmenname,
 		"${InvoiceNumber}":   meta.Rechnungsnummer,
 		"${Kurzbezeichnung}": meta.Kurzbezeichnung,
@@ -70,29 +69,23 @@ func ApplyTemplate(template string, meta Meta, opts TemplateOpts) (string, error
 	return result, nil
 }
 
-// extractDay extracts the day from a YYYY-MM-DD date string.
+// extractDay extracts the day from a DD.MM.YYYY date string.
 func extractDay(date string) string {
-	parts := strings.Split(date, "-")
+	parts := strings.Split(date, ".")
 	if len(parts) == 3 {
-		return parts[2]
+		return parts[0] // Day is the first part in DD.MM.YYYY format
 	}
 	return ""
 }
 
-// FormatGermanDate formats a YYYY-MM-DD date as dd.MM.yyyy.
-func FormatGermanDate(yyyyMmDd string) string {
-	parts := strings.Split(yyyyMmDd, "-")
-	if len(parts) != 3 {
-		return yyyyMmDd
-	}
-	return fmt.Sprintf("%s.%s.%s", parts[2], parts[1], parts[0])
+// FormatGermanDate is kept for backward compatibility but dates are already in DD.MM.YYYY format.
+// This function now just returns the input unchanged.
+func FormatGermanDate(ddMmYyyy string) string {
+	return ddMmYyyy
 }
 
-// ParseGermanDate parses a dd.MM.yyyy date to YYYY-MM-DD.
+// ParseGermanDate is kept for backward compatibility.
+// Since dates are now stored in DD.MM.YYYY format, this returns the input unchanged.
 func ParseGermanDate(ddMmYyyy string) string {
-	parts := strings.Split(ddMmYyyy, ".")
-	if len(parts) != 3 {
-		return ddMmYyyy
-	}
-	return fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+	return ddMmYyyy
 }

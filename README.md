@@ -56,8 +56,11 @@ make deps
 make build
 
 # Or build for specific platforms
-make build-macos      # macOS (Intel + ARM)
-make build-windows    # Windows
+MACOSX_DEPLOYMENT_TARGET=15.0 make build-macos      # macOS (Intel + ARM)
+MACOSX_DEPLOYMENT_TARGET=15.0 make build-windows    # Windows
+
+# Or apps
+MACOSX_DEPLOYMENT_TARGET=15.0 make package-macos
 
 # Run the application
 ./build/buchisy
@@ -134,12 +137,11 @@ Access via the "Einstellungen" button.
 Each month folder contains an `invoices.csv` file with the following columns:
 
 ```
-Dateiname,Rechnungsdatum,Datum_Deutsch,Jahr,Monat,Firmenname,Kurzbezeichnung,Rechnungsnummer,BetragNetto,Steuersatz_Prozent,Steuersatz_Betrag,Bruttobetrag,Waehrung,Gegenkonto
+Dateiname,Rechnungsdatum,Jahr,Monat,Firmenname,Kurzbezeichnung,Rechnungsnummer,BetragNetto,Steuersatz_Prozent,Steuersatz_Betrag,Bruttobetrag,Waehrung,Gegenkonto,Bankkonto,Bezahldatum,Teilzahlung
 ```
 
 - All amounts use `.` as decimal separator in CSV (regardless of UI settings)
-- Dates are in `YYYY-MM-DD` format (ISO) for Rechnungsdatum
-- Datum_Deutsch uses German format `dd.MM.yyyy`
+- Dates (Rechnungsdatum and Bezahldatum) are in German format `DD.MM.YYYY`
 
 ## File Structure
 
@@ -255,9 +257,11 @@ Contributions are welcome! Please:
 
 ## License
 
-Copyright © 2025 Bergx2 GmbH. All rights reserved.
+MIT License - Copyright © 2025 Bergx2 GmbH
 
-_License details TBD_
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+You are free to use, modify, distribute, and sell this software without restriction.
 
 ## Support
 

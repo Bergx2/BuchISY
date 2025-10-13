@@ -43,11 +43,11 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 	// Extract invoice date
 	if date := e.extractDate(text); date != "" {
 		meta.Rechnungsdatum = date
-		meta.DatumDeutsch = FormatGermanDate(date)
-		parts := strings.Split(date, "-")
+		// Parse DD.MM.YYYY format
+		parts := strings.Split(date, ".")
 		if len(parts) == 3 {
-			meta.Jahr = parts[0]
-			meta.Monat = parts[1]
+			meta.Jahr = parts[2]  // Year is the third part
+			meta.Monat = parts[1] // Month is the second part
 		}
 		matched++
 	}
@@ -124,7 +124,7 @@ func (e *LocalExtractor) extractInvoiceNumber(text string) string {
 	return ""
 }
 
-// extractDate extracts the invoice date and returns it in YYYY-MM-DD format.
+// extractDate extracts the invoice date and returns it in DD.MM.YYYY format.
 func (e *LocalExtractor) extractDate(text string) string {
 	// Patterns for German dates (dd.MM.yyyy or dd.MM.yy)
 	germanDatePatterns := []string{
@@ -139,15 +139,18 @@ func (e *LocalExtractor) extractDate(text string) string {
 			day := pad(matches[1], 2)
 			month := pad(matches[2], 2)
 			year := matches[3]
-			return year + "-" + month + "-" + day
+			return day + "." + month + "." + year
 		}
 	}
 
-	// ISO date (YYYY-MM-DD)
+	// ISO date (YYYY-MM-DD) - convert to German format
 	isoPattern := `(\d{4})-(\d{2})-(\d{2})`
 	re := regexp.MustCompile(isoPattern)
 	if matches := re.FindStringSubmatch(text); len(matches) > 3 {
-		return matches[0]
+		year := matches[1]
+		month := matches[2]
+		day := matches[3]
+		return day + "." + month + "." + year
 	}
 
 	return ""

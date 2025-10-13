@@ -16,13 +16,12 @@ type Meta struct {
 	SteuersatzBetrag  float64 // Tax amount
 	Bruttobetrag      float64 // Gross amount
 	Waehrung          string  // Currency (EUR, USD, etc.)
-	Rechnungsdatum    string  // Invoice date YYYY-MM-DD
-	DatumDeutsch      string  // German date format dd.MM.yyyy
+	Rechnungsdatum    string  // Invoice date DD.MM.YYYY
 	Jahr              string  // Year YYYY
 	Monat             string  // Month MM
 	Gegenkonto        int     // Account code
 	Bankkonto         string  // Bank account
-	Bezahldatum       string  // Payment date YYYY-MM-DD
+	Bezahldatum       string  // Payment date DD.MM.YYYY
 	Teilzahlung       bool    // Partial payment flag
 	Dateiname         string  // Final filename
 }
@@ -72,7 +71,7 @@ func DefaultSettings() Settings {
 		NamingTemplate:     "${YYYY}-${MM}-${DD}_${Company}_${GrossAmount}_${Currency}.pdf",
 		DecimalSeparator:   ",",
 		CurrencyDefault:    "EUR",
-		AnthropicModel:     "claude-3-5-sonnet-20241022",
+		AnthropicModel:     "claude-sonnet-4-5",
 		AnthropicAPIKeyRef: "claude", // keyring account name
 		Language:           "de",
 		ProcessingMode:     "claude",
@@ -116,7 +115,6 @@ type MetaExtractor interface {
 type CSVRow struct {
 	Dateiname         string
 	Rechnungsdatum    string
-	DatumDeutsch      string
 	Jahr              string
 	Monat             string
 	Firmenname        string
@@ -138,7 +136,6 @@ func (m Meta) ToCSVRow() CSVRow {
 	return CSVRow{
 		Dateiname:         m.Dateiname,
 		Rechnungsdatum:    m.Rechnungsdatum,
-		DatumDeutsch:      m.DatumDeutsch,
 		Jahr:              m.Jahr,
 		Monat:             m.Monat,
 		Firmenname:        m.Firmenname,
@@ -153,6 +150,28 @@ func (m Meta) ToCSVRow() CSVRow {
 		Bankkonto:         m.Bankkonto,
 		Bezahldatum:       m.Bezahldatum,
 		Teilzahlung:       m.Teilzahlung,
+	}
+}
+
+// ToMeta converts CSVRow to Meta.
+func (r CSVRow) ToMeta() Meta {
+	return Meta{
+		Dateiname:         r.Dateiname,
+		Rechnungsdatum:    r.Rechnungsdatum,
+		Jahr:              r.Jahr,
+		Monat:             r.Monat,
+		Firmenname:        r.Firmenname,
+		Kurzbezeichnung:   r.Kurzbezeichnung,
+		Rechnungsnummer:   r.Rechnungsnummer,
+		BetragNetto:       r.BetragNetto,
+		SteuersatzProzent: r.SteuersatzProzent,
+		SteuersatzBetrag:  r.SteuersatzBetrag,
+		Bruttobetrag:      r.Bruttobetrag,
+		Waehrung:          r.Waehrung,
+		Gegenkonto:        r.Gegenkonto,
+		Bankkonto:         r.Bankkonto,
+		Bezahldatum:       r.Bezahldatum,
+		Teilzahlung:       r.Teilzahlung,
 	}
 }
 

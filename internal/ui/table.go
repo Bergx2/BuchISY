@@ -6,11 +6,51 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bergx2/buchisy/internal/core"
 	"github.com/bergx2/buchisy/internal/i18n"
 )
+
+// hoverLabel is a label that shows tooltip on hover
+type hoverLabel struct {
+	widget.Label
+	onHover       func(string, fyne.Position)
+	onExit        func()
+	tooltip       string
+	tooltipShown  bool
+	lastTooltipPos fyne.Position
+}
+
+func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLabel {
+	hl := &hoverLabel{
+		onHover: onHover,
+		onExit:  onExit,
+	}
+	hl.ExtendBaseWidget(hl)
+	hl.Truncation = fyne.TextTruncateEllipsis
+	return hl
+}
+
+func (hl *hoverLabel) MouseIn(ev *desktop.MouseEvent) {
+	if hl.tooltip != "" && hl.onHover != nil && !hl.tooltipShown {
+		hl.onHover(hl.tooltip, ev.AbsolutePosition)
+		hl.tooltipShown = true
+		hl.lastTooltipPos = ev.AbsolutePosition
+	}
+}
+
+func (hl *hoverLabel) MouseMoved(ev *desktop.MouseEvent) {
+	// Don't recreate tooltip on every mouse move - only on MouseIn
+}
+
+func (hl *hoverLabel) MouseOut() {
+	hl.tooltipShown = false
+	if hl.onExit != nil {
+		hl.onExit()
+	}
+}
 
 // InvoiceTable displays a table of invoices with filtering.
 type InvoiceTable struct {
@@ -24,12 +64,12 @@ type InvoiceTable struct {
 	lastSelectedRow int  // Track last selected row for context menu
 	window          fyne.Window
 	columnOrder     []string
+	tooltipPopup    *widget.PopUp // Shared tooltip popup
 }
 
 var columnWidthMap = map[string]float32{
 	"Dateiname":          250,
-	"Rechnungsdatum":     140,
-	"Datum_Deutsch":      120,
+	"Rechnungsdatum":     120,
 	"Jahr":               80,
 	"Monat":              80,
 	"Firmenname":         200,
@@ -60,13 +100,38 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 		it.applyFilter(query)
 	}
 
+	// Tooltip show/hide callbacks
+	showTooltip := func(text string, pos fyne.Position) {
+		if it.window == nil {
+			return
+		}
+		it.hideTooltip()
+
+		// Create label with no wrapping
+		label := widget.NewLabel(text)
+		label.Wrapping = fyne.TextWrapOff
+
+		// Use a HBox container to keep text horizontal
+		tooltipBox := container.NewHBox(label)
+
+		it.tooltipPopup = widget.NewPopUp(
+			container.NewPadded(tooltipBox),
+			it.window.Canvas(),
+		)
+		it.tooltipPopup.ShowAtPosition(pos.Add(fyne.NewPos(10, 10)))
+	}
+
+	hideTooltip := func() {
+		it.hideTooltip()
+	}
+
 	it.table = widget.NewTable(
 		func() (int, int) {
-			return len(it.filtered) + 1, len(it.columnOrder) + 1
+			return len(it.filtered) + 1, len(it.columnOrder) + 2 // +2 for edit and delete columns
 		},
 		func() fyne.CanvasObject {
 			return container.NewStack(
-				widget.NewLabel(""),
+				newHoverLabel(showTooltip, hideTooltip),
 				widget.NewButton("", nil),
 			)
 		},
@@ -74,19 +139,43 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			stack := cell.(*fyne.Container)
 
 			if id.Col == 0 {
-				// Delete button column (FIRST column now)
-				label := stack.Objects[0].(*widget.Label)
+				// Edit button column (FIRST column now)
+				hoverLabel := stack.Objects[0].(*hoverLabel)
 				btn := stack.Objects[1].(*widget.Button)
 
+				hoverLabel.Hide()
+
 				if id.Row == 0 {
-					// Header
-					label.SetText("")
-					label.TextStyle.Bold = true
+					// Header - hide button completely
 					btn.Hide()
 				} else {
 					// Data row
-					label.Hide()
-					btn.SetText("🗑️")
+					btn.SetText("✏️")
+					btn.Importance = widget.MediumImportance
+					btn.Show()
+
+					// Set edit handler
+					dataRow := id.Row - 1
+					btn.OnTapped = func() {
+						if dataRow >= 0 && dataRow < len(it.filtered) && it.app != nil {
+							it.app.showEditDialog(it.filtered[dataRow])
+						}
+					}
+				}
+			} else if id.Col == 1 {
+				// Delete button column (SECOND column now)
+				hoverLabel := stack.Objects[0].(*hoverLabel)
+				btn := stack.Objects[1].(*widget.Button)
+
+				hoverLabel.Hide()
+
+				if id.Row == 0 {
+					// Header - hide button completely
+					btn.Hide()
+				} else {
+					// Data row
+					btn.SetText("🗑")
+					btn.Importance = widget.MediumImportance
 					btn.Show()
 
 					// Set delete handler
@@ -98,29 +187,43 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 					}
 				}
 			} else {
-				// Regular text columns (shift by -1 since delete is first)
-				label := stack.Objects[0].(*widget.Label)
+				// Regular text columns (shift by -2 since edit and delete are first)
+				hoverLabel := stack.Objects[0].(*hoverLabel)
 				btn := stack.Objects[1].(*widget.Button)
 				btn.Hide()
 
-				label.Show()
-				label.Truncation = fyne.TextTruncateEllipsis
+				hoverLabel.Show()
 
-				colIndex := id.Col - 1
+				colIndex := id.Col - 2
 				if colIndex >= len(it.columnOrder) {
-					label.SetText("")
+					hoverLabel.SetText("")
+					hoverLabel.tooltip = ""
 					return
 				}
 				colID := it.columnOrder[colIndex]
 
 				if id.Row == 0 {
 					// Header row
-					label.TextStyle.Bold = true
-					label.SetText(it.getColumnHeader(colID))
+					hoverLabel.TextStyle.Bold = true
+					hoverLabel.SetText(it.getColumnHeader(colID))
+					hoverLabel.tooltip = "" // No tooltip for headers
 				} else {
 					// Data row
-					label.TextStyle.Bold = false
-					label.SetText(it.getCellValue(id.Row-1, colID))
+					hoverLabel.TextStyle.Bold = false
+					cellValue := it.getCellValue(id.Row-1, colID)
+					hoverLabel.SetText(cellValue)
+
+					// Add tooltip for columns that are often truncated
+					if colID == "Dateiname" || colID == "Firmenname" || colID == "Kurzbezeichnung" {
+						// Set tooltip to show full text on hover
+						if cellValue != "" && len(cellValue) > 0 {
+							hoverLabel.tooltip = cellValue
+						} else {
+							hoverLabel.tooltip = ""
+						}
+					} else {
+						hoverLabel.tooltip = ""
+					}
 				}
 			}
 		},
@@ -155,13 +258,22 @@ func (it *InvoiceTable) applyColumnWidths() {
 		return
 	}
 
-	it.table.SetColumnWidth(0, 50) // Delete button column
+	it.table.SetColumnWidth(0, 50) // Edit button column
+	it.table.SetColumnWidth(1, 50) // Delete button column
 	for idx, colID := range it.columnOrder {
 		width, ok := columnWidthMap[colID]
 		if !ok {
 			width = 140
 		}
-		it.table.SetColumnWidth(idx+1, width)
+		it.table.SetColumnWidth(idx+2, width) // +2 for edit and delete columns
+	}
+}
+
+// hideTooltip hides the current tooltip popup if visible
+func (it *InvoiceTable) hideTooltip() {
+	if it.tooltipPopup != nil {
+		it.tooltipPopup.Hide()
+		it.tooltipPopup = nil
 	}
 }
 
@@ -314,8 +426,6 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		return row.Dateiname
 	case "Rechnungsdatum":
 		return row.Rechnungsdatum
-	case "Datum_Deutsch":
-		return row.DatumDeutsch
 	case "Jahr":
 		return row.Jahr
 	case "Monat":
@@ -341,9 +451,33 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 			return ""
 		}
 		return fmt.Sprintf("%d", row.Gegenkonto)
+	case "Bankkonto":
+		return row.Bankkonto
+	case "Bezahldatum":
+		return row.Bezahldatum
+	case "Teilzahlung":
+		if row.Teilzahlung {
+			return "✓"
+		}
+		return ""
 	default:
 		return ""
 	}
+}
+
+// formatDateGerman converts ISO date (YYYY-MM-DD) to German format (DD.MM.YYYY).
+func formatDateGerman(isoDate string) string {
+	if isoDate == "" {
+		return ""
+	}
+	// Parse YYYY-MM-DD
+	if len(isoDate) >= 10 {
+		year := isoDate[0:4]
+		month := isoDate[5:7]
+		day := isoDate[8:10]
+		return day + "." + month + "." + year
+	}
+	return isoDate
 }
 
 func sanitizeColumnOrder(order []string) []string {

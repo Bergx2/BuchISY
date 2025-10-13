@@ -2,24 +2,28 @@ package ui
 
 import (
 	"fmt"
-	"net/url"
+	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bergx2/buchisy/internal/core"
 )
 
-// showConfirmationModal shows the invoice data confirmation modal.
-func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
-	// Create form entries
+// showEditDialog shows a dialog to edit an existing invoice.
+func (a *App) showEditDialog(row core.CSVRow) {
+	// Convert CSVRow back to Meta
+	meta := row.ToMeta()
+
+	// Build the current file path
+	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
+	originalPath := filepath.Join(targetFolder, row.Dateiname)
+
+	// Create form entries (same as showConfirmationModal)
 	companyEntry := widget.NewEntry()
 	companyEntry.SetText(meta.Firmenname)
 	companyEntry.SetPlaceHolder(a.bundle.T("field.company"))
@@ -27,7 +31,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	shortDescEntry := widget.NewEntry()
 	shortDescEntry.SetText(meta.Kurzbezeichnung)
 	shortDescEntry.SetPlaceHolder(a.bundle.T("field.shortdesc"))
-	// Show character count
 	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Kurzbezeichnung)))
 	shortDescEntry.OnChanged = func(s string) {
 		if len(s) > 80 {
@@ -48,7 +51,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	dateCalendarBtn := widget.NewButton("📅", func() {
 		a.showDatePicker(dateEntry.Text, func(selectedDate string) {
 			dateEntry.SetText(selectedDate)
-			// OnChanged callback will handle updateFilenamePreview
 		})
 	})
 	dateCalendarBtn.Importance = widget.LowImportance
@@ -87,7 +89,7 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 		accountMap[label] = acc.Code
 	}
 	accountSelect := widget.NewSelect(accountOptions, nil)
-	// Pre-select the suggested account
+	// Pre-select the current account
 	for label, code := range accountMap {
 		if code == meta.Gegenkonto {
 			accountSelect.SetSelected(label)
@@ -101,7 +103,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 		bankAccountOptions = append(bankAccountOptions, ba.Name)
 	}
 	bankAccountSelect := widget.NewSelect(bankAccountOptions, nil)
-	// Pre-select from meta or default
 	if meta.Bankkonto != "" {
 		bankAccountSelect.SetSelected(meta.Bankkonto)
 	} else {
@@ -124,38 +125,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	// Partial payment checkbox
 	partialPaymentCheck := widget.NewCheck(a.bundle.T("field.partialPayment"), nil)
 	partialPaymentCheck.SetChecked(meta.Teilzahlung)
-
-	// Remember mapping checkbox
-	rememberCheck := widget.NewCheck(a.bundle.T("checkbox.rememberMap"), nil)
-	rememberCheck.SetChecked(a.settings.RememberCompanyAccount)
-
-	// Original filename (entry for copy-paste, keep enabled for proper dark mode colors)
-	originalEntry := widget.NewEntry()
-	originalEntry.SetText(filepath.Base(originalPath))
-	originalEntry.MultiLine = false
-	// Note: Keeping entry enabled so text is visible in dark mode
-	// User can technically edit but it doesn't affect processing
-	openOriginalBtn := widget.NewButton(a.bundle.T("modal.openOriginal"), func() {
-		fileURI := storage.NewFileURI(originalPath)
-		parsed, err := url.Parse(fileURI.String())
-		if err != nil {
-			a.logger.Warn("Failed to parse file URI: %v", err)
-			a.showError(
-				a.bundle.T("error.processing.title"),
-				a.bundle.T("error.openOriginal", err.Error()),
-			)
-			return
-		}
-
-		if err := a.app.OpenURL(parsed); err != nil {
-			a.logger.Warn("Failed to open original PDF: %v", err)
-			a.showError(
-				a.bundle.T("error.processing.title"),
-				a.bundle.T("error.openOriginal", err.Error()),
-			)
-		}
-	})
-	openOriginalBtn.Importance = widget.LowImportance
 
 	// Filename preview
 	filenamePreview := widget.NewLabel("")
@@ -205,13 +174,12 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	grossEntry.OnChanged = onAnyChange
 	currencySelect.OnChanged = onAnyChange
 
-	// Initial preview - call after all widgets are set up
+	// Initial preview
 	updateFilenamePreview()
 
 	// Form layout
 	form := container.NewVBox(
-		widget.NewLabel(a.bundle.T("modal.originalFile")),
-		container.NewBorder(nil, nil, nil, openOriginalBtn, originalEntry),
+		widget.NewLabel("Datei: "+row.Dateiname),
 		widget.NewSeparator(),
 
 		widget.NewForm(
@@ -230,7 +198,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 			widget.NewFormItem("", partialPaymentCheck),
 		),
 
-		rememberCheck,
 		widget.NewSeparator(),
 		widget.NewLabel(a.bundle.T("modal.filenamePreview")),
 		filenamePreview,
@@ -242,7 +209,7 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 
 	// Buttons
 	confirmDialog := dialog.NewCustomConfirm(
-		a.bundle.T("modal.title"),
+		"Rechnung bearbeiten", // Edit title
 		a.bundle.T("btn.save"),
 		a.bundle.T("btn.cancel"),
 		scrollForm,
@@ -251,9 +218,10 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 				return
 			}
 
-			// Save the invoice
-			err := a.saveInvoice(
-				originalPath,
+			// Update the invoice
+			err := a.updateInvoice(
+				row,                    // Original row
+				originalPath,           // Original file path
 				companyEntry.Text,
 				shortDescEntry.Text,
 				invoiceNumEntry.Text,
@@ -267,7 +235,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 				accountMap[accountSelect.Selected],
 				bankAccountSelect.Selected,
 				partialPaymentCheck.Checked,
-				rememberCheck.Checked,
 			)
 
 			if err != nil {
@@ -286,8 +253,9 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	confirmDialog.Show()
 }
 
-// saveInvoice saves an invoice to the file system and CSV.
-func (a *App) saveInvoice(
+// updateInvoice updates an existing invoice in the CSV and renames the file if necessary.
+func (a *App) updateInvoice(
+	originalRow core.CSVRow,
 	originalPath string,
 	company string,
 	shortDesc string,
@@ -302,10 +270,9 @@ func (a *App) saveInvoice(
 	account int,
 	bankAccount string,
 	partialPayment bool,
-	rememberMapping bool,
 ) error {
-	// Build meta
-	meta := core.Meta{
+	// Build new meta
+	newMeta := core.Meta{
 		Firmenname:        company,
 		Kurzbezeichnung:   shortDesc,
 		Rechnungsnummer:   invoiceNum,
@@ -321,230 +288,93 @@ func (a *App) saveInvoice(
 		Teilzahlung:       partialPayment,
 	}
 
-	// Extract year and month from invoice date (for filename and CSV fields)
-	// Date is in DD.MM.YYYY format
+	// Extract year and month from invoice date
 	parts := strings.Split(invoiceDate, ".")
 	if len(parts) == 3 {
-		meta.Jahr = parts[2]  // Year is the third part
-		meta.Monat = parts[1] // Month is the second part
+		newMeta.Jahr = parts[2]  // Year is the third part
+		newMeta.Monat = parts[1] // Month is the second part
 	}
 
-	// Generate filename
-	filename, err := core.ApplyTemplate(
+	// Generate new filename
+	newFilename, err := core.ApplyTemplate(
 		a.settings.NamingTemplate,
-		meta,
+		newMeta,
 		core.TemplateOpts{DecimalSeparator: a.settings.DecimalSeparator},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to generate filename: %w", err)
 	}
 
-	// IMPORTANT: Save to CURRENTLY SELECTED month, not invoice date month
-	// This allows organizing invoices by payment month, not invoice date
 	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
+	newPath := filepath.Join(targetFolder, newFilename)
+
+	// Rename file if filename changed
+	if originalRow.Dateiname != newFilename {
+		a.logger.Info("Renaming file from %s to %s", originalRow.Dateiname, newFilename)
+
+		// Check if target file already exists (handle collisions)
+		finalName := newFilename
+		finalPath := newPath
+		counter := 2
+		for {
+			if _, err := os.Stat(finalPath); os.IsNotExist(err) {
+				break
+			}
+			// File exists, try with counter
+			ext := filepath.Ext(newFilename)
+			base := newFilename[:len(newFilename)-len(ext)]
+			finalName = fmt.Sprintf("%s_%d%s", base, counter, ext)
+			finalPath = filepath.Join(targetFolder, finalName)
+			counter++
+		}
+
+		newFilename = finalName
+		newPath = finalPath
+
+		// Rename the file
+		if err := os.Rename(originalPath, newPath); err != nil {
+			return fmt.Errorf("failed to rename file: %w", err)
+		}
+	}
+
+	// Update CSV
 	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
-
-	a.logger.Debug("Saving to folder: %s (current month: %d-%02d)", targetFolder, a.currentYear, a.currentMonth)
-	a.logger.Debug("Invoice date month: %s-%s", meta.Jahr, meta.Monat)
-
-	// Check for duplicates
-	existingRows, _ := a.csvRepo.Load(csvPath)
-	newRow := meta.ToCSVRow()
-	newRow.Dateiname = filename
-
-	// Helper function to complete the save
-	completeSave := func() error {
-		// Move and rename file
-		finalFilename, err := a.storageManager.MoveAndRename(originalPath, targetFolder, filename)
-		if err != nil {
-			return fmt.Errorf("failed to move file: %w", err)
-		}
-
-		// Update filename in meta
-		meta.Dateiname = finalFilename
-		newRow.Dateiname = finalFilename
-
-		// Append to CSV
-		if err := a.csvRepo.Append(csvPath, newRow); err != nil {
-			return fmt.Errorf("failed to append to CSV: %w", err)
-		}
-
-		// Remember company mapping if requested
-		if rememberMapping && company != "" {
-			a.companyMap.Set(company, account)
-			if err := a.companyMap.Save(); err != nil {
-				a.logger.Warn("Failed to save company mapping: %v", err)
-			}
-		}
-
-		a.logger.Info("Saved invoice: %s", finalFilename)
-		return nil
+	existingRows, err := a.csvRepo.Load(csvPath)
+	if err != nil {
+		return fmt.Errorf("failed to load CSV: %w", err)
 	}
 
-	if core.IsDuplicate(existingRows, newRow) {
-		// Show confirmation dialog (async)
-		dialog.ShowConfirm(
-			a.bundle.T("error.duplicate"),
-			fmt.Sprintf("%s: %s", a.bundle.T("error.duplicate"), filename),
-			func(confirmed bool) {
-				if !confirmed {
-					a.logger.Info("User cancelled duplicate save")
-					return
-				}
-				// User confirmed, proceed with save
-				if err := completeSave(); err != nil {
-					a.showError(
-						a.bundle.T("error.processing.title"),
-						err.Error(),
-					)
-				} else {
-					// Reload table
-					a.loadInvoices()
-				}
-			},
-			a.window,
-		)
-		return nil // Return nil since async dialog will handle the rest
-	}
-
-	// Not a duplicate, proceed with save
-	return completeSave()
-}
-
-// parseFloat parses a float from a string with flexible decimal separators.
-func parseFloat(s string) float64 {
-	s = strings.TrimSpace(s)
-	s = strings.ReplaceAll(s, ",", ".")
-	var f float64
-	fmt.Sscanf(s, "%f", &f)
-	return f
-}
-
-// showDatePicker shows a date picker dialog.
-func (a *App) showDatePicker(initialDate string, onSelect func(string)) {
-	// Parse initial date (DD.MM.YYYY format)
-	var day, month, year int
-	dateValid := false
-
-	if initialDate != "" {
-		parts := strings.Split(initialDate, ".")
-		if len(parts) == 3 {
-			parsedDay, errDay := strconv.Atoi(strings.TrimSpace(parts[0]))
-			parsedMonth, errMonth := strconv.Atoi(strings.TrimSpace(parts[1]))
-			parsedYear, errYear := strconv.Atoi(strings.TrimSpace(parts[2]))
-
-			if errDay == nil && errMonth == nil && errYear == nil {
-				day = parsedDay
-				month = parsedMonth
-				year = parsedYear
-				dateValid = true
-			}
+	// Find and update the row
+	updatedRows := make([]core.CSVRow, 0, len(existingRows))
+	found := false
+	for _, r := range existingRows {
+		if r.Dateiname == originalRow.Dateiname {
+			// Update this row
+			newRow := newMeta.ToCSVRow()
+			newRow.Dateiname = newFilename
+			updatedRows = append(updatedRows, newRow)
+			found = true
+		} else {
+			updatedRows = append(updatedRows, r)
 		}
 	}
 
-	// Use current date if no initial date or parsing failed
-	if !dateValid || day == 0 || month == 0 || year == 0 {
-		now := time.Now()
-		day = now.Day()
-		month = int(now.Month())
-		year = now.Year()
+	if !found {
+		return fmt.Errorf("original row not found in CSV")
 	}
 
-	// Create day options (1-31)
-	days := make([]string, 31)
-	for i := 0; i < 31; i++ {
-		days[i] = fmt.Sprintf("%d", i+1)
+	// Rewrite CSV
+	if err := a.rewriteCSV(csvPath, updatedRows); err != nil {
+		return fmt.Errorf("failed to update CSV: %w", err)
 	}
 
-	// Create month options with German names
-	months := []string{
-		"1 - Januar", "2 - Februar", "3 - März", "4 - April",
-		"5 - Mai", "6 - Juni", "7 - Juli", "8 - August",
-		"9 - September", "10 - Oktober", "11 - November", "12 - Dezember",
-	}
+	a.logger.Info("Updated invoice: %s", newFilename)
 
-	// Create year options (current year ± 10 years)
-	currentYear := time.Now().Year()
-	years := make([]string, 21)
-	for i := 0; i < 21; i++ {
-		years[i] = fmt.Sprintf("%d", currentYear-10+i)
-	}
-
-	// Create select widgets
-	daySelect := widget.NewSelect(days, nil)
-	monthSelect := widget.NewSelect(months, nil)
-	yearSelect := widget.NewSelect(years, nil)
-
-	// Set selected values AFTER creating the widgets
-	// Day: always set if valid
-	if day >= 1 && day <= 31 {
-		daySelect.SetSelected(fmt.Sprintf("%d", day))
-	} else {
-		// Default to current day if invalid
-		daySelect.SetSelected(fmt.Sprintf("%d", time.Now().Day()))
-	}
-
-	// Month: always set if valid
-	if month >= 1 && month <= 12 {
-		monthSelect.SetSelected(months[month-1])
-	} else {
-		// Default to current month if invalid
-		monthSelect.SetSelected(months[int(time.Now().Month())-1])
-	}
-
-	// Year: always set if valid and in range
-	if year >= currentYear-10 && year <= currentYear+10 {
-		yearSelect.SetSelected(fmt.Sprintf("%d", year))
-	} else {
-		// Default to current year if invalid or out of range
-		yearSelect.SetSelected(fmt.Sprintf("%d", currentYear))
-	}
-
-	// Create form
-	form := container.NewVBox(
-		widget.NewForm(
-			widget.NewFormItem("Tag", daySelect),
-			widget.NewFormItem("Monat", monthSelect),
-			widget.NewFormItem("Jahr", yearSelect),
-		),
+	// Show success message
+	a.showInfo(
+		"Gespeichert",
+		fmt.Sprintf("Rechnung wurde aktualisiert: %s", newFilename),
 	)
 
-	// Create dialog
-	dateDialog := dialog.NewCustomConfirm(
-		"Datum wählen",
-		"OK",
-		"Abbrechen",
-		form,
-		func(ok bool) {
-			if !ok {
-				return
-			}
-
-			// Parse selected values
-			selectedDay := 1
-			selectedMonth := 1
-			selectedYear := time.Now().Year()
-
-			if daySelect.Selected != "" {
-				fmt.Sscanf(daySelect.Selected, "%d", &selectedDay)
-			}
-
-			if monthSelect.Selected != "" {
-				// Extract month number from "1 - Januar" format
-				fmt.Sscanf(monthSelect.Selected, "%d", &selectedMonth)
-			}
-
-			if yearSelect.Selected != "" {
-				fmt.Sscanf(yearSelect.Selected, "%d", &selectedYear)
-			}
-
-			// Format as DD.MM.YYYY
-			formattedDate := fmt.Sprintf("%02d.%02d.%04d", selectedDay, selectedMonth, selectedYear)
-			onSelect(formattedDate)
-		},
-		a.window,
-	)
-
-	dateDialog.Resize(fyne.NewSize(350, 250))
-	dateDialog.Show()
+	return nil
 }
