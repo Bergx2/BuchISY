@@ -257,10 +257,16 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	updateCurrencyConversionVisibility := func() {
 		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
 			// Show currency conversion fields
+			currency := currencySelect.Selected
+			if currency == "" {
+				currency = a.settings.CurrencyDefault
+			}
+			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), currency)
+
 			currencyConversionContainer.Objects = []fyne.CanvasObject{
 				widget.NewForm(
 					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
-					widget.NewFormItem(a.bundle.T("field.fee"), feeEntry),
+					widget.NewFormItem(feeLabel, feeEntry),
 				),
 			}
 		} else {
