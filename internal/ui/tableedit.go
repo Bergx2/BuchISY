@@ -56,6 +56,11 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	})
 	dateCalendarBtn.Importance = widget.LowImportance
 
+	// Dynamic labels for amount fields (will show currency in parentheses)
+	netLabel := widget.NewLabel(a.bundle.T("field.net"))
+	vatAmountLabel := widget.NewLabel(a.bundle.T("field.vatAmount"))
+	grossLabel := widget.NewLabel(a.bundle.T("field.gross"))
+
 	netEntry := widget.NewEntry()
 	netEntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto))
 	netEntry.SetPlaceHolder(a.bundle.T("field.net"))
@@ -290,6 +295,18 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
 
+	// Update currency labels to show selected currency
+	updateCurrencyLabels := func() {
+		currency := currencySelect.Selected
+		if currency == "" {
+			currency = a.settings.CurrencyDefault
+		}
+
+		netLabel.SetText(fmt.Sprintf("%s (%s)", a.bundle.T("field.net"), currency))
+		vatAmountLabel.SetText(fmt.Sprintf("%s (%s)", a.bundle.T("field.vatAmount"), currency))
+		grossLabel.SetText(fmt.Sprintf("%s (%s)", a.bundle.T("field.gross"), currency))
+	}
+
 	// Currency conversion visibility logic
 	updateCurrencyConversionVisibility := func() {
 		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
@@ -306,11 +323,13 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	}
 
 	currencySelect.OnChanged = func(s string) {
+		updateCurrencyLabels()
 		updateCurrencyConversionVisibility()
 		onAnyChange(s)
 	}
 
-	// Initial visibility check and preview
+	// Initial updates
+	updateCurrencyLabels()
 	updateCurrencyConversionVisibility()
 	updateFilenamePreview()
 
@@ -324,20 +343,61 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		fileActionsContainer,
 		widget.NewSeparator(),
 
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("field.company"), companyEntry),
-			widget.NewFormItem(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
-			widget.NewFormItem(a.bundle.T("field.invoicenumber"), invoiceNumEntry),
-			widget.NewFormItem(a.bundle.T("field.invoiceDate"), container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry)),
-			widget.NewFormItem(a.bundle.T("field.paymentDate"), container.NewBorder(nil, nil, nil, paymentDateCalendarBtn, paymentDateEntry)),
-			widget.NewFormItem(a.bundle.T("field.net"), netEntry),
-			widget.NewFormItem(a.bundle.T("field.vatPercent"), vatPercentEntry),
-			widget.NewFormItem(a.bundle.T("field.vatAmount"), vatAmountEntry),
-			widget.NewFormItem(a.bundle.T("field.gross"), grossEntry),
-			widget.NewFormItem(a.bundle.T("field.currency"), currencySelect),
-			widget.NewFormItem(a.bundle.T("field.account"), accountSelect),
-			widget.NewFormItem(a.bundle.T("field.bankAccount"), bankAccountSelect),
-			widget.NewFormItem("", partialPaymentCheck),
+		// Main form fields with dynamic currency labels
+		container.NewVBox(
+			// Company
+			widget.NewLabel(a.bundle.T("field.company")),
+			companyEntry,
+
+			// Short description
+			container.NewHBox(
+				widget.NewLabel(a.bundle.T("field.shortdesc")),
+				shortDescLabel,
+			),
+			shortDescEntry,
+
+			// Invoice number
+			widget.NewLabel(a.bundle.T("field.invoicenumber")),
+			invoiceNumEntry,
+
+			// Invoice date
+			widget.NewLabel(a.bundle.T("field.invoiceDate")),
+			container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry),
+
+			// Payment date
+			widget.NewLabel(a.bundle.T("field.paymentDate")),
+			container.NewBorder(nil, nil, nil, paymentDateCalendarBtn, paymentDateEntry),
+
+			// Net amount (with currency)
+			netLabel,
+			netEntry,
+
+			// VAT percent
+			widget.NewLabel(a.bundle.T("field.vatPercent")),
+			vatPercentEntry,
+
+			// VAT amount (with currency)
+			vatAmountLabel,
+			vatAmountEntry,
+
+			// Gross amount (with currency)
+			grossLabel,
+			grossEntry,
+
+			// Currency select
+			widget.NewLabel(a.bundle.T("field.currency")),
+			currencySelect,
+
+			// Account
+			widget.NewLabel(a.bundle.T("field.account")),
+			accountSelect,
+
+			// Bank account
+			widget.NewLabel(a.bundle.T("field.bankAccount")),
+			bankAccountSelect,
+
+			// Partial payment
+			partialPaymentCheck,
 		),
 
 		// Currency conversion fields (conditional)
