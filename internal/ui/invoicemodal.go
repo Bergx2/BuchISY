@@ -146,30 +146,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 
 	// Container for currency conversion fields (initially hidden)
 	currencyConversionContainer := container.NewVBox()
-	updateCurrencyConversionVisibility := func() {
-		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
-			// Show currency conversion fields
-			currencyConversionContainer.Objects = []fyne.CanvasObject{
-				widget.NewForm(
-					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
-					widget.NewFormItem(a.bundle.T("field.fee"), feeEntry),
-				),
-			}
-		} else {
-			// Hide currency conversion fields
-			currencyConversionContainer.Objects = []fyne.CanvasObject{}
-		}
-		currencyConversionContainer.Refresh()
-	}
-
-	// Update visibility when currency changes
-	currencySelect.OnChanged = func(s string) {
-		updateCurrencyConversionVisibility()
-		onAnyChange(s)
-	}
-
-	// Initial visibility check
-	updateCurrencyConversionVisibility()
 
 	// List to track selected attachment files
 	selectedAttachments := []string{}
@@ -276,9 +252,32 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	vatPercentEntry.OnChanged = onAnyChange
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
-	// Note: currencySelect.OnChanged is set above to handle currency conversion visibility
 
-	// Initial preview - call after all widgets are set up
+	// Currency conversion visibility logic
+	updateCurrencyConversionVisibility := func() {
+		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+			// Show currency conversion fields
+			currencyConversionContainer.Objects = []fyne.CanvasObject{
+				widget.NewForm(
+					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
+					widget.NewFormItem(a.bundle.T("field.fee"), feeEntry),
+				),
+			}
+		} else {
+			// Hide currency conversion fields
+			currencyConversionContainer.Objects = []fyne.CanvasObject{}
+		}
+		currencyConversionContainer.Refresh()
+	}
+
+	// Update visibility when currency changes
+	currencySelect.OnChanged = func(s string) {
+		updateCurrencyConversionVisibility()
+		onAnyChange(s)
+	}
+
+	// Initial visibility check and preview
+	updateCurrencyConversionVisibility()
 	updateFilenamePreview()
 
 	// Form layout

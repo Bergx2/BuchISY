@@ -147,26 +147,6 @@ func (a *App) showEditDialog(row core.CSVRow) {
 
 	// Container for currency conversion fields
 	currencyConversionContainer := container.NewVBox()
-	updateCurrencyConversionVisibility := func() {
-		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
-			currencyConversionContainer.Objects = []fyne.CanvasObject{
-				widget.NewForm(
-					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
-					widget.NewFormItem(a.bundle.T("field.fee"), feeEntry),
-				),
-			}
-		} else {
-			currencyConversionContainer.Objects = []fyne.CanvasObject{}
-		}
-		currencyConversionContainer.Refresh()
-	}
-
-	currencySelect.OnChanged = func(s string) {
-		updateCurrencyConversionVisibility()
-		onAnyChange(s)
-	}
-
-	updateCurrencyConversionVisibility()
 
 	// Open PDF button
 	openPDFBtn := widget.NewButton(a.bundle.T("btn.openPDF"), func() {
@@ -245,9 +225,29 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	vatPercentEntry.OnChanged = onAnyChange
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
-	currencySelect.OnChanged = onAnyChange
 
-	// Initial preview
+	// Currency conversion visibility logic
+	updateCurrencyConversionVisibility := func() {
+		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+			currencyConversionContainer.Objects = []fyne.CanvasObject{
+				widget.NewForm(
+					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
+					widget.NewFormItem(a.bundle.T("field.fee"), feeEntry),
+				),
+			}
+		} else {
+			currencyConversionContainer.Objects = []fyne.CanvasObject{}
+		}
+		currencyConversionContainer.Refresh()
+	}
+
+	currencySelect.OnChanged = func(s string) {
+		updateCurrencyConversionVisibility()
+		onAnyChange(s)
+	}
+
+	// Initial visibility check and preview
+	updateCurrencyConversionVisibility()
 	updateFilenamePreview()
 
 	// Form layout
