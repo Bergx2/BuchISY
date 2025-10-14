@@ -8,22 +8,26 @@ import (
 
 // Meta represents the invoice metadata extracted from a PDF.
 type Meta struct {
-	Firmenname        string  // Company name
-	Kurzbezeichnung   string  // Short description (max 80 chars)
-	Rechnungsnummer   string  // Invoice number
-	BetragNetto       float64 // Net amount
-	SteuersatzProzent float64 // Tax rate in percent
-	SteuersatzBetrag  float64 // Tax amount
-	Bruttobetrag      float64 // Gross amount
-	Waehrung          string  // Currency (EUR, USD, etc.)
-	Rechnungsdatum    string  // Invoice date DD.MM.YYYY
-	Jahr              string  // Year YYYY
-	Monat             string  // Month MM
-	Gegenkonto        int     // Account code
-	Bankkonto         string  // Bank account
-	Bezahldatum       string  // Payment date DD.MM.YYYY
-	Teilzahlung       bool    // Partial payment flag
-	Dateiname         string  // Final filename
+	Firmenname          string  // Company name
+	Kurzbezeichnung     string  // Short description (max 80 chars)
+	Rechnungsnummer     string  // Invoice number
+	BetragNetto         float64 // Net amount
+	SteuersatzProzent   float64 // Tax rate in percent
+	SteuersatzBetrag    float64 // Tax amount
+	Bruttobetrag        float64 // Gross amount
+	Waehrung            string  // Currency (EUR, USD, etc.)
+	Rechnungsdatum      string  // Invoice date DD.MM.YYYY
+	Jahr                string  // Year YYYY
+	Monat               string  // Month MM
+	Gegenkonto          int     // Account code
+	Bankkonto           string  // Bank account
+	Bezahldatum         string  // Payment date DD.MM.YYYY
+	Teilzahlung         bool    // Partial payment flag
+	Dateiname           string  // Final filename
+	Kommentar           string  // Comment/note for this invoice
+	BetragNetto_EUR     float64 // Net amount in default currency (EUR) for foreign currency invoices
+	Gebuehr             float64 // Fee (e.g., currency exchange fee)
+	HatAnhaenge         bool    // Indicates if invoice has additional file attachments
 }
 
 // Account represents a user-defined account (Gegenkonto).
@@ -129,6 +133,10 @@ type CSVRow struct {
 	Bankkonto         string
 	Bezahldatum       string
 	Teilzahlung       bool
+	Kommentar         string
+	BetragNetto_EUR   float64
+	Gebuehr           float64
+	HatAnhaenge       bool
 }
 
 // ToCSVRow converts Meta to CSVRow.
@@ -150,6 +158,10 @@ func (m Meta) ToCSVRow() CSVRow {
 		Bankkonto:         m.Bankkonto,
 		Bezahldatum:       m.Bezahldatum,
 		Teilzahlung:       m.Teilzahlung,
+		Kommentar:         m.Kommentar,
+		BetragNetto_EUR:   m.BetragNetto_EUR,
+		Gebuehr:           m.Gebuehr,
+		HatAnhaenge:       m.HatAnhaenge,
 	}
 }
 
@@ -172,6 +184,10 @@ func (r CSVRow) ToMeta() Meta {
 		Bankkonto:         r.Bankkonto,
 		Bezahldatum:       r.Bezahldatum,
 		Teilzahlung:       r.Teilzahlung,
+		Kommentar:         r.Kommentar,
+		BetragNetto_EUR:   r.BetragNetto_EUR,
+		Gebuehr:           r.Gebuehr,
+		HatAnhaenge:       r.HatAnhaenge,
 	}
 }
 

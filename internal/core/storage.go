@@ -134,3 +134,95 @@ func (sm *StorageManager) ListAllCSVPaths() ([]string, error) {
 
 	return paths, nil
 }
+
+// GetAttachmentsFolderName returns the attachments folder name for a given invoice filename.
+// e.g., "invoice.pdf" -> "invoice-files"
+func GetAttachmentsFolderName(filename string) string {
+	ext := filepath.Ext(filename)
+	base := strings.TrimSuffix(filename, ext)
+	return base + "-files"
+}
+
+// GetAttachmentsFolder returns the full path to the attachments folder for a given invoice.
+func (sm *StorageManager) GetAttachmentsFolder(invoiceFilePath string) string {
+	dir := filepath.Dir(invoiceFilePath)
+	filename := filepath.Base(invoiceFilePath)
+	folderName := GetAttachmentsFolderName(filename)
+	return filepath.Join(dir, folderName)
+}
+
+// HasAttachments checks if an invoice has attachments.
+func (sm *StorageManager) HasAttachments(invoiceFilePath string) bool {
+	attachmentsFolder := sm.GetAttachmentsFolder(invoiceFilePath)
+	info, err := os.Stat(attachmentsFolder)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
+// EnsureAttachmentsFolder creates the attachments folder if it doesn't exist.
+func (sm *StorageManager) EnsureAttachmentsFolder(invoiceFilePath string) error {
+	attachmentsFolder := sm.GetAttachmentsFolder(invoiceFilePath)
+	return os.MkdirAll(attachmentsFolder, 0755)
+}
+
+// CopyFileToAttachments copies a file to the attachments folder, preserving the original filename.
+// Returns the final filename (which may be different if there was a collision).
+func (sm *StorageManager) CopyFileToAttachments(sourcePath, invoiceFilePath string) (string, error) {
+	attachmentsFolder := sm.GetAttachmentsFolder(invoiceFilePath)
+
+	// Ensure attachments folder exists
+	if err := sm.EnsureAttachmentsFolder(invoiceFilePath); err != nil {
+		return "", fmt.Errorf("failed to create attachments folder: %w", err)
+	}
+
+	// Get original filename
+	filename := filepath.Base(sourcePath)
+	targetPath := filepath.Join(attachmentsFolder, filename)
+
+	// Handle filename collisions
+	finalName := filename
+	counter := 2
+	for {
+		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+			break
+		}
+
+		ext := filepath.Ext(filename)
+		base := filename[:len(filename)-len(ext)]
+		finalName = fmt.Sprintf("%s_%d%s", base, counter, ext)
+		targetPath = filepath.Join(attachmentsFolder, finalName)
+		counter++
+	}
+
+	// Copy the file
+	if err := copyFile(sourcePath, targetPath); err != nil {
+		return "", fmt.Errorf("failed to copy attachment: %w", err)
+	}
+
+	return finalName, nil
+}
+
+// ListAttachments returns a list of attachment filenames for an invoice.
+func (sm *StorageManager) ListAttachments(invoiceFilePath string) ([]string, error) {
+	attachmentsFolder := sm.GetAttachmentsFolder(invoiceFilePath)
+
+	if !sm.HasAttachments(invoiceFilePath) {
+		return []string{}, nil
+	}
+
+	entries, err := os.ReadDir(attachmentsFolder)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read attachments folder: %w", err)
+	}
+
+	var filenames []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			filenames = append(filenames, entry.Name())
+		}
+	}
+
+	return filenames, nil
+}

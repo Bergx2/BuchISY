@@ -27,6 +27,10 @@ var DefaultCSVColumns = []string{
 	"Bankkonto",
 	"Bezahldatum",
 	"Teilzahlung",
+	"Kommentar",
+	"BetragNetto_EUR",
+	"Gebuehr",
+	"HatAnhaenge",
 }
 
 // ColumnDisplayNames maps column IDs to German display names.
@@ -47,6 +51,10 @@ var ColumnDisplayNames = map[string]string{
 	"Bankkonto":          "Bankkonto",
 	"Bezahldatum":        "Bezahldatum",
 	"Teilzahlung":        "Teilzahlung",
+	"Kommentar":          "Kommentar",
+	"BetragNetto_EUR":    "Betrag Netto (EUR)",
+	"Gebuehr":            "Gebühr",
+	"HatAnhaenge":        "Anhänge",
 }
 
 // ColumnTranslationKeys maps column IDs to translation keys.
@@ -67,6 +75,10 @@ var ColumnTranslationKeys = map[string]string{
 	"Bankkonto":          "table.col.bankaccount",
 	"Bezahldatum":        "table.col.paymentdate",
 	"Teilzahlung":        "table.col.partialpayment",
+	"Kommentar":          "table.col.comment",
+	"BetragNetto_EUR":    "table.col.net_eur",
+	"Gebuehr":            "table.col.fee",
+	"HatAnhaenge":        "table.col.hasattachments",
 }
 
 var validColumns = func() map[string]struct{} {
@@ -155,6 +167,10 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			Bankkonto:         valueForColumn(record, headerMap, "Bankkonto"),
 			Bezahldatum:       valueForColumn(record, headerMap, "Bezahldatum"),
 			Teilzahlung:       parseBool(valueForColumn(record, headerMap, "Teilzahlung")),
+			Kommentar:         valueForColumn(record, headerMap, "Kommentar"),
+			BetragNetto_EUR:   parseFloat(valueForColumn(record, headerMap, "BetragNetto_EUR")),
+			Gebuehr:           parseFloat(valueForColumn(record, headerMap, "Gebuehr")),
+			HatAnhaenge:       parseBool(valueForColumn(record, headerMap, "HatAnhaenge")),
 		}
 		rows = append(rows, row)
 	}
@@ -284,6 +300,10 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"Bankkonto":          row.Bankkonto,
 		"Bezahldatum":        row.Bezahldatum,
 		"Teilzahlung":        formatBool(row.Teilzahlung),
+		"Kommentar":          row.Kommentar,
+		"BetragNetto_EUR":    formatFloat(row.BetragNetto_EUR),
+		"Gebuehr":            formatFloat(row.Gebuehr),
+		"HatAnhaenge":        formatBool(row.HatAnhaenge),
 	}
 
 	// Build record in configured order
