@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bergx2/buchisy/internal/core"
@@ -148,13 +149,69 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	// Container for currency conversion fields
 	currencyConversionContainer := container.NewVBox()
 
+	// List to track newly selected attachment files
+	selectedAttachments := []string{}
+	attachmentsLabel := widget.NewLabel("")
+
+	// Update attachments label based on existing and new attachments
+	updateAttachmentsLabel := func() {
+		existingCount := 0
+		if a.storageManager.HasAttachments(originalPath) {
+			attachments, err := a.storageManager.ListAttachments(originalPath)
+			if err == nil {
+				existingCount = len(attachments)
+			}
+		}
+
+		newCount := len(selectedAttachments)
+		totalCount := existingCount + newCount
+
+		if totalCount == 0 {
+			attachmentsLabel.SetText(a.bundle.T("field.attachments.none"))
+		} else if newCount == 0 {
+			// Only existing attachments
+			if existingCount == 1 {
+				attachmentsLabel.SetText(fmt.Sprintf("1 vorhandene Datei"))
+			} else {
+				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene Dateien", existingCount))
+			}
+		} else {
+			// Has new attachments to add
+			if newCount == 1 {
+				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue Datei", existingCount, newCount))
+			} else {
+				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue Dateien", existingCount, newCount))
+			}
+		}
+	}
+
+	// Button to add more attachments
+	selectAttachmentsBtn := widget.NewButton(a.bundle.T("btn.addAttachments"), func() {
+		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			defer reader.Close()
+
+			filepath := reader.URI().Path()
+			selectedAttachments = append(selectedAttachments, filepath)
+			updateAttachmentsLabel()
+		}, a.window)
+
+		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx", ".txt"}))
+		fileDialog.Show()
+	})
+	selectAttachmentsBtn.Importance = widget.LowImportance
+
+	updateAttachmentsLabel()
+
 	// Open PDF button
 	openPDFBtn := widget.NewButton(a.bundle.T("btn.openPDF"), func() {
 		a.openFile(originalPath)
 	})
 	openPDFBtn.Importance = widget.MediumImportance
 
-	// Open attachments folder button (shown only if attachments exist)
+	// Open attachments folder button (shown only if attachments exist or will be added)
 	openAttachmentsBtn := widget.NewButton(a.bundle.T("btn.openAttachments"), func() {
 		attachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
 		a.openFolder(attachmentsFolder)
@@ -172,6 +229,13 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		if a.storageManager.HasAttachments(originalPath) {
 			actions = append(actions, container.NewHBox(openAttachmentsBtn))
 		}
+
+		// Always show the add attachments section
+		actions = append(actions,
+			widget.NewSeparator(),
+			widget.NewLabel(a.bundle.T("field.attachments")),
+			container.NewHBox(selectAttachmentsBtn, attachmentsLabel),
+		)
 
 		fileActionsContainer.Objects = actions
 		fileActionsContainer.Refresh()
@@ -324,6 +388,7 @@ func (a *App) showEditDialog(row core.CSVRow) {
 				commentEntry.Text,
 				parseFloat(netEUREntry.Text),
 				parseFloat(feeEntry.Text),
+				selectedAttachments,
 			)
 
 			if err != nil {
@@ -362,7 +427,11 @@ func (a *App) updateInvoice(
 	comment string,
 	netEUR float64,
 	fee float64,
+	newAttachments []string,
 ) error {
+	// Check if we will have attachments after this update
+	willHaveAttachments := originalRow.HatAnhaenge || len(newAttachments) > 0
+
 	// Build new meta
 	newMeta := core.Meta{
 		Firmenname:        company,
@@ -381,7 +450,7 @@ func (a *App) updateInvoice(
 		Kommentar:         comment,
 		BetragNetto_EUR:   netEUR,
 		Gebuehr:           fee,
-		HatAnhaenge:       originalRow.HatAnhaenge, // Preserve attachment flag
+		HatAnhaenge:       willHaveAttachments,
 	}
 
 	// Extract year and month from invoice date
@@ -444,6 +513,23 @@ func (a *App) updateInvoice(
 		if err := os.Rename(originalPath, newPath); err != nil {
 			return fmt.Errorf("failed to rename file: %w", err)
 		}
+
+		// Update originalPath to the new path for attachment operations
+		originalPath = newPath
+	}
+
+	// Copy any new attachment files
+	if len(newAttachments) > 0 {
+		for _, attachmentPath := range newAttachments {
+			copiedName, err := a.storageManager.CopyFileToAttachments(attachmentPath, originalPath)
+			if err != nil {
+				a.logger.Warn("Failed to copy attachment %s: %v", filepath.Base(attachmentPath), err)
+				// Continue with other attachments even if one fails
+			} else {
+				a.logger.Debug("Copied attachment: %s", copiedName)
+			}
+		}
+		a.logger.Info("Added %d new attachment(s)", len(newAttachments))
 	}
 
 	// Update CSV
