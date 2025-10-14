@@ -1,0 +1,157 @@
+name: Build macOS Signed Release
+
+# This workflow signs the macOS app - only enable if you have Apple Developer certificates
+# To use this workflow:
+# 1. Add your Apple Developer certificate as a GitHub secret (APPLE_CERTIFICATE_BASE64)
+# 2. Add the certificate password as a GitHub secret (APPLE_CERTIFICATE_PASSWORD)
+# 3. Add your Apple Developer Team ID as a GitHub secret (APPLE_TEAM_ID)
+# 4. Add your Apple ID as a GitHub secret (APPLE_ID)
+# 5. Add an app-specific password as a GitHub secret (APPLE_APP_PASSWORD)
+
+on:
+  workflow_dispatch:  # Manual trigger only for signed builds
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.2.0)'
+        required: true
+
+jobs:
+  build-macos-signed:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Install Fyne command
+      run: |
+        go install fyne.io/fyne/v2/cmd/fyne@latest
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Import Apple Certificate
+      env:
+        APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      run: |
+        # Create temporary keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+        # Create keychain
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+        # Import certificate
+        echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+        security import certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+        rm certificate.p12
+
+        # Set keychain as default
+        security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+    - name: Build and Sign macOS .app
+      env:
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        # Build the app bundle
+        MACOSX_DEPLOYMENT_TARGET=11.0 fyne package -os darwin \
+          -name BuchISY \
+          -appID com.bergx2.buchisy \
+          -src ./cmd/buchisy
+
+        # Copy assets
+        mkdir -p BuchISY.app/Contents/Resources
+        cp -r assets BuchISY.app/Contents/Resources/
+
+        # Sign the app
+        codesign --deep --force --verify --verbose \
+          --sign "Developer ID Application: $APPLE_TEAM_ID" \
+          --options runtime \
+          --entitlements - \
+          BuchISY.app <<EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+            <true/>
+            <key>com.apple.security.files.user-selected.read-write</key>
+            <true/>
+        </dict>
+        </plist>
+        EOF
+
+        # Verify signature
+        codesign --verify --deep --strict --verbose=2 BuchISY.app
+        spctl -a -t exec -vvv BuchISY.app
+
+    - name: Notarize app
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        # Create ZIP for notarization
+        ditto -c -k --keepParent BuchISY.app BuchISY-notarize.zip
+
+        # Submit for notarization
+        xcrun notarytool submit BuchISY-notarize.zip \
+          --apple-id "$APPLE_ID" \
+          --password "$APPLE_APP_PASSWORD" \
+          --team-id "$APPLE_TEAM_ID" \
+          --wait
+
+        # Staple the notarization ticket
+        xcrun stapler staple BuchISY.app
+
+        rm BuchISY-notarize.zip
+
+    - name: Create signed DMG
+      run: |
+        # Create DMG contents
+        mkdir -p dmg-contents
+        cp -r BuchISY.app dmg-contents/
+        ln -s /Applications dmg-contents/Applications
+
+        # Create DMG
+        hdiutil create -volname "BuchISY" \
+          -srcfolder dmg-contents \
+          -ov -format UDZO \
+          BuchISY-macOS-signed.dmg
+
+        # Sign the DMG
+        codesign --sign "Developer ID Application: ${{ secrets.APPLE_TEAM_ID }}" \
+          --force \
+          BuchISY-macOS-signed.dmg
+
+        # Notarize the DMG
+        xcrun notarytool submit BuchISY-macOS-signed.dmg \
+          --apple-id "${{ secrets.APPLE_ID }}" \
+          --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+          --wait
+
+        # Staple the DMG
+        xcrun stapler staple BuchISY-macOS-signed.dmg
+
+    - name: Create signed ZIP
+      run: |
+        zip -r BuchISY-macOS-signed.zip BuchISY.app
+
+    - name: Upload signed artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: BuchISY-macOS-signed-${{ github.event.inputs.version }}
+        path: |
+          BuchISY-macOS-signed.zip
+          BuchISY-macOS-signed.dmg
+        retention-days: 90

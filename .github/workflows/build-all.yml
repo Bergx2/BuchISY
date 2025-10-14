@@ -1,0 +1,181 @@
+name: Build All Platforms
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Build Windows executable
+      run: |
+        go build -ldflags="-H windowsgui" -o BuchISY.exe ./cmd/buchisy
+
+    - name: Create ZIP archive
+      run: |
+        Compress-Archive -Path BuchISY.exe -DestinationPath BuchISY-Windows.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BuchISY-Windows
+        path: BuchISY-Windows.zip
+        retention-days: 30
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Install Fyne command
+      run: |
+        go install fyne.io/fyne/v2/cmd/fyne@latest
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Create macOS .app bundle
+      run: |
+        MACOSX_DEPLOYMENT_TARGET=11.0 fyne package -os darwin \
+          -name BuchISY \
+          -appID com.bergx2.buchisy \
+          -src ./cmd/buchisy
+
+        # Copy assets into the app bundle
+        mkdir -p BuchISY.app/Contents/Resources
+        cp -r assets BuchISY.app/Contents/Resources/
+
+    - name: Create ZIP archive
+      run: |
+        zip -r BuchISY-macOS.zip BuchISY.app
+
+    - name: Create DMG installer
+      run: |
+        mkdir -p dmg-contents
+        cp -r BuchISY.app dmg-contents/
+        ln -s /Applications dmg-contents/Applications
+
+        hdiutil create -volname "BuchISY" \
+          -srcfolder dmg-contents \
+          -ov -format UDZO \
+          BuchISY-macOS.dmg
+
+    - name: Upload ZIP artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BuchISY-macOS
+        path: BuchISY-macOS.zip
+        retention-days: 30
+
+    - name: Upload DMG artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BuchISY-macOS-DMG
+        path: BuchISY-macOS.dmg
+        retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: BuchISY-Windows
+
+    - name: Download macOS ZIP artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: BuchISY-macOS
+
+    - name: Download macOS DMG artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: BuchISY-macOS-DMG
+
+    - name: Generate release notes
+      id: notes
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+        cat << EOF > release_notes.md
+        ## BuchISY ${TAG} Release
+
+        ### 📦 Downloads
+
+        - **Windows**: Download \`BuchISY-Windows.zip\`, extract, and run \`BuchISY.exe\`
+        - **macOS (ZIP)**: Download \`BuchISY-macOS.zip\`, extract, and move \`BuchISY.app\` to Applications
+        - **macOS (DMG)**: Download \`BuchISY-macOS.dmg\`, mount, and drag BuchISY to Applications
+
+        ### ✨ Features
+        - Embedded translations (German/English) - no external files needed
+        - Standalone executables for both Windows and macOS
+        - E-invoice support (XRechnung, ZUGFeRD)
+        - Claude Vision API for scanned PDFs
+
+        ### 📋 System Requirements
+        - **Windows**: Windows 10 or later (64-bit)
+        - **macOS**: macOS 11.0 (Big Sur) or later
+
+        ### 🔧 Installation
+
+        #### Windows
+        1. Download \`BuchISY-Windows.zip\`
+        2. Extract the ZIP file
+        3. Run \`BuchISY.exe\`
+
+        #### macOS
+        1. Download \`BuchISY-macOS.dmg\` or \`BuchISY-macOS.zip\`
+        2. For DMG: Mount and drag to Applications
+        3. For ZIP: Extract and move to Applications
+        4. On first launch: Right-click → Open (to bypass Gatekeeper)
+
+        ---
+        Built automatically via GitHub Actions
+        EOF
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: release_notes.md
+        files: |
+          BuchISY-Windows.zip
+          BuchISY-macOS.zip
+          BuchISY-macOS.dmg
+        draft: false
+        prerelease: false
+        name: BuchISY ${{ steps.notes.outputs.tag }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

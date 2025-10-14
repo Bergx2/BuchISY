@@ -178,11 +178,54 @@ After building:
 
 ## Continuous Integration
 
-For automated builds, use GitHub Actions:
+### Automated Builds with GitHub Actions
 
-1. Windows builds: Use `windows-latest` runner
-2. macOS builds: Use `macos-latest` runner
-3. Upload artifacts for distribution
-4. Create releases automatically on tags
+We have several GitHub Actions workflows configured:
 
-See `.github/workflows/` for example workflows.
+#### 1. Individual Platform Workflows
+
+- **Windows Build** (`.github/workflows/build-windows.yml`)
+  - Triggers on version tags (`v*`) or manual dispatch
+  - Builds on Windows Server with native toolchain
+  - Creates Windows executable with embedded translations
+
+- **macOS Build** (`.github/workflows/build-macos.yml`)
+  - Triggers on version tags (`v*`) or manual dispatch
+  - Builds on macOS with Fyne packaging
+  - Creates both .app bundle and DMG installer
+
+#### 2. Combined Multi-Platform Build
+
+- **Build All Platforms** (`.github/workflows/build-all.yml`)
+  - Builds Windows and macOS in parallel
+  - Automatically creates GitHub release with all artifacts
+  - Most efficient for releases
+
+#### 3. Signed macOS Build (Optional)
+
+- **Build macOS Signed** (`.github/workflows/build-macos-signed.yml`)
+  - Manual trigger only
+  - Requires Apple Developer certificates in GitHub secrets
+  - Signs and notarizes the app for distribution without Gatekeeper warnings
+
+### Triggering Builds
+
+#### Automatic (on version tags):
+```bash
+git tag v1.3.0
+git push origin v1.3.0
+```
+
+#### Manual (from GitHub UI):
+1. Go to Actions tab
+2. Select the workflow
+3. Click "Run workflow"
+
+### Required GitHub Secrets (for signed builds only)
+
+For signed macOS builds, add these secrets in repository settings:
+- `APPLE_CERTIFICATE_BASE64` - Base64 encoded .p12 certificate
+- `APPLE_CERTIFICATE_PASSWORD` - Certificate password
+- `APPLE_TEAM_ID` - Apple Developer Team ID
+- `APPLE_ID` - Apple ID email
+- `APPLE_APP_PASSWORD` - App-specific password
