@@ -81,6 +81,10 @@ var columnWidthMap = map[string]float32{
 	"Bruttobetrag":       120,
 	"Waehrung":           80,
 	"Gegenkonto":         110,
+	"Kommentar":          200,
+	"BetragNetto_EUR":    120,
+	"Gebuehr":            100,
+	"HatAnhaenge":        80,
 }
 
 // NewInvoiceTable creates a new invoice table.
@@ -214,7 +218,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 					hoverLabel.SetText(cellValue)
 
 					// Add tooltip for columns that are often truncated
-					if colID == "Dateiname" || colID == "Firmenname" || colID == "Kurzbezeichnung" {
+					if colID == "Dateiname" || colID == "Firmenname" || colID == "Kurzbezeichnung" || colID == "Kommentar" {
 						// Set tooltip to show full text on hover
 						if cellValue != "" && len(cellValue) > 0 {
 							hoverLabel.tooltip = cellValue
@@ -458,6 +462,23 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	case "Teilzahlung":
 		if row.Teilzahlung {
 			return "✓"
+		}
+		return ""
+	case "Kommentar":
+		return row.Kommentar
+	case "BetragNetto_EUR":
+		if row.BetragNetto_EUR > 0 {
+			return fmt.Sprintf("%.2f", row.BetragNetto_EUR)
+		}
+		return ""
+	case "Gebuehr":
+		if row.Gebuehr > 0 {
+			return fmt.Sprintf("%.2f", row.Gebuehr)
+		}
+		return ""
+	case "HatAnhaenge":
+		if row.HatAnhaenge {
+			return "📎"
 		}
 		return ""
 	default:

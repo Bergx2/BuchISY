@@ -25,6 +25,10 @@
   "table.col.paymentdate": "Payment Date",
   "table.col.partialpayment": "Partial Payment",
   "table.col.filename": "Filename",
+  "table.col.comment": "Comment",
+  "table.col.net_eur": "Net Amount (EUR)",
+  "table.col.fee": "Fee",
+  "table.col.hasattachments": "Attachments",
   "table.delete": "Delete File",
   "table.delete.confirm.title": "Delete Invoice?",
   "table.delete.confirm.message": "Do you really want to delete this invoice?\n\nFile: %s\nCompany: %s\nAmount: %.2f %s\n\nThis will delete both the PDF file and the CSV entry.",
@@ -47,6 +51,13 @@
   "field.bankAccount": "Bank Account",
   "field.paymentDate": "Payment Date (DD.MM.YYYY)",
   "field.partialPayment": "Partial Payment",
+  "field.comment": "Comment",
+  "field.net_eur": "Net Amount (EUR)",
+  "field.fee": "Fee",
+  "field.attachments": "Attachments",
+  "field.attachments.none": "No attachments",
+  "field.attachments.count.one": "%d file selected",
+  "field.attachments.count.multiple": "%d files selected",
 
   "checkbox.rememberMap": "Remember this mapping (Company→Account)",
 
@@ -55,6 +66,11 @@
   "btn.cancel": "Cancel",
   "btn.retry": "Retry",
   "btn.openSettings": "Open Settings",
+  "btn.selectAttachments": "Select Attachments …",
+  "btn.openPDF": "Open PDF",
+  "btn.openAttachments": "Open Attachments",
+
+  "label.fileActions": "File Actions",
 
   "error.noText": "No text detected. OCR is not currently supported.",
   "error.needApiKey": "Claude API key missing. Please configure in settings.",
@@ -65,6 +81,7 @@
   "error.processing.title": "Error",
   "error.processing.message": "Error processing PDF: %s",
   "error.openOriginal": "Could not open original file: %s",
+  "error.openFile": "Could not open file: %s",
 
   "processing.title": "Processing PDF",
   "processing.message": "Please wait ...",

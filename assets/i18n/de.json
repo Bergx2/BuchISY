@@ -25,6 +25,10 @@
   "table.col.paymentdate": "Bezahldatum",
   "table.col.partialpayment": "Teilzahlung",
   "table.col.filename": "Dateiname",
+  "table.col.comment": "Kommentar",
+  "table.col.net_eur": "Betrag netto (EUR)",
+  "table.col.fee": "Gebühr",
+  "table.col.hasattachments": "Anhänge",
   "table.delete": "Datei löschen",
   "table.delete.confirm.title": "Rechnung löschen?",
   "table.delete.confirm.message": "Möchten Sie diese Rechnung wirklich löschen?\n\nDatei: %s\nFirma: %s\nBetrag: %.2f %s\n\nDies löscht sowohl die PDF-Datei als auch den CSV-Eintrag.",
@@ -47,6 +51,13 @@
   "field.bankAccount": "Bankkonto",
   "field.paymentDate": "Bezahldatum (DD.MM.YYYY)",
   "field.partialPayment": "Teilzahlung",
+  "field.comment": "Kommentar",
+  "field.net_eur": "Betrag netto (EUR)",
+  "field.fee": "Gebühr",
+  "field.attachments": "Anhänge",
+  "field.attachments.none": "Keine Anhänge",
+  "field.attachments.count.one": "%d Datei ausgewählt",
+  "field.attachments.count.multiple": "%d Dateien ausgewählt",
 
   "checkbox.rememberMap": "Diese Zuordnung (Firma→Konto) merken",
 
@@ -55,6 +66,11 @@
   "btn.cancel": "Abbrechen",
   "btn.retry": "Erneut versuchen",
   "btn.openSettings": "Einstellungen öffnen",
+  "btn.selectAttachments": "Anhänge auswählen …",
+  "btn.openPDF": "PDF öffnen",
+  "btn.openAttachments": "Anhänge öffnen",
+
+  "label.fileActions": "Dateiaktionen",
 
   "error.noText": "Kein Text erkennbar. OCR wird derzeit nicht unterstützt.",
   "error.needApiKey": "Claude API-Schlüssel fehlt. Bitte in den Einstellungen konfigurieren.",
@@ -65,6 +81,7 @@
   "error.processing.title": "Fehler",
   "error.processing.message": "Fehler beim Verarbeiten der PDF: %s",
   "error.openOriginal": "Originaldatei konnte nicht geöffnet werden: %s",
+  "error.openFile": "Datei konnte nicht geöffnet werden: %s",
 
   "processing.title": "Verarbeite PDF",
   "processing.message": "Bitte warten ...",

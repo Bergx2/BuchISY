@@ -126,6 +126,79 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	partialPaymentCheck := widget.NewCheck(a.bundle.T("field.partialPayment"), nil)
 	partialPaymentCheck.SetChecked(meta.Teilzahlung)
 
+	// Comment field (multiline)
+	commentEntry := widget.NewMultiLineEntry()
+	commentEntry.SetText(meta.Kommentar)
+	commentEntry.SetPlaceHolder(a.bundle.T("field.comment"))
+	commentEntry.SetMinRowsVisible(3)
+
+	// Currency conversion fields (shown only for non-default currency)
+	netEUREntry := widget.NewEntry()
+	if meta.BetragNetto_EUR > 0 {
+		netEUREntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto_EUR))
+	}
+	netEUREntry.SetPlaceHolder(a.bundle.T("field.net_eur"))
+
+	feeEntry := widget.NewEntry()
+	if meta.Gebuehr > 0 {
+		feeEntry.SetText(fmt.Sprintf("%.2f", meta.Gebuehr))
+	}
+	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
+
+	// Container for currency conversion fields
+	currencyConversionContainer := container.NewVBox()
+	updateCurrencyConversionVisibility := func() {
+		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+			currencyConversionContainer.Objects = []fyne.CanvasObject{
+				widget.NewForm(
+					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
+					widget.NewFormItem(a.bundle.T("field.fee"), feeEntry),
+				),
+			}
+		} else {
+			currencyConversionContainer.Objects = []fyne.CanvasObject{}
+		}
+		currencyConversionContainer.Refresh()
+	}
+
+	currencySelect.OnChanged = func(s string) {
+		updateCurrencyConversionVisibility()
+		onAnyChange(s)
+	}
+
+	updateCurrencyConversionVisibility()
+
+	// Open PDF button
+	openPDFBtn := widget.NewButton(a.bundle.T("btn.openPDF"), func() {
+		a.openFile(originalPath)
+	})
+	openPDFBtn.Importance = widget.MediumImportance
+
+	// Open attachments folder button (shown only if attachments exist)
+	openAttachmentsBtn := widget.NewButton(a.bundle.T("btn.openAttachments"), func() {
+		attachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
+		a.openFolder(attachmentsFolder)
+	})
+	openAttachmentsBtn.Importance = widget.MediumImportance
+
+	// File actions container
+	fileActionsContainer := container.NewVBox()
+	updateFileActionsVisibility := func() {
+		actions := []fyne.CanvasObject{
+			container.NewHBox(openPDFBtn),
+		}
+
+		// Add open attachments button if attachments exist
+		if a.storageManager.HasAttachments(originalPath) {
+			actions = append(actions, container.NewHBox(openAttachmentsBtn))
+		}
+
+		fileActionsContainer.Objects = actions
+		fileActionsContainer.Refresh()
+	}
+
+	updateFileActionsVisibility()
+
 	// Filename preview
 	filenamePreview := widget.NewLabel("")
 	filenamePreview.Wrapping = fyne.TextWrapBreak
@@ -182,6 +255,11 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		widget.NewLabel("Datei: "+row.Dateiname),
 		widget.NewSeparator(),
 
+		// File actions section
+		widget.NewLabel(a.bundle.T("label.fileActions")),
+		fileActionsContainer,
+		widget.NewSeparator(),
+
 		widget.NewForm(
 			widget.NewFormItem(a.bundle.T("field.company"), companyEntry),
 			widget.NewFormItem(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
@@ -196,6 +274,14 @@ func (a *App) showEditDialog(row core.CSVRow) {
 			widget.NewFormItem(a.bundle.T("field.account"), accountSelect),
 			widget.NewFormItem(a.bundle.T("field.bankAccount"), bankAccountSelect),
 			widget.NewFormItem("", partialPaymentCheck),
+		),
+
+		// Currency conversion fields (conditional)
+		currencyConversionContainer,
+
+		widget.NewSeparator(),
+		widget.NewForm(
+			widget.NewFormItem(a.bundle.T("field.comment"), commentEntry),
 		),
 
 		widget.NewSeparator(),
@@ -235,6 +321,9 @@ func (a *App) showEditDialog(row core.CSVRow) {
 				accountMap[accountSelect.Selected],
 				bankAccountSelect.Selected,
 				partialPaymentCheck.Checked,
+				commentEntry.Text,
+				parseFloat(netEUREntry.Text),
+				parseFloat(feeEntry.Text),
 			)
 
 			if err != nil {
@@ -270,6 +359,9 @@ func (a *App) updateInvoice(
 	account int,
 	bankAccount string,
 	partialPayment bool,
+	comment string,
+	netEUR float64,
+	fee float64,
 ) error {
 	// Build new meta
 	newMeta := core.Meta{
@@ -286,6 +378,10 @@ func (a *App) updateInvoice(
 		Gegenkonto:        account,
 		Bankkonto:         bankAccount,
 		Teilzahlung:       partialPayment,
+		Kommentar:         comment,
+		BetragNetto_EUR:   netEUR,
+		Gebuehr:           fee,
+		HatAnhaenge:       originalRow.HatAnhaenge, // Preserve attachment flag
 	}
 
 	// Extract year and month from invoice date
@@ -330,6 +426,19 @@ func (a *App) updateInvoice(
 
 		newFilename = finalName
 		newPath = finalPath
+
+		// If attachments folder exists, rename it first
+		if a.storageManager.HasAttachments(originalPath) {
+			oldAttachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
+			newAttachmentsFolder := a.storageManager.GetAttachmentsFolder(newPath)
+
+			a.logger.Info("Renaming attachments folder from %s to %s",
+				filepath.Base(oldAttachmentsFolder), filepath.Base(newAttachmentsFolder))
+
+			if err := os.Rename(oldAttachmentsFolder, newAttachmentsFolder); err != nil {
+				a.logger.Warn("Failed to rename attachments folder: %v", err)
+			}
+		}
 
 		// Rename the file
 		if err := os.Rename(originalPath, newPath); err != nil {
