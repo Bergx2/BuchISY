@@ -56,11 +56,6 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	})
 	dateCalendarBtn.Importance = widget.LowImportance
 
-	// Dynamic labels for amount fields (will show currency in parentheses)
-	netLabel := widget.NewLabel(a.bundle.T("field.net"))
-	vatAmountLabel := widget.NewLabel(a.bundle.T("field.vatAmount"))
-	grossLabel := widget.NewLabel(a.bundle.T("field.gross"))
-
 	netEntry := widget.NewEntry()
 	netEntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto))
 	netEntry.SetPlaceHolder(a.bundle.T("field.net"))
@@ -295,16 +290,38 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
 
-	// Update currency labels to show selected currency
-	updateCurrencyLabels := func() {
+	// Helper function to get currency-aware label
+	getCurrencyLabel := func(baseKey string) string {
 		currency := currencySelect.Selected
 		if currency == "" {
 			currency = a.settings.CurrencyDefault
 		}
+		return fmt.Sprintf("%s (%s)", a.bundle.T(baseKey), currency)
+	}
 
-		netLabel.SetText(fmt.Sprintf("%s (%s)", a.bundle.T("field.net"), currency))
-		vatAmountLabel.SetText(fmt.Sprintf("%s (%s)", a.bundle.T("field.vatAmount"), currency))
-		grossLabel.SetText(fmt.Sprintf("%s (%s)", a.bundle.T("field.gross"), currency))
+	// Container for the main form - will be rebuilt when currency changes
+	mainFormContainer := container.NewVBox()
+
+	// Function to rebuild the form with current currency
+	rebuildForm := func() {
+		mainFormContainer.Objects = []fyne.CanvasObject{
+			widget.NewForm(
+				widget.NewFormItem(a.bundle.T("field.company"), companyEntry),
+				widget.NewFormItem(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
+				widget.NewFormItem(a.bundle.T("field.invoicenumber"), invoiceNumEntry),
+				widget.NewFormItem(a.bundle.T("field.invoiceDate"), container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry)),
+				widget.NewFormItem(a.bundle.T("field.paymentDate"), container.NewBorder(nil, nil, nil, paymentDateCalendarBtn, paymentDateEntry)),
+				widget.NewFormItem(getCurrencyLabel("field.net"), netEntry),
+				widget.NewFormItem(a.bundle.T("field.vatPercent"), vatPercentEntry),
+				widget.NewFormItem(getCurrencyLabel("field.vatAmount"), vatAmountEntry),
+				widget.NewFormItem(getCurrencyLabel("field.gross"), grossEntry),
+				widget.NewFormItem(a.bundle.T("field.currency"), currencySelect),
+				widget.NewFormItem(a.bundle.T("field.account"), accountSelect),
+				widget.NewFormItem(a.bundle.T("field.bankAccount"), bankAccountSelect),
+				widget.NewFormItem("", partialPaymentCheck),
+			),
+		}
+		mainFormContainer.Refresh()
 	}
 
 	// Currency conversion visibility logic
@@ -322,16 +339,16 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		currencyConversionContainer.Refresh()
 	}
 
+	// Update currency select handler to rebuild form
 	currencySelect.OnChanged = func(s string) {
-		updateCurrencyLabels()
+		rebuildForm()
 		updateCurrencyConversionVisibility()
 		onAnyChange(s)
 	}
 
-	// Initial updates
-	updateCurrencyLabels()
+	// Initial form build and currency conversion visibility
+	rebuildForm()
 	updateCurrencyConversionVisibility()
-	updateFilenamePreview()
 
 	// Form layout
 	form := container.NewVBox(
@@ -343,62 +360,7 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		fileActionsContainer,
 		widget.NewSeparator(),
 
-		// Main form fields with dynamic currency labels
-		container.NewVBox(
-			// Company
-			widget.NewLabel(a.bundle.T("field.company")),
-			companyEntry,
-
-			// Short description
-			container.NewHBox(
-				widget.NewLabel(a.bundle.T("field.shortdesc")),
-				shortDescLabel,
-			),
-			shortDescEntry,
-
-			// Invoice number
-			widget.NewLabel(a.bundle.T("field.invoicenumber")),
-			invoiceNumEntry,
-
-			// Invoice date
-			widget.NewLabel(a.bundle.T("field.invoiceDate")),
-			container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry),
-
-			// Payment date
-			widget.NewLabel(a.bundle.T("field.paymentDate")),
-			container.NewBorder(nil, nil, nil, paymentDateCalendarBtn, paymentDateEntry),
-
-			// Net amount (with currency)
-			netLabel,
-			netEntry,
-
-			// VAT percent
-			widget.NewLabel(a.bundle.T("field.vatPercent")),
-			vatPercentEntry,
-
-			// VAT amount (with currency)
-			vatAmountLabel,
-			vatAmountEntry,
-
-			// Gross amount (with currency)
-			grossLabel,
-			grossEntry,
-
-			// Currency select
-			widget.NewLabel(a.bundle.T("field.currency")),
-			currencySelect,
-
-			// Account
-			widget.NewLabel(a.bundle.T("field.account")),
-			accountSelect,
-
-			// Bank account
-			widget.NewLabel(a.bundle.T("field.bankAccount")),
-			bankAccountSelect,
-
-			// Partial payment
-			partialPaymentCheck,
-		),
+		mainFormContainer,
 
 		// Currency conversion fields (conditional)
 		currencyConversionContainer,
@@ -415,56 +377,87 @@ func (a *App) showEditDialog(row core.CSVRow) {
 
 	// Scroll container for long forms
 	scrollForm := container.NewVScroll(form)
-	scrollForm.SetMinSize(fyne.NewSize(750, 625))
 
-	// Buttons
-	confirmDialog := dialog.NewCustomConfirm(
-		"Rechnung bearbeiten", // Edit title
-		a.bundle.T("btn.save"),
-		a.bundle.T("btn.cancel"),
-		scrollForm,
-		func(confirm bool) {
-			if !confirm {
-				return
-			}
+	// Create resizable window
+	editWindow := a.app.NewWindow("Rechnung bearbeiten") // Edit title
 
-			// Update the invoice
-			err := a.updateInvoice(
-				row,                    // Original row
-				originalPath,           // Original file path
-				companyEntry.Text,
-				shortDescEntry.Text,
-				invoiceNumEntry.Text,
-				dateEntry.Text,
-				paymentDateEntry.Text,
-				parseFloat(netEntry.Text),
-				parseFloat(vatPercentEntry.Text),
-				parseFloat(vatAmountEntry.Text),
-				parseFloat(grossEntry.Text),
-				currencySelect.Selected,
-				accountMap[accountSelect.Selected],
-				bankAccountSelect.Selected,
-				partialPaymentCheck.Checked,
-				commentEntry.Text,
-				parseFloat(netEUREntry.Text),
-				parseFloat(feeEntry.Text),
-				selectedAttachments,
+	// Create buttons (now we can reference editWindow)
+	saveBtn := widget.NewButton(a.bundle.T("btn.save"), func() {
+		// Update the invoice
+		err := a.updateInvoice(
+			row,                    // Original row
+			originalPath,           // Original file path
+			companyEntry.Text,
+			shortDescEntry.Text,
+			invoiceNumEntry.Text,
+			dateEntry.Text,
+			paymentDateEntry.Text,
+			parseFloat(netEntry.Text),
+			parseFloat(vatPercentEntry.Text),
+			parseFloat(vatAmountEntry.Text),
+			parseFloat(grossEntry.Text),
+			currencySelect.Selected,
+			accountMap[accountSelect.Selected],
+			bankAccountSelect.Selected,
+			partialPaymentCheck.Checked,
+			commentEntry.Text,
+			parseFloat(netEUREntry.Text),
+			parseFloat(feeEntry.Text),
+			selectedAttachments,
+		)
+
+		if err != nil {
+			a.showError(
+				a.bundle.T("error.processing.title"),
+				err.Error(),
 			)
+		} else {
+			// Save dialog size
+			a.saveDialogSize(editWindow)
+			// Close dialog
+			editWindow.Close()
+			// Reload table
+			a.loadInvoices()
+		}
+	})
+	saveBtn.Importance = widget.HighImportance
 
-			if err != nil {
-				a.showError(
-					a.bundle.T("error.processing.title"),
-					err.Error(),
-				)
-			} else {
-				// Reload table
-				a.loadInvoices()
-			}
-		},
-		a.window,
+	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
+		a.saveDialogSize(editWindow)
+		editWindow.Close()
+	})
+
+	buttonBar := container.NewHBox(
+		saveBtn,
+		cancelBtn,
 	)
 
-	confirmDialog.Show()
+	// Set size from settings or defaults
+	dialogWidth := float32(a.settings.DialogWidth)
+	dialogHeight := float32(a.settings.DialogHeight)
+	if dialogWidth < 500 {
+		dialogWidth = 850
+	}
+	if dialogHeight < 400 {
+		dialogHeight = 700
+	}
+	editWindow.Resize(fyne.NewSize(dialogWidth, dialogHeight))
+	editWindow.CenterOnScreen()
+
+	// Set content with buttons at bottom
+	editWindow.SetContent(container.NewBorder(
+		nil,
+		buttonBar,
+		nil, nil,
+		scrollForm,
+	))
+
+	// Set close handler to save size
+	editWindow.SetOnClosed(func() {
+		a.saveDialogSize(editWindow)
+	})
+
+	editWindow.Show()
 }
 
 // updateInvoice updates an existing invoice in the CSV and renames the file if necessary.

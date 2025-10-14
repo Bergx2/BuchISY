@@ -64,6 +64,8 @@ type Settings struct {
 	WindowHeight           int           `json:"window_height"`    // Window height in pixels
 	WindowX                int           `json:"window_x"`         // Window X position
 	WindowY                int           `json:"window_y"`         // Window Y position
+	DialogWidth            int           `json:"dialog_width"`     // Invoice dialog width in pixels
+	DialogHeight           int           `json:"dialog_height"`    // Invoice dialog height in pixels
 	ColumnOrder            []string      `json:"column_order"`     // Order of columns in table and CSV
 }
 
@@ -94,6 +96,8 @@ func DefaultSettings() Settings {
 		WindowHeight:           875,
 		WindowX:                -1, // -1 means center on screen
 		WindowY:                -1,
+		DialogWidth:            850,
+		DialogHeight:           700,
 		ColumnOrder:            DefaultCSVColumns,
 	}
 }
