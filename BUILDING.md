@@ -52,45 +52,21 @@ go build -o BuchISY.exe ./cmd/buchisy
 build-windows.bat
 ```
 
-#### Option 2: Use GitHub Actions
+#### Option 2: Use GitHub Actions (Recommended for CI/CD)
 
-The most reliable cross-platform solution is to use GitHub Actions:
+The most reliable automated solution is to use GitHub Actions with a Windows runner:
 
-1. Push your code to GitHub
-2. Use the workflow below to automatically build for Windows
+1. The workflow is already set up in `.github/workflows/build-windows.yml`
+2. To trigger a build:
+   - Push a tag starting with `v` (e.g., `v1.2.0`)
+   - Or go to Actions tab → Build Windows Release → Run workflow
+3. Download the artifact from the Actions run
 
-Create `.github/workflows/build-windows.yml`:
-
-```yaml
-name: Build Windows Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-
-jobs:
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22'
-
-    - name: Build Windows exe
-      run: go build -o BuchISY.exe ./cmd/buchisy
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: BuchISY-Windows
-        path: BuchISY.exe
-```
+The workflow automatically:
+- Sets up Go 1.25 on Windows
+- Builds with native Windows toolchain
+- Uploads the executable as an artifact
+- Creates a release (when triggered by a tag)
 
 #### Option 3: Cross-compile from macOS (Limited)
 
@@ -103,36 +79,48 @@ If you still want to try:
 ./build-windows-from-mac.sh
 ```
 
-#### Option 4: Use Docker with MinGW (Recommended for Cross-Platform)
+#### Option 4: Use Docker
 
-Build Windows executable from macOS/Linux using Docker:
+There are two Docker approaches, depending on your needs:
+
+##### 4a. Windows Docker Container (Best Compatibility)
+
+Uses native Windows container for perfect compatibility:
 
 ```bash
-# Method 1: Use the build script
+# Requires Docker in Windows containers mode
 make build-windows-docker
 # or
-./build-windows-docker.sh
-
-# Method 2: Use Docker directly
-docker build -t buchisy-windows -f Dockerfile.windows .
-docker run --rm -v $PWD:/output buchisy-windows sh -c "cp /build/BuchISY.exe /output/"
-
-# Method 3: Use Docker Compose
-docker-compose -f docker-compose.build.yml up
-
-# Method 4: Use pre-built MinGW image
-docker pull x1unix/go-mingw
-docker run --rm -v "$PWD":/app -w /app x1unix/go-mingw:latest \
-  bash -c "GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -o BuchISY.exe ./cmd/buchisy"
+./build-windows-native-docker.sh
 ```
 
-This method uses Docker with MinGW to properly compile the Windows executable with full CGO support, ensuring all Fyne UI features work correctly.
+**Requirements:**
+- Windows host with Docker Desktop in Windows containers mode
+- OR use in CI/CD with Windows runner (GitHub Actions, Azure DevOps)
+
+**Pros:**
+- Native Windows build environment
+- Full compatibility with all dependencies
+- No cross-compilation issues
+
+##### 4b. Linux Docker with MinGW (Cross-Compile)
+
+Attempts cross-compilation from Linux container:
+
+```bash
+# Works on any Docker host but may have compatibility issues
+make build-windows-docker-mingw
+# or
+./build-windows-docker.sh
+```
+
+**⚠️ Warning:** This method may fail with certain dependencies (like go-fitz) that include pre-compiled Windows libraries built with MSVC.
 
 **Requirements:**
-- Docker must be installed and running
-- First build may take longer due to Docker image creation
+- Docker installed and running (any OS)
+- May not work with all dependencies
 
-**Output:**
+**Output (both methods):**
 - `BuchISY.exe` - Standalone Windows executable with embedded translations
 
 ## Embedded Translations

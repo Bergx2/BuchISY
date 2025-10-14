@@ -1,0 +1,60 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # Allow manual trigger
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Build Windows executable
+      run: |
+        go build -ldflags="-H windowsgui" -o BuchISY.exe ./cmd/buchisy
+
+    - name: Test executable exists and show info
+      run: |
+        if (Test-Path "BuchISY.exe") {
+          Write-Host "✅ Build successful!"
+          $size = (Get-Item "BuchISY.exe").Length / 1MB
+          Write-Host "📦 Size: $([math]::Round($size, 2)) MB"
+        } else {
+          Write-Host "❌ Build failed!"
+          exit 1
+        }
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BuchISY-Windows-${{ github.sha }}
+        path: BuchISY.exe
+        retention-days: 30
+
+    - name: Create Release (only on tags)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: BuchISY.exe
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
