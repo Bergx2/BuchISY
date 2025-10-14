@@ -1,0 +1,32 @@
+# Dockerfile for building Windows executable with embedded translations
+FROM golang:1.22-bookworm
+
+# Install MinGW for Windows cross-compilation with CGO support
+RUN apt-get update && apt-get install -y \
+    mingw-w64 \
+    gcc-mingw-w64-x86-64 \
+    g++-mingw-w64-x86-64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up Go environment for Windows cross-compilation
+ENV CGO_ENABLED=1
+ENV GOOS=windows
+ENV GOARCH=amd64
+ENV CC=x86_64-w64-mingw32-gcc
+ENV CXX=x86_64-w64-mingw32-g++
+
+# Set working directory
+WORKDIR /build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the entire project
+COPY . .
+
+# Build the Windows executable
+RUN go build -ldflags="-H windowsgui" -o BuchISY.exe ./cmd/buchisy
+
+# The output executable will be at /build/BuchISY.exe
+CMD ["echo", "Build complete! Windows executable: BuchISY.exe"]

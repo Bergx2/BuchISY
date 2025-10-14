@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  windows-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows
+    volumes:
+      - .:/output
+    command: sh -c "cp /build/BuchISY.exe /output/ && echo 'Windows build complete: BuchISY.exe'"

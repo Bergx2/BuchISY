@@ -35,12 +35,20 @@ build-macos:
 	MACOSX_DEPLOYMENT_TARGET=15.0 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-macos $(MAIN_PATH)
 	@echo "macOS build complete: $(BUILD_DIR)/$(BINARY_NAME)-macos"
 
-# Build for Windows
+# Build for Windows (must be run on Windows machine)
+# Translations are embedded in the binary - no assets folder needed
 build-windows:
-	@echo "Building for Windows..."
+	@echo "Building for Windows (native build)..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
-	@echo "Windows build complete: $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe"
+	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-windows.exe $(MAIN_PATH)
+	@echo "Windows build complete: $(BUILD_DIR)/$(BINARY_NAME)-windows.exe"
+	@echo "Note: Translations are embedded in the binary - no assets folder needed"
+
+# Build for Windows using Docker (works on any platform)
+# Uses MinGW for proper CGO support
+build-windows-docker:
+	@echo "Building for Windows using Docker + MinGW..."
+	@./build-windows-docker.sh
 
 # Package for macOS (creates .app bundle)
 package-macos:
@@ -118,7 +126,8 @@ help:
 	@echo ""
 	@echo "  make build              - Build for current platform"
 	@echo "  make build-macos        - Build for macOS (Intel + ARM)"
-	@echo "  make build-windows      - Build for Windows"
+	@echo "  make build-windows      - Build for Windows (on Windows)"
+	@echo "  make build-windows-docker - Build for Windows using Docker (any platform)"
 	@echo "  make package-macos      - Create macOS .app bundle"
 	@echo "  make package-windows    - Create Windows .exe"
 	@echo "  make run                - Run the application"
