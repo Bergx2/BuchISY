@@ -6,17 +6,42 @@
 
 ## Features
 
+### Invoice Processing
 - **PDF Invoice Processing**: Drag-and-drop or select PDF invoices for automatic data extraction
 - **Dual Processing Modes**:
-  - **Claude API**: High-accuracy extraction using Anthropic's Claude AI
-  - **Local Heuristics**: Offline extraction using pattern matching and rules
+  - **Claude API**: High-accuracy extraction using Anthropic's Claude AI with Vision support for scanned PDFs
+  - **Local Heuristics**: Offline extraction using pattern matching and rules for standard German invoices
+- **E-Invoice Support**: Process XRechnung and ZUGFeRD electronic invoices with structured XML data extraction
 - **Automatic Organization**: Organizes invoices by year-month (YYYY-MM) with customizable folder structure
 - **Smart Naming**: Flexible filename templates with tokens like `${Company}`, `${InvoiceNumber}`, `${GrossAmount}`, etc.
-- **Account Management**: Define up to 10 custom accounts (Gegenkonten) and automatically remember company-to-account mappings
+- **Batch Processing**: Process multiple invoices in sequence with automatic metadata extraction
+
+### Data Management
+- **Invoice Table Display**: View, sort, and manage all invoices for the selected month
+- **Edit Functionality**: Modify existing invoice data with automatic file renaming
+- **Delete & Cleanup**: Remove unwanted entries with automatic file management
+- **Duplicate Detection**: Smart prevention of duplicate entries based on invoice number, date, and amount
 - **CSV Export**: Maintains a monthly `invoices.csv` file with all invoice metadata
-- **Duplicate Detection**: Prevents accidental duplicate entries based on invoice number, date, and amount
-- **Multi-language**: German (default) and English interface with easy switching
-- **Privacy-First**: All processing happens locally except Claude API calls; API keys stored securely in OS keychain
+- **Customizable Columns**: Configure which columns to display and their order in both table and CSV
+
+### Account & Company Management
+- **Account Management**: Define up to 10 custom accounts (Gegenkonten) with codes and descriptions
+- **Smart Company Mapping**: Automatically remembers and suggests accounts for repeat vendors
+- **Bank Account Tracking**: Optional bank account field for payment processing
+- **Payment Date Tracking**: Record when invoices were paid with date picker interface
+
+### User Interface
+- **Multi-language**: German (primary) and English interface with instant switching
+- **Tooltips**: Hover tooltips for long text in company names, filenames, and descriptions
+- **Date Pickers**: Calendar widgets for easy date selection (German format DD.MM.YYYY)
+- **Responsive Design**: Native desktop experience on macOS and Windows
+- **Window State Memory**: Remembers window size and position between sessions
+
+### Security & Privacy
+- **Privacy-First**: All processing happens locally except when using Claude API
+- **Secure Key Storage**: API keys stored in OS keychain (macOS Keychain/Windows Credential Manager)
+- **No Telemetry**: No usage tracking or data collection
+- **Local Logs**: Debug logs stored locally for troubleshooting
 
 ## Screenshots
 
@@ -88,7 +113,25 @@ MACOSX_DEPLOYMENT_TARGET=15.0 make package-macos
    - Currency
    - Account code (Gegenkonto)
    - Short description
+   - Payment date (optional)
+   - Bank account (optional)
 4. **Save**: Click "Speichern" to save the invoice. The file will be renamed according to your template and moved to the month folder.
+
+### Extraction Modes Explained
+
+**Claude API Mode** (Recommended):
+- Uses Anthropic's Claude AI for intelligent extraction
+- Supports both native PDFs and scanned documents (via Claude Vision)
+- Handles complex layouts and multiple languages
+- Requires internet connection and API key
+- Higher accuracy for non-standard invoice formats
+
+**Local Mode** (Offline):
+- Uses pattern matching and heuristics
+- Works completely offline - no internet required
+- Best for standard German invoices
+- Does not support scanned PDFs
+- Faster processing for simple invoices
 
 ### Configuration
 
@@ -124,6 +167,9 @@ Access via the "Einstellungen" button.
 **Language (Sprache)**:
 - Switch between German and English
 
+**Advanced**:
+- **Debug Mode**: Enable verbose logging for troubleshooting (logs stored in Application Support folder)
+
 #### Getting a Claude API Key
 
 1. Sign up at [console.anthropic.com](https://console.anthropic.com/)
@@ -134,14 +180,16 @@ Access via the "Einstellungen" button.
 
 ## CSV Format
 
-Each month folder contains an `invoices.csv` file with the following columns:
+Each month folder contains an `invoices.csv` file with the following columns (default order):
 
 ```
 Dateiname,Rechnungsdatum,Jahr,Monat,Firmenname,Kurzbezeichnung,Rechnungsnummer,BetragNetto,Steuersatz_Prozent,Steuersatz_Betrag,Bruttobetrag,Waehrung,Gegenkonto,Bankkonto,Bezahldatum,Teilzahlung
 ```
 
+- **Column order** can be customized in Settings
 - All amounts use `.` as decimal separator in CSV (regardless of UI settings)
 - Dates (Rechnungsdatum and Bezahldatum) are in German format `DD.MM.YYYY`
+- Currency codes are normalized (€ → EUR, $ → USD, etc.)
 
 ## File Structure
 
@@ -175,10 +223,13 @@ Dateiname,Rechnungsdatum,Jahr,Monat,Firmenname,Kurzbezeichnung,Rechnungsnummer,B
 
 **Cause**: The PDF is image-based (scanned document) without embedded text.
 
-**Solution**: BuchISY currently does not support OCR. Options:
-1. Use a PDF with embedded text (native PDF, not scanned)
-2. Pre-process scanned PDFs with OCR software (e.g., Adobe Acrobat, ABBYY FineReader)
-3. Enter invoice data manually
+**Solution**:
+- **Claude API Mode**: BuchISY supports scanned PDFs through Claude Vision API. Ensure you're using Claude mode with a valid API key.
+- **Local Mode**: Does not support scanned PDFs. Options:
+  1. Switch to Claude API mode for automatic extraction from scanned PDFs
+  2. Use a PDF with embedded text (native PDF, not scanned)
+  3. Pre-process scanned PDFs with OCR software (e.g., Adobe Acrobat, ABBYY FineReader)
+  4. Enter invoice data manually
 
 ### "API key missing" error
 
@@ -244,16 +295,32 @@ Contributions are welcome! Please:
 
 ## Roadmap
 
-- [ ] Drag-and-drop support for PDF files
-- [ ] Settings dialog with all configuration options
-- [ ] Full invoice confirmation modal
+### Completed Features ✅
+- [x] Drag-and-drop support for PDF files
+- [x] Settings dialog with all configuration options
+- [x] Full invoice confirmation modal with all fields
+- [x] Edit functionality for existing invoices
+- [x] Claude Vision support for scanned PDFs (OCR alternative)
+- [x] E-invoice support (XRechnung, ZUGFeRD)
+- [x] Tooltips for long text fields
+- [x] Date picker with calendar widget
+- [x] Company-to-account mapping memory
+- [x] Customizable CSV column order
+
+### Planned Features
 - [ ] Open folder in system file manager
-- [ ] OCR support for scanned PDFs
 - [ ] Batch processing with progress indicator
-- [ ] Export to other formats (Excel, JSON)
+- [ ] Export to other formats (Excel, JSON, QuickBooks)
 - [ ] Search and filter in invoice table
+- [ ] Keyboard shortcuts for common operations
 - [ ] Dark mode support
 - [ ] Additional language support (French, Italian, Spanish)
+- [ ] Cloud backup/sync support
+- [ ] Multi-user collaboration features
+- [ ] Invoice templates for recurring vendors
+- [ ] Automatic categorization with machine learning
+- [ ] Email invoice import
+- [ ] Receipt scanning via mobile app
 
 ## License
 
