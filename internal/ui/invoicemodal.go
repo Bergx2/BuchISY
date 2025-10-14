@@ -125,6 +125,79 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	partialPaymentCheck := widget.NewCheck(a.bundle.T("field.partialPayment"), nil)
 	partialPaymentCheck.SetChecked(meta.Teilzahlung)
 
+	// Comment field (multiline)
+	commentEntry := widget.NewMultiLineEntry()
+	commentEntry.SetText(meta.Kommentar)
+	commentEntry.SetPlaceHolder(a.bundle.T("field.comment"))
+	commentEntry.SetMinRowsVisible(3)
+
+	// Currency conversion fields (shown only for non-default currency)
+	netEUREntry := widget.NewEntry()
+	if meta.BetragNetto_EUR > 0 {
+		netEUREntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto_EUR))
+	}
+	netEUREntry.SetPlaceHolder(a.bundle.T("field.net_eur"))
+
+	feeEntry := widget.NewEntry()
+	if meta.Gebuehr > 0 {
+		feeEntry.SetText(fmt.Sprintf("%.2f", meta.Gebuehr))
+	}
+	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
+
+	// Container for currency conversion fields (initially hidden)
+	currencyConversionContainer := container.NewVBox()
+	updateCurrencyConversionVisibility := func() {
+		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+			// Show currency conversion fields
+			currencyConversionContainer.Objects = []fyne.CanvasObject{
+				widget.NewForm(
+					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
+					widget.NewFormItem(a.bundle.T("field.fee"), feeEntry),
+				),
+			}
+		} else {
+			// Hide currency conversion fields
+			currencyConversionContainer.Objects = []fyne.CanvasObject{}
+		}
+		currencyConversionContainer.Refresh()
+	}
+
+	// Update visibility when currency changes
+	currencySelect.OnChanged = func(s string) {
+		updateCurrencyConversionVisibility()
+		onAnyChange(s)
+	}
+
+	// Initial visibility check
+	updateCurrencyConversionVisibility()
+
+	// List to track selected attachment files
+	selectedAttachments := []string{}
+	attachmentsLabel := widget.NewLabel(a.bundle.T("field.attachments.none"))
+
+	// Button to select attachments
+	selectAttachmentsBtn := widget.NewButton(a.bundle.T("btn.selectAttachments"), func() {
+		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			defer reader.Close()
+
+			filepath := reader.URI().Path()
+			selectedAttachments = append(selectedAttachments, filepath)
+
+			// Update label
+			if len(selectedAttachments) == 1 {
+				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.one"), len(selectedAttachments)))
+			} else {
+				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.multiple"), len(selectedAttachments)))
+			}
+		}, a.window)
+
+		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx", ".txt"}))
+		fileDialog.Show()
+	})
+
 	// Remember mapping checkbox
 	rememberCheck := widget.NewCheck(a.bundle.T("checkbox.rememberMap"), nil)
 	rememberCheck.SetChecked(a.settings.RememberCompanyAccount)
@@ -203,7 +276,7 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	vatPercentEntry.OnChanged = onAnyChange
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
-	currencySelect.OnChanged = onAnyChange
+	// Note: currencySelect.OnChanged is set above to handle currency conversion visibility
 
 	// Initial preview - call after all widgets are set up
 	updateFilenamePreview()
@@ -230,6 +303,19 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 			widget.NewFormItem("", partialPaymentCheck),
 		),
 
+		// Currency conversion fields (shown only for non-default currency)
+		currencyConversionContainer,
+
+		widget.NewSeparator(),
+		widget.NewForm(
+			widget.NewFormItem(a.bundle.T("field.comment"), commentEntry),
+		),
+
+		widget.NewSeparator(),
+		widget.NewLabel(a.bundle.T("field.attachments")),
+		container.NewHBox(selectAttachmentsBtn, attachmentsLabel),
+
+		widget.NewSeparator(),
 		rememberCheck,
 		widget.NewSeparator(),
 		widget.NewLabel(a.bundle.T("modal.filenamePreview")),
@@ -267,6 +353,10 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 				accountMap[accountSelect.Selected],
 				bankAccountSelect.Selected,
 				partialPaymentCheck.Checked,
+				commentEntry.Text,
+				parseFloat(netEUREntry.Text),
+				parseFloat(feeEntry.Text),
+				selectedAttachments,
 				rememberCheck.Checked,
 			)
 
@@ -302,6 +392,10 @@ func (a *App) saveInvoice(
 	account int,
 	bankAccount string,
 	partialPayment bool,
+	comment string,
+	netEUR float64,
+	fee float64,
+	attachments []string,
 	rememberMapping bool,
 ) error {
 	// Build meta
@@ -319,6 +413,10 @@ func (a *App) saveInvoice(
 		Gegenkonto:        account,
 		Bankkonto:         bankAccount,
 		Teilzahlung:       partialPayment,
+		Kommentar:         comment,
+		BetragNetto_EUR:   netEUR,
+		Gebuehr:           fee,
+		HatAnhaenge:       len(attachments) > 0,
 	}
 
 	// Extract year and month from invoice date (for filename and CSV fields)
@@ -364,6 +462,20 @@ func (a *App) saveInvoice(
 		meta.Dateiname = finalFilename
 		newRow.Dateiname = finalFilename
 
+		// Copy attachment files if any
+		if len(attachments) > 0 {
+			invoicePath := filepath.Join(targetFolder, finalFilename)
+			for _, attachmentPath := range attachments {
+				copiedName, err := a.storageManager.CopyFileToAttachments(attachmentPath, invoicePath)
+				if err != nil {
+					a.logger.Warn("Failed to copy attachment %s: %v", filepath.Base(attachmentPath), err)
+					// Continue with other attachments even if one fails
+				} else {
+					a.logger.Debug("Copied attachment: %s", copiedName)
+				}
+			}
+		}
+
 		// Append to CSV
 		if err := a.csvRepo.Append(csvPath, newRow); err != nil {
 			return fmt.Errorf("failed to append to CSV: %w", err)
@@ -378,6 +490,9 @@ func (a *App) saveInvoice(
 		}
 
 		a.logger.Info("Saved invoice: %s", finalFilename)
+		if len(attachments) > 0 {
+			a.logger.Info("Saved %d attachment(s)", len(attachments))
+		}
 		return nil
 	}
 
