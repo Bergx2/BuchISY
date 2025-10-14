@@ -63,7 +63,7 @@ jobs:
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
         # Build the app bundle
-        MACOSX_DEPLOYMENT_TARGET=11.0 fyne package -os darwin \
+        MACOSX_DEPLOYMENT_TARGET=15.0 fyne package -os darwin \
           -name BuchISY \
           -appID com.bergx2.buchisy \
           -src ./cmd/buchisy

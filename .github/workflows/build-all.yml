@@ -61,7 +61,7 @@ jobs:
 
     - name: Create macOS .app bundle
       run: |
-        MACOSX_DEPLOYMENT_TARGET=11.0 fyne package -os darwin \
+        MACOSX_DEPLOYMENT_TARGET=15.0 fyne package -os darwin \
           -name BuchISY \
           -appID com.bergx2.buchisy \
           -src ./cmd/buchisy
