@@ -327,12 +327,9 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	// Currency conversion visibility logic
 	updateCurrencyConversionVisibility := func() {
 		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
-			// Show currency conversion fields
-			currency := currencySelect.Selected
-			if currency == "" {
-				currency = a.settings.CurrencyDefault
-			}
-			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), currency)
+			// Show currency conversion fields (both in default currency EUR)
+			defaultCurrency := a.settings.CurrencyDefault
+			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
 
 			currencyConversionContainer.Objects = []fyne.CanvasObject{
 				widget.NewForm(
