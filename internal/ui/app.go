@@ -32,6 +32,7 @@ type App struct {
 	pdfExtractor       *core.PDFTextExtractor
 	localExtractor     *core.LocalExtractor
 	anthropicExtractor *anthropic.Extractor
+	eInvoiceExtractor  *core.EInvoiceExtractor
 	csvRepo            *core.CSVRepository
 	storageManager     *core.StorageManager
 
@@ -108,6 +109,7 @@ func New(assetsDir string) (*App, error) {
 	pdfExtractor := core.NewPDFTextExtractor()
 	localExtractor := core.NewLocalExtractor()
 	anthropicExtractor := anthropic.NewExtractor(logger, settings.DebugMode)
+	eInvoiceExtractor := core.NewEInvoiceExtractor()
 	csvRepo := core.NewCSVRepository()
 	csvRepo.SetColumnOrder(settings.ColumnOrder)
 	storageManager := core.NewStorageManager(&settings)
@@ -128,6 +130,7 @@ func New(assetsDir string) (*App, error) {
 		pdfExtractor:       pdfExtractor,
 		localExtractor:     localExtractor,
 		anthropicExtractor: anthropicExtractor,
+		eInvoiceExtractor:  eInvoiceExtractor,
 		csvRepo:            csvRepo,
 		storageManager:     storageManager,
 		currentYear:        currentYear,
@@ -350,7 +353,40 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 	a.logger.Debug("=== PDF EXTRACTION START ===")
 	a.logger.Debug("File: %s", path)
 
-	// Extract text
+	// STEP 1: Check for XRechnung/ZUGFeRD structured data (highest priority)
+	if format, ok := a.eInvoiceExtractor.DetectFormat(path); ok {
+		a.logger.Info("✓ Detected %s format - using structured data extraction", format)
+		meta, confidence, err := a.eInvoiceExtractor.Extract(path)
+		if err == nil {
+			a.logger.Info("E-invoice extraction successful (confidence: %.2f)", confidence)
+			if a.settings.DebugMode {
+				a.logger.Debug("=== E-INVOICE METADATA ===")
+				a.logger.Debug("Format: %s", format)
+				a.logger.Debug("Company: %s", meta.Firmenname)
+				a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
+				a.logger.Debug("Date: %s", meta.Rechnungsdatum)
+				a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
+				a.logger.Debug("Net: %.2f", meta.BetragNetto)
+				a.logger.Debug("Tax: %.2f%% (%.2f)", meta.SteuersatzProzent, meta.SteuersatzBetrag)
+			}
+
+			// Suggest account
+			if a.settings.AutoSelectAccount && meta.Firmenname != "" {
+				if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+					meta.Gegenkonto = account
+				} else {
+					meta.Gegenkonto = a.settings.DefaultAccount
+				}
+			} else {
+				meta.Gegenkonto = a.settings.DefaultAccount
+			}
+
+			return meta, nil
+		}
+		a.logger.Warn("E-invoice extraction failed: %v, falling back to text extraction", err)
+	}
+
+	// STEP 2: Extract text from PDF
 	text, err := a.pdfExtractor.ExtractText(path)
 	if err != nil {
 		a.logger.Debug("PDF extraction error: %v", err)
