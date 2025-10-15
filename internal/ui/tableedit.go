@@ -154,17 +154,32 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	// Container for currency conversion fields
 	currencyConversionContainer := container.NewVBox()
 
+	// Original filename label
+	originalLabel := widget.NewLabel(row.Dateiname)
+
+	// Open original button
+	openOriginalBtn := widget.NewButton("Datei öffnen", func() {
+		a.openFile(originalPath)
+	})
+	openOriginalBtn.Importance = widget.LowImportance
+
+	// New filename preview label
+	newFilenameLabel := widget.NewLabel("")
+
 	// List to track newly selected attachment files
 	selectedAttachments := []string{}
-	attachmentsLabel := widget.NewLabel("")
+	attachmentsLabel := widget.NewLabel("Keine")
+
+	// Container for attachment list (will be populated when attachments are added)
+	attachmentListContainer := container.NewVBox()
 
 	// Create button with dummy callback (will be replaced after editWindow is created)
-	selectAttachmentsBtn := widget.NewButton(a.bundle.T("btn.addAttachments"), func() {
+	selectAttachmentsBtn := widget.NewButton("Anhänge hinzufügen", func() {
 		// Will be replaced
 	})
 	selectAttachmentsBtn.Importance = widget.LowImportance
 
-	// Update attachments label based on existing and new attachments
+	// Update attachments label and list based on existing and new attachments
 	updateAttachmentsLabel := func() {
 		existingCount := 0
 		if a.storageManager.HasAttachments(originalPath) {
@@ -175,10 +190,11 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		}
 
 		newCount := len(selectedAttachments)
-		totalCount := existingCount + newCount
 
-		if totalCount == 0 {
-			attachmentsLabel.SetText(a.bundle.T("field.attachments.none"))
+		// Update label
+		if existingCount == 0 && newCount == 0 {
+			attachmentsLabel.SetText("Keine")
+			attachmentListContainer.Objects = []fyne.CanvasObject{}
 		} else if newCount == 0 {
 			// Only existing attachments
 			if existingCount == 1 {
@@ -186,37 +202,29 @@ func (a *App) showEditDialog(row core.CSVRow) {
 			} else {
 				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene Dateien", existingCount))
 			}
+			attachmentListContainer.Objects = []fyne.CanvasObject{}
 		} else {
 			// Has new attachments to add
 			if newCount == 1 {
-				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue Datei", existingCount, newCount))
+				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue", existingCount, newCount))
 			} else {
-				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue Dateien", existingCount, newCount))
+				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue", existingCount, newCount))
 			}
+
+			// Update attachment list
+			attachmentItems := []fyne.CanvasObject{}
+			for _, path := range selectedAttachments {
+				attachmentItems = append(attachmentItems,
+					widget.NewLabel("  • "+filepath.Base(path)))
+			}
+			attachmentListContainer.Objects = attachmentItems
+			attachmentListContainer.Refresh()
 		}
 	}
 
 	updateAttachmentsLabel()
 
-	// Open PDF button
-	openPDFBtn := widget.NewButton(a.bundle.T("btn.openPDF"), func() {
-		a.openFile(originalPath)
-	})
-	openPDFBtn.Importance = widget.MediumImportance
-
-	// Open attachments folder button (shown only if attachments exist or will be added)
-	openAttachmentsBtn := widget.NewButton(a.bundle.T("btn.openAttachments"), func() {
-		attachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
-		a.openFolder(attachmentsFolder)
-	})
-	openAttachmentsBtn.Importance = widget.MediumImportance
-
-	// File actions container (will be populated after button creation)
-	fileActionsContainer := container.NewVBox()
-
-	// Filename preview
-	filenamePreview := widget.NewLabel("")
-	filenamePreview.Wrapping = fyne.TextWrapBreak
+	// Update filename preview function
 	updateFilenamePreview := func() {
 		// Build meta from current form values
 		currentMeta := core.Meta{
@@ -244,22 +252,32 @@ func (a *App) showEditDialog(row core.CSVRow) {
 			core.TemplateOpts{DecimalSeparator: a.settings.DecimalSeparator},
 		)
 		if err != nil {
-			filenamePreview.SetText("Fehler: " + err.Error())
+			newFilenameLabel.SetText("Fehler: " + err.Error())
 		} else {
-			filenamePreview.SetText(filename)
+			newFilenameLabel.SetText(filename)
 		}
 	}
 
 	// Update preview on any field change
 	onAnyChange := func(string) { updateFilenamePreview() }
 	companyEntry.OnChanged = onAnyChange
-	shortDescEntry.OnChanged = onAnyChange
+	// Special handler for shortDescEntry to handle both character limit and preview
+	shortDescEntry.OnChanged = func(s string) {
+		if len(s) > 80 {
+			shortDescEntry.SetText(s[:80])
+		}
+		shortDescLabel.SetText(fmt.Sprintf("%d / 80", len(shortDescEntry.Text)))
+		updateFilenamePreview()
+	}
 	invoiceNumEntry.OnChanged = onAnyChange
 	dateEntry.OnChanged = onAnyChange
 	netEntry.OnChanged = onAnyChange
 	vatPercentEntry.OnChanged = onAnyChange
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
+
+	// Initial preview update
+	updateFilenamePreview()
 
 	// Helper function to get currency-aware label
 	getCurrencyLabel := func(baseKey string) string {
@@ -320,22 +338,44 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	currencySelect.OnChanged = func(s string) {
 		rebuildForm()
 		updateCurrencyConversionVisibility()
-		onAnyChange(s)
+		updateFilenamePreview()
 	}
 
 	// Initial form build and currency conversion visibility
 	rebuildForm()
 	updateCurrencyConversionVisibility()
 
+	// Create header section (same as new invoice modal)
+	headerSection := container.NewVBox(
+		// Original file (left) + New filename (right) on same row
+		container.NewBorder(nil, nil,
+			// Left side: Original file
+			container.NewHBox(
+				widget.NewLabel("Originaldatei:"),
+				originalLabel,
+				openOriginalBtn,
+			),
+			// Right side: New filename
+			container.NewHBox(
+				widget.NewLabel("Neuer Dateiname:"),
+				newFilenameLabel,
+			),
+			nil, // Center is empty
+		),
+		// Attachments row
+		container.NewHBox(
+			widget.NewLabel("Anhänge:"),
+			attachmentsLabel,
+			selectAttachmentsBtn,
+		),
+		// Attachment list (only visible when attachments are added)
+		attachmentListContainer,
+		widget.NewSeparator(),
+	)
+
 	// Form layout
 	form := container.NewVBox(
-		widget.NewLabel("Datei: "+row.Dateiname),
-		widget.NewSeparator(),
-
-		// File actions section
-		widget.NewLabel(a.bundle.T("label.fileActions")),
-		fileActionsContainer,
-		widget.NewSeparator(),
+		headerSection,
 
 		mainFormContainer,
 
@@ -346,10 +386,6 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		widget.NewForm(
 			widget.NewFormItem(a.bundle.T("field.comment"), commentEntry),
 		),
-
-		widget.NewSeparator(),
-		widget.NewLabel(a.bundle.T("modal.filenamePreview")),
-		filenamePreview,
 	)
 
 	// Scroll container for long forms
@@ -375,29 +411,6 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		fileDialog.Resize(fyne.NewSize(1000, 700)) // Make it twice as big
 		fileDialog.Show()
 	}
-
-	// Now populate file actions container (all buttons exist)
-	updateFileActionsVisibility := func() {
-		actions := []fyne.CanvasObject{
-			container.NewHBox(openPDFBtn),
-		}
-
-		// Add open attachments button if attachments exist
-		if a.storageManager.HasAttachments(originalPath) {
-			actions = append(actions, container.NewHBox(openAttachmentsBtn))
-		}
-
-		// Always show the add attachments section
-		actions = append(actions,
-			widget.NewSeparator(),
-			widget.NewLabel(a.bundle.T("field.attachments")),
-			container.NewHBox(selectAttachmentsBtn, attachmentsLabel),
-		)
-
-		fileActionsContainer.Objects = actions
-		fileActionsContainer.Refresh()
-	}
-	updateFileActionsVisibility()
 
 	// Create buttons (now we can reference editWindow)
 	saveBtn := widget.NewButton(a.bundle.T("btn.save"), func() {

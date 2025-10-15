@@ -128,8 +128,8 @@ func (a *App) showCustomFilePicker() {
 		},
 	)
 
-	// Set column widths
-	fileTable.SetColumnWidth(0, 920) // Filename - takes most space
+	// Set column widths (total should be less than dialog width minus padding/scrollbars)
+	fileTable.SetColumnWidth(0, 880) // Filename - takes most space
 	fileTable.SetColumnWidth(1, 80)  // Date - very compact (80px as requested)
 
 	// Define loadFiles function FIRST (before it's used in handlers)
@@ -320,7 +320,7 @@ func (a *App) showCustomFilePicker() {
 		a.window,
 	)
 
-	customDialog.Resize(fyne.NewSize(1000, 700))
+	customDialog.Resize(fyne.NewSize(1100, 700))
 	customDialog.Show()
 }
 

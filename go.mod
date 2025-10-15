@@ -4,8 +4,12 @@ go 1.25
 
 require (
 	fyne.io/fyne/v2 v2.6.3
+	github.com/gen2brain/go-fitz v1.24.15
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
+	github.com/pdfcpu/pdfcpu v0.11.0
 	github.com/zalando/go-keyring v0.2.6
+	golang.org/x/text v0.30.0
+	modernc.org/sqlite v1.39.1
 )
 
 require (
@@ -22,7 +26,6 @@ require (
 	github.com/fyne-io/glfw-js v0.3.0 // indirect
 	github.com/fyne-io/image v0.1.1 // indirect
 	github.com/fyne-io/oksvg v0.1.0 // indirect
-	github.com/gen2brain/go-fitz v1.24.15 // indirect
 	github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71 // indirect
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20240506104042-037f3cc74f2a // indirect
 	github.com/go-text/render v0.2.0 // indirect
@@ -43,7 +46,6 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.5.1 // indirect
-	github.com/pdfcpu/pdfcpu v0.11.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -58,11 +60,9 @@ require (
 	golang.org/x/image v0.27.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.39.1 // indirect
 )

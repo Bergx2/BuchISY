@@ -29,12 +29,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	shortDescEntry.SetPlaceHolder(a.bundle.T("field.shortdesc"))
 	// Show character count
 	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Verwendungszweck)))
-	shortDescEntry.OnChanged = func(s string) {
-		if len(s) > 80 {
-			shortDescEntry.SetText(s[:80])
-		}
-		shortDescLabel.SetText(fmt.Sprintf("%d / 80", len(shortDescEntry.Text)))
-	}
 
 	invoiceNumEntry := widget.NewEntry()
 	invoiceNumEntry.SetText(meta.Rechnungsnummer)
@@ -152,26 +146,15 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	// Container for currency conversion fields (initially hidden)
 	currencyConversionContainer := container.NewVBox()
 
-	// List to track selected attachment files
-	selectedAttachments := []string{}
-	attachmentsLabel := widget.NewLabel(a.bundle.T("field.attachments.none"))
-
-	// Create button with dummy callback (will be replaced after dialogWindow is created)
-	selectAttachmentsBtn := widget.NewButton(a.bundle.T("btn.selectAttachments"), func() {
-		// Will be replaced
-	})
-
 	// Remember mapping checkbox
 	rememberCheck := widget.NewCheck(a.bundle.T("checkbox.rememberMap"), nil)
 	rememberCheck.SetChecked(a.settings.RememberCompanyAccount)
 
-	// Original filename (entry for copy-paste, keep enabled for proper dark mode colors)
-	originalEntry := widget.NewEntry()
-	originalEntry.SetText(filepath.Base(originalPath))
-	originalEntry.MultiLine = false
-	// Note: Keeping entry enabled so text is visible in dark mode
-	// User can technically edit but it doesn't affect processing
-	openOriginalBtn := widget.NewButton(a.bundle.T("modal.openOriginal"), func() {
+	// Original filename label (read-only)
+	originalLabel := widget.NewLabel(filepath.Base(originalPath))
+
+	// Open original button
+	openOriginalBtn := widget.NewButton("Datei öffnen", func() {
 		fileURI := storage.NewFileURI(originalPath)
 		parsed, err := url.Parse(fileURI.String())
 		if err != nil {
@@ -193,9 +176,21 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	})
 	openOriginalBtn.Importance = widget.LowImportance
 
-	// Filename preview
-	filenamePreview := widget.NewLabel("")
-	filenamePreview.Wrapping = fyne.TextWrapBreak
+	// New filename preview label
+	newFilenameLabel := widget.NewLabel("")
+
+	// List to track selected attachment files
+	selectedAttachments := []string{}
+	attachmentsLabel := widget.NewLabel("Keine")
+
+	// Container for attachment list (will be populated when attachments are added)
+	attachmentListContainer := container.NewVBox()
+
+	// Create button with dummy callback (will be replaced after dialogWindow is created)
+	selectAttachmentsBtn := widget.NewButton("Anhänge hinzufügen", func() {
+		// Will be replaced
+	})
+	selectAttachmentsBtn.Importance = widget.LowImportance
 	updateFilenamePreview := func() {
 		// Build meta from current form values
 		currentMeta := core.Meta{
@@ -223,22 +218,32 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 			core.TemplateOpts{DecimalSeparator: a.settings.DecimalSeparator},
 		)
 		if err != nil {
-			filenamePreview.SetText("Fehler: " + err.Error())
+			newFilenameLabel.SetText("Fehler: " + err.Error())
 		} else {
-			filenamePreview.SetText(filename)
+			newFilenameLabel.SetText(filename)
 		}
 	}
 
 	// Update preview on any field change
 	onAnyChange := func(string) { updateFilenamePreview() }
 	companyEntry.OnChanged = onAnyChange
-	shortDescEntry.OnChanged = onAnyChange
+	// Special handler for shortDescEntry to handle both character limit and preview
+	shortDescEntry.OnChanged = func(s string) {
+		if len(s) > 80 {
+			shortDescEntry.SetText(s[:80])
+		}
+		shortDescLabel.SetText(fmt.Sprintf("%d / 80", len(shortDescEntry.Text)))
+		updateFilenamePreview()
+	}
 	invoiceNumEntry.OnChanged = onAnyChange
 	dateEntry.OnChanged = onAnyChange
 	netEntry.OnChanged = onAnyChange
 	vatPercentEntry.OnChanged = onAnyChange
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
+
+	// Initial preview update
+	updateFilenamePreview()
 
 	// Currency conversion visibility logic
 	updateCurrencyConversionVisibility := func() {
@@ -299,18 +304,44 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	currencySelect.OnChanged = func(s string) {
 		rebuildForm()
 		updateCurrencyConversionVisibility()
-		onAnyChange(s)
+		updateFilenamePreview() // Update filename preview when currency changes
 	}
 
 	// Initial form build and currency conversion visibility
 	rebuildForm()
 	updateCurrencyConversionVisibility()
 
+	// Create header section with buttons immediately after labels
+	headerSection := container.NewVBox(
+		// Original file (left) + New filename (right) on same row
+		container.NewBorder(nil, nil,
+			// Left side: Original file
+			container.NewHBox(
+				widget.NewLabel("Originaldatei:"),
+				originalLabel,
+				openOriginalBtn,
+			),
+			// Right side: New filename
+			container.NewHBox(
+				widget.NewLabel("Neuer Dateiname:"),
+				newFilenameLabel,
+			),
+			nil, // Center is empty
+		),
+		// Attachments row
+		container.NewHBox(
+			widget.NewLabel("Anhänge:"),
+			attachmentsLabel,
+			selectAttachmentsBtn,
+		),
+		// Attachment list (only visible when attachments are added)
+		attachmentListContainer,
+		widget.NewSeparator(),
+	)
+
 	// Form layout
 	form := container.NewVBox(
-		widget.NewLabel(a.bundle.T("modal.originalFile")),
-		container.NewBorder(nil, nil, nil, openOriginalBtn, originalEntry),
-		widget.NewSeparator(),
+		headerSection,
 
 		mainFormContainer,
 
@@ -323,14 +354,7 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 		),
 
 		widget.NewSeparator(),
-		widget.NewLabel(a.bundle.T("field.attachments")),
-		container.NewHBox(selectAttachmentsBtn, attachmentsLabel),
-
-		widget.NewSeparator(),
 		rememberCheck,
-		widget.NewSeparator(),
-		widget.NewLabel(a.bundle.T("modal.filenamePreview")),
-		filenamePreview,
 	)
 
 	// Scroll container for long forms
@@ -347,14 +371,29 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 			}
 			defer func() { _ = reader.Close() }()
 
-			filepath := reader.URI().Path()
-			selectedAttachments = append(selectedAttachments, filepath)
+			attachmentPath := reader.URI().Path()
+			selectedAttachments = append(selectedAttachments, attachmentPath)
 
-			// Update label
-			if len(selectedAttachments) == 1 {
-				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.one"), len(selectedAttachments)))
+			// Update label and attachment list
+			if len(selectedAttachments) == 0 {
+				attachmentsLabel.SetText("Keine")
+				attachmentListContainer.Objects = []fyne.CanvasObject{}
 			} else {
-				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.multiple"), len(selectedAttachments)))
+				// Update count label
+				if len(selectedAttachments) == 1 {
+					attachmentsLabel.SetText(fmt.Sprintf("%d Datei", len(selectedAttachments)))
+				} else {
+					attachmentsLabel.SetText(fmt.Sprintf("%d Dateien", len(selectedAttachments)))
+				}
+
+				// Update attachment list
+				attachmentItems := []fyne.CanvasObject{}
+				for _, path := range selectedAttachments {
+					attachmentItems = append(attachmentItems,
+						widget.NewLabel("  • " + filepath.Base(path)))
+				}
+				attachmentListContainer.Objects = attachmentItems
+				attachmentListContainer.Refresh()
 			}
 		}, dialogWindow)
 
