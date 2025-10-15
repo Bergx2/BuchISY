@@ -5,6 +5,8 @@
 **Published by:** Bergx2 GmbH
 **Website:** [www.buchisy.de](https://www.buchisy.de)
 
+> **Note:** The codebase is under heavy development and the documentation is constantly evolving. Give it a try and let us know what you think by [creating an issue](https://github.com/Bergx2/BuchISY/issues). Watch releases of this repo to get notified of updates. And give us a star if you like it!
+
 ## 🆕 Version 2.1 - ARM64 Fix & UI Improvements
 
 **New in v2.1:**
