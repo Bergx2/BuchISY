@@ -80,8 +80,7 @@ func (a *App) showCustomFilePicker() {
 	}
 
 	// File table
-	var fileTable *widget.Table
-	fileTable = widget.NewTable(
+	fileTable := widget.NewTable(
 		func() (int, int) {
 			return len(filteredFiles) + 1, 2 // +1 for header row, 2 columns
 		},
@@ -134,6 +133,7 @@ func (a *App) showCustomFilePicker() {
 	fileTable.SetColumnWidth(1, 80)  // Date - very compact (80px as requested)
 
 	// Define loadFiles function FIRST (before it's used in handlers)
+	// Note: must be var because it's recursive
 	var loadFiles func(string)
 	loadFiles = func(path string) {
 		entries, err := os.ReadDir(path)

@@ -205,7 +205,9 @@ func (c *Client) doRequest(ctx context.Context, apiKey string, req Request) (str
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() {
+		_ = httpResp.Body.Close()
+	}()
 
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {

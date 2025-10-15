@@ -182,7 +182,7 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		} else if newCount == 0 {
 			// Only existing attachments
 			if existingCount == 1 {
-				attachmentsLabel.SetText(fmt.Sprintf("1 vorhandene Datei"))
+				attachmentsLabel.SetText("1 vorhandene Datei")
 			} else {
 				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene Dateien", existingCount))
 			}
@@ -364,7 +364,7 @@ func (a *App) showEditDialog(row core.CSVRow) {
 			if err != nil || reader == nil {
 				return
 			}
-			defer reader.Close()
+			defer func() { _ = reader.Close() }()
 
 			filepath := reader.URI().Path()
 			selectedAttachments = append(selectedAttachments, filepath)
@@ -403,8 +403,8 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	saveBtn := widget.NewButton(a.bundle.T("btn.save"), func() {
 		// Update the invoice
 		err := a.updateInvoice(
-			row,                    // Original row
-			originalPath,           // Original file path
+			row,          // Original row
+			originalPath, // Original file path
 			companyEntry.Text,
 			shortDescEntry.Text,
 			invoiceNumEntry.Text,

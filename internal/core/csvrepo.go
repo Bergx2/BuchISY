@@ -127,11 +127,12 @@ func (r *CSVRepository) SetColumnOrder(order []string) {
 
 // SetSeparator sets the CSV field separator.
 func (r *CSVRepository) SetSeparator(sep string) {
-	if sep == ";" {
+	switch sep {
+	case ";":
 		r.separator = ';'
-	} else if sep == "\t" || sep == "\\t" {
+	case "\t", "\\t":
 		r.separator = '\t'
-	} else {
+	default:
 		r.separator = ','
 	}
 }
@@ -165,7 +166,7 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open CSV: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create reader with encoding transformation
 	var reader *csv.Reader
@@ -269,7 +270,7 @@ func (r *CSVRepository) Append(path string, row CSVRow) error {
 	if err != nil {
 		return fmt.Errorf("failed to open CSV: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create write target with encoding transformation
 	var writeTarget io.Writer = file
@@ -319,7 +320,7 @@ func (r *CSVRepository) Rewrite(path string, rows []CSVRow) error {
 	if err != nil {
 		return fmt.Errorf("failed to recreate CSV: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create writer with encoding transformation
 	var writer *csv.Writer

@@ -5,11 +5,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/storage"
-
-	"github.com/bergx2/buchisy/internal/core"
+	"fyne.io/fyne/v2/widget"
 )
 
 // selectPDFFiles shows a custom file picker with search functionality.
@@ -18,36 +16,19 @@ func (a *App) selectPDFFiles() {
 	a.showCustomFilePicker()
 }
 
-// parseFolderURI converts a folder path to a Fyne URI.
-func parseFolderURI(path string) fyne.ListableURI {
-	uri, err := storage.ParseURI("file://" + path)
-	if err != nil {
-		return nil
-	}
-	listable, ok := uri.(fyne.ListableURI)
-	if !ok {
-		return nil
-	}
-	return listable
-}
-
-// getDocumentsURI returns the URI for the Documents folder.
-func getDocumentsURI() (fyne.ListableURI, error) {
-	docsDir, err := core.GetDocumentsDir()
-	if err != nil {
-		return nil, err
-	}
-	return parseFolderURI(docsDir), nil
-}
-
 // processPDFAsync processes a PDF file in the background.
 func (a *App) processPDFAsync(path string) {
 	a.logger.Info("Processing PDF: %s", path)
 
 	// Show loading indicator
-	progress := dialog.NewProgressInfinite(
+	progressBar := widget.NewProgressBarInfinite()
+	progressContent := container.NewVBox(
+		widget.NewLabel(a.bundle.T("processing.message")),
+		progressBar,
+	)
+	progress := dialog.NewCustomWithoutButtons(
 		a.bundle.T("processing.title"),
-		a.bundle.T("processing.message"),
+		progressContent,
 		a.window,
 	)
 	progress.Show()

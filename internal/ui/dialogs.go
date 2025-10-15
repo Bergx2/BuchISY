@@ -15,8 +15,3 @@ func (a *App) showError(title, message string) {
 func (a *App) showInfo(title, message string) {
 	dialog.ShowInformation(title, message, a.window)
 }
-
-// showConfirm displays a confirmation dialog.
-func (a *App) showConfirm(title, message string, callback func(bool)) {
-	dialog.ShowConfirm(title, message, callback, a.window)
-}

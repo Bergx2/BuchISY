@@ -34,7 +34,7 @@ func NewRepository(dbPath string) (*Repository, error) {
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -45,7 +45,7 @@ func NewRepository(dbPath string) (*Repository, error) {
 
 	// Initialize schema
 	if err := repo.initSchema(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
@@ -198,7 +198,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query invoices: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []core.CSVRow
 

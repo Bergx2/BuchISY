@@ -17,7 +17,7 @@ func PDFToImageBase64(path string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("failed to open PDF: %w", err)
 	}
-	defer doc.Close()
+	defer func() { _ = doc.Close() }()
 
 	// Check if document has pages
 	if doc.NumPage() < 1 {

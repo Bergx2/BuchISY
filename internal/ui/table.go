@@ -16,10 +16,10 @@ import (
 // hoverLabel is a label that shows tooltip on hover
 type hoverLabel struct {
 	widget.Label
-	onHover       func(string, fyne.Position)
-	onExit        func()
-	tooltip       string
-	tooltipShown  bool
+	onHover        func(string, fyne.Position)
+	onExit         func()
+	tooltip        string
+	tooltipShown   bool
 	lastTooltipPos fyne.Position
 }
 
@@ -145,7 +145,8 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 		func(id widget.TableCellID, cell fyne.CanvasObject) {
 			stack := cell.(*fyne.Container)
 
-			if id.Col == 0 {
+			switch id.Col {
+			case 0:
 				// Edit button column (FIRST column now)
 				hoverLabel := stack.Objects[0].(*hoverLabel)
 				btn := stack.Objects[1].(*widget.Button)
@@ -169,7 +170,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 						}
 					}
 				}
-			} else if id.Col == 1 {
+			case 1:
 				// Delete button column (SECOND column now)
 				hoverLabel := stack.Objects[0].(*hoverLabel)
 				btn := stack.Objects[1].(*widget.Button)
@@ -193,7 +194,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 						}
 					}
 				}
-			} else {
+			default:
 				// Regular text columns (shift by -2 since edit and delete are first)
 				hoverLabel := stack.Objects[0].(*hoverLabel)
 				btn := stack.Objects[1].(*widget.Button)
@@ -506,21 +507,6 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	default:
 		return ""
 	}
-}
-
-// formatDateGerman converts ISO date (YYYY-MM-DD) to German format (DD.MM.YYYY).
-func formatDateGerman(isoDate string) string {
-	if isoDate == "" {
-		return ""
-	}
-	// Parse YYYY-MM-DD
-	if len(isoDate) >= 10 {
-		year := isoDate[0:4]
-		month := isoDate[5:7]
-		day := isoDate[8:10]
-		return day + "." + month + "." + year
-	}
-	return isoDate
 }
 
 func sanitizeColumnOrder(order []string) []string {

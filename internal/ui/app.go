@@ -184,9 +184,9 @@ func (a *App) Run() {
 
 	// Cleanup
 	if a.dbRepo != nil {
-		a.dbRepo.Close()
+		_ = a.dbRepo.Close()
 	}
-	a.logger.Close()
+	_ = a.logger.Close()
 }
 
 // saveWindowState saves the current window size.
@@ -233,7 +233,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	currentYearStr := fmt.Sprintf("%d", a.currentYear)
 	a.yearSelect = widget.NewSelect(years, func(selected string) {
 		var year int
-		fmt.Sscanf(selected, "%d", &year)
+		_, _ = fmt.Sscanf(selected, "%d", &year)
 		a.currentYear = year
 		a.onMonthChanged()
 	})
@@ -285,7 +285,6 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		settingsBtn,
 	)
 }
-
 
 // onMonthChanged is called when the year or month selection changes.
 func (a *App) onMonthChanged() {
@@ -433,7 +432,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 
 		meta, confidence, err = a.anthropicExtractor.Extract(ctx, apiKey, a.settings.AnthropicModel, text)
 		if err != nil {
-			return core.Meta{}, fmt.Errorf("Claude extraction failed: %w", err)
+			return core.Meta{}, fmt.Errorf("claude extraction failed: %w", err)
 		}
 	} else {
 		meta, confidence, err = a.localExtractor.Extract(text)
@@ -497,7 +496,7 @@ func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta,
 		mediaType,
 	)
 	if err != nil {
-		return core.Meta{}, fmt.Errorf("Claude vision extraction failed: %w", err)
+		return core.Meta{}, fmt.Errorf("claude vision extraction failed: %w", err)
 	}
 
 	a.logger.Info("Vision extraction succeeded with confidence %.2f", confidence)

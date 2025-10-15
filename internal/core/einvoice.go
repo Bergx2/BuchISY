@@ -91,7 +91,7 @@ func (e *EInvoiceExtractor) extractXMLAttachment(pdfPath string) ([]byte, string
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tempDir) // Clean up temp directory
+	defer func() { _ = os.RemoveAll(tempDir) }() // Clean up temp directory
 
 	// Extract all attachments to temp directory
 	// nil = extract all attachments, nil = use default configuration
@@ -156,8 +156,8 @@ func (e *EInvoiceExtractor) extractXMLAttachment(pdfPath string) ([]byte, string
 
 // CrossIndustryInvoice represents the root element of CII XML.
 type CrossIndustryInvoice struct {
-	XMLName              xml.Name             `xml:"CrossIndustryInvoice"`
-	ExchangedDocument    ExchangedDocument    `xml:"ExchangedDocument"`
+	XMLName                     xml.Name                    `xml:"CrossIndustryInvoice"`
+	ExchangedDocument           ExchangedDocument           `xml:"ExchangedDocument"`
 	SupplyChainTradeTransaction SupplyChainTradeTransaction `xml:"SupplyChainTradeTransaction"`
 }
 
@@ -196,10 +196,10 @@ type TradeParty struct {
 
 // HeaderTradeSettlement contains payment and amount information.
 type HeaderTradeSettlement struct {
-	InvoiceCurrencyCode                           string                    `xml:"InvoiceCurrencyCode"`
-	ApplicableTradeTax                            []TradeTax                `xml:"ApplicableTradeTax"`
-	SpecifiedTradePaymentTerms                    *TradePaymentTerms        `xml:"SpecifiedTradePaymentTerms"`
-	SpecifiedTradeSettlementHeaderMonetarySummation MonetarySummation         `xml:"SpecifiedTradeSettlementHeaderMonetarySummation"`
+	InvoiceCurrencyCode                             string             `xml:"InvoiceCurrencyCode"`
+	ApplicableTradeTax                              []TradeTax         `xml:"ApplicableTradeTax"`
+	SpecifiedTradePaymentTerms                      *TradePaymentTerms `xml:"SpecifiedTradePaymentTerms"`
+	SpecifiedTradeSettlementHeaderMonetarySummation MonetarySummation  `xml:"SpecifiedTradeSettlementHeaderMonetarySummation"`
 }
 
 // TradeTax represents tax information.
@@ -221,10 +221,10 @@ type TradePaymentTerms struct {
 
 // MonetarySummation contains total amounts.
 type MonetarySummation struct {
-	LineTotalAmount    Amount `xml:"LineTotalAmount"`
+	LineTotalAmount     Amount `xml:"LineTotalAmount"`
 	TaxBasisTotalAmount Amount `xml:"TaxBasisTotalAmount"`
-	TaxTotalAmount     Amount `xml:"TaxTotalAmount"`
-	GrandTotalAmount   Amount `xml:"GrandTotalAmount"`
+	TaxTotalAmount      Amount `xml:"TaxTotalAmount"`
+	GrandTotalAmount    Amount `xml:"GrandTotalAmount"`
 }
 
 // parseXML parses the CII XML into a structured format.
@@ -250,8 +250,8 @@ func (e *EInvoiceExtractor) mapToMeta(invoice *CrossIndustryInvoice) Meta {
 
 	// Extract year and month from date
 	if len(dateStr) >= 6 {
-		meta.Jahr = dateStr[0:4]   // YYYY
-		meta.Monat = dateStr[4:6]  // MM
+		meta.Jahr = dateStr[0:4]  // YYYY
+		meta.Monat = dateStr[4:6] // MM
 	}
 
 	// Company name (seller)
@@ -306,6 +306,6 @@ func parseXMLAmount(s string) float64 {
 	s = strings.TrimSpace(s)
 	s = strings.ReplaceAll(s, ",", ".") // Handle European format
 	var amount float64
-	fmt.Sscanf(s, "%f", &amount)
+	_, _ = fmt.Sscanf(s, "%f", &amount)
 	return amount
 }

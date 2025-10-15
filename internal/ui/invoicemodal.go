@@ -260,7 +260,6 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 		currencyConversionContainer.Refresh()
 	}
 
-
 	// Helper function to get currency-aware label
 	getCurrencyLabel := func(baseKey string) string {
 		currency := currencySelect.Selected
@@ -346,7 +345,7 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 			if err != nil || reader == nil {
 				return
 			}
-			defer reader.Close()
+			defer func() { _ = reader.Close() }()
 
 			filepath := reader.URI().Path()
 			selectedAttachments = append(selectedAttachments, filepath)

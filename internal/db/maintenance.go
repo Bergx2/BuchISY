@@ -23,7 +23,7 @@ func (r *Repository) WipeDatabase() error {
 	// Delete migration marker if it exists
 	markerPath := r.getMigrationMarkerPath()
 	if markerPath != "" {
-		os.Remove(markerPath)
+		_ = os.Remove(markerPath)
 	}
 
 	return nil
@@ -45,7 +45,7 @@ func (r *Repository) DeleteDatabase() error {
 	// Delete migration marker
 	markerPath := r.getMigrationMarkerPath()
 	if markerPath != "" {
-		os.Remove(markerPath)
+		_ = os.Remove(markerPath)
 	}
 
 	return nil
