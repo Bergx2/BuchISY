@@ -4,6 +4,23 @@
 
 **Published by:** Bergx2 GmbH
 
+## 🆕 Version 2.0 - Major Update!
+
+**⚠️ Breaking Changes:**
+- SQLite database replaces CSV as source-of-truth
+- Field renames: Firmenname → Auftraggeber, Kurzbezeichnung → Verwendungszweck
+- CSV files are now auto-generated exports (backward compatible reading)
+
+**New in v2.0:**
+- SQLite database for faster, more reliable data management
+- USt-IdNr (VAT ID) field with automatic extraction
+- File attachments support
+- Currency conversion fields for foreign invoices
+- Comments/notes field
+- Sortable file picker with date column
+- Resizable dialogs with saved dimensions
+- Improved CSV export (configurable separator, encoding, quotes)
+
 ## Features
 
 ### Invoice Processing
@@ -17,12 +34,16 @@
 - **Batch Processing**: Process multiple invoices in sequence with automatic metadata extraction
 
 ### Data Management
+- **SQLite Database**: Fast, reliable SQLite database as source-of-truth (v2.0!)
 - **Invoice Table Display**: View, sort, and manage all invoices for the selected month
 - **Edit Functionality**: Modify existing invoice data with automatic file renaming
-- **Delete & Cleanup**: Remove unwanted entries with automatic file management
-- **Duplicate Detection**: Smart prevention of duplicate entries based on invoice number, date, and amount
-- **CSV Export**: Maintains a monthly `invoices.csv` file with all invoice metadata
-- **Customizable Columns**: Configure which columns to display and their order in both table and CSV
+- **Delete & Cleanup**: Remove unwanted entries with automatic file and database management
+- **Duplicate Detection**: SQL-based prevention of duplicate entries
+- **CSV Auto-Export**: Automatically generates `invoices.csv` after every change
+- **Customizable Columns**: Configure which columns to display and their order
+- **File Attachments**: Upload additional files (receipts, contracts) per invoice
+- **Comments**: Add notes and comments to invoices
+- **Currency Conversion**: Track foreign currency amounts with EUR conversion and fees
 
 ### Account & Company Management
 - **Account Management**: Define up to 10 custom accounts (Gegenkonten) with codes and descriptions
@@ -32,10 +53,14 @@
 
 ### User Interface
 - **Multi-language**: German (primary) and English interface with instant switching
-- **Tooltips**: Hover tooltips for long text in company names, filenames, and descriptions
+- **Sortable File Picker**: Click column headers (Dateiname, Datum) to sort files
+- **Quick Shortcuts**: Desktop, Documents, and Downloads folder buttons
+- **Resizable Dialogs**: Invoice dialogs remember your preferred size
+- **Tooltips**: Hover tooltips for long text fields
 - **Date Pickers**: Calendar widgets for easy date selection (German format DD.MM.YYYY)
+- **Full-Width Table**: Maximized space for invoice list (no sidebar)
 - **Responsive Design**: Native desktop experience on macOS and Windows
-- **Window State Memory**: Remembers window size and position between sessions
+- **Window State Memory**: Remembers window and dialog sizes between sessions
 
 ### Security & Privacy
 - **Privacy-First**: All processing happens locally except when using Claude API
@@ -64,7 +89,7 @@ _Coming soon_
 
 #### Requirements
 
-- Go 1.22 or later
+- Go 1.25 or later
 - Git
 
 #### Steps
@@ -104,18 +129,21 @@ MACOSX_DEPLOYMENT_TARGET=15.0 make package-macos
 ### Processing Invoices
 
 1. **Select Month**: Use the year-month selector at the top to choose the target month (defaults to last month)
-2. **Add Invoices**: Drag-and-drop PDF files or click "PDF auswählen" to select files
-3. **Review Data**: A modal will appear with extracted invoice data. Review and edit as needed:
-   - Company name
+2. **Add Invoices**: Click "Datei auswählen" in the header to select files
+3. **Review Data**: A resizable modal will appear with extracted invoice data. Review and edit:
+   - Auftraggeber (payer/client)
+   - Verwendungszweck (purpose/description)
    - Invoice number
+   - USt-IdNr (VAT ID) - auto-extracted
    - Invoice date
-   - Amounts (net, tax, gross)
-   - Currency
+   - Amounts (net, VAT, gross) with currency
+   - Currency conversion (for non-EUR invoices)
    - Account code (Gegenkonto)
-   - Short description
    - Payment date (optional)
    - Bank account (optional)
-4. **Save**: Click "Speichern" to save the invoice. The file will be renamed according to your template and moved to the month folder.
+   - Comments/notes
+   - File attachments (receipts, contracts, etc.)
+4. **Save**: Click "Speichern" to save. The invoice is stored in SQLite and exported to CSV automatically.
 
 ### Extraction Modes Explained
 
@@ -167,8 +195,15 @@ Access via the "Einstellungen" button.
 **Language (Sprache)**:
 - Switch between German and English
 
+**CSV Format**:
+- **CSV Separator**: Choose comma (default), semicolon, or tab
+- **CSV Encoding**: Choose ISO-8859-1 (default) or UTF-8
+- All CSV files auto-generated from database
+
 **Advanced**:
-- **Debug Mode**: Enable verbose logging for troubleshooting (logs stored in Application Support folder)
+- **Column Order**: Customize table and CSV column order
+- **Debug Mode**: Enable verbose logging for troubleshooting
+- **Wipe Database**: Delete all invoice data (with confirmation)
 
 #### Getting a Claude API Key
 
@@ -178,40 +213,90 @@ Access via the "Einstellungen" button.
 4. Copy the key and paste it into BuchISY Settings
 5. The key will be securely stored in your system keychain (macOS Keychain or Windows Credential Manager)
 
-## CSV Format
+## Data Storage (v2.0)
 
-Each month folder contains an `invoices.csv` file with the following columns (default order):
+### SQLite Database (Source-of-Truth)
+- **Location**: `~/Library/Application Support/BuchISY/invoices.db` (macOS) or `%APPDATA%\BuchISY\invoices.db` (Windows)
+- **Single database** for all invoices across all months
+- **Automatic indexes** for fast searching and filtering
+- **Timestamps**: Tracks when invoices were created and last modified
+
+### CSV Export (Auto-Generated)
+
+Each month folder contains an auto-generated `invoices.csv` file with the following columns (default order):
 
 ```
-Dateiname,Rechnungsdatum,Jahr,Monat,Firmenname,Kurzbezeichnung,Rechnungsnummer,BetragNetto,Steuersatz_Prozent,Steuersatz_Betrag,Bruttobetrag,Waehrung,Gegenkonto,Bankkonto,Bezahldatum,Teilzahlung
+"Dateiname","Rechnungsdatum","Jahr","Monat","Auftraggeber","Verwendungszweck","Rechnungsnummer","BetragNetto","Steuersatz_Prozent","Steuersatz_Betrag","Bruttobetrag","Waehrung","Gegenkonto","Bankkonto","Bezahldatum","Teilzahlung","Kommentar","BetragNetto_EUR","Gebuehr","HatAnhaenge","UStIdNr"
 ```
 
-- **Column order** can be customized in Settings
-- All amounts use `.` as decimal separator in CSV (regardless of UI settings)
-- Dates (Rechnungsdatum and Bezahldatum) are in German format `DD.MM.YYYY`
-- Currency codes are normalized (€ → EUR, $ → USD, etc.)
+**CSV Features:**
+- **Auto-generated** from SQLite database after every change
+- **All fields quoted** with double quotes
+- **Configurable separator**: Comma (default), semicolon, or tab
+- **Configurable encoding**: ISO-8859-1 (default) or UTF-8
+- **Column order** customizable in Settings
+- **Decimal separator**: Comma or dot (matches your preference)
+- **Backward compatible**: Can read old CSV files with Firmenname/Kurzbezeichnung columns
 
-## File Structure
+## File Structure (v2.0)
 
 ```
 ~/Documents/BuchISY/              # Default storage root
   2024-09/                        # Month folder
-    invoices.csv                  # CSV with invoice metadata
-    2024-09-15_Acme-GmbH_119,00_EUR.pdf
-    2024-09-20_Example-AG_250,50_EUR.pdf
+    invoices.csv                  # Auto-generated CSV export
+    2024-09-15_Acme-Corp_240,00_USD.pdf
+    2024-09-15_Acme-Corp_240,00_USD-files/  # Attachments folder (NEW!)
+      receipt.jpg
+      contract.pdf
+    2024-09-20_Example-AG_500,00_EUR.pdf
   2024-10/
     invoices.csv
     ...
 
 ~/Library/Application Support/BuchISY/  # macOS config
+  invoices.db                     # SQLite database (SOURCE-OF-TRUTH!) (NEW!)
   settings.json                   # App settings
   company_accounts.json           # Company→Account mappings
   logs/                           # Application logs
+
+# Windows equivalent:
+%APPDATA%\BuchISY\
+  invoices.db
+  settings.json
+  company_accounts.json
+  logs\
 ```
+
+## Upgrading to v2.0
+
+### From v1.x to v2.0
+
+**Important Notes:**
+- v2.0 uses SQLite database instead of CSV as primary storage
+- Old CSV files are backward compatible and can be read
+- Start fresh with v2.0 (recommended) or manually import old invoices
+
+**Migration Options:**
+
+**Option 1: Fresh Start (Recommended)**
+1. Install v2.0
+2. Start adding new invoices
+3. Old CSV files remain accessible for reference
+
+**Option 2: Keep Old Data**
+- Your existing PDF files and CSV files remain untouched
+- Old CSVs can still be read (backward compatible column names)
+- Manually re-process old invoices if you want them in the database
+
+**What Changes:**
+- Database location: `~/Library/Application Support/BuchISY/invoices.db`
+- CSV files become exports (regenerated automatically)
+- Field names in database: Auftraggeber, Verwendungszweck (CSV backward compatible)
 
 ## Privacy & Security
 
 - **API Key**: Stored in OS keychain (not in plain text)
+- **Database**: Stored locally, fully under your control
 - **No Telemetry**: BuchISY does not send any telemetry or usage data
 - **Local Processing**: When using local mode, no data leaves your machine
 - **Claude API**: When using Claude mode, invoice text is sent to Anthropic's API over HTTPS. See [Anthropic's Privacy Policy](https://www.anthropic.com/privacy)
@@ -262,12 +347,15 @@ buchisy/
   internal/
     ui/                 # Fyne UI components
     core/               # Core business logic
+    db/                 # SQLite database layer (NEW!)
     anthropic/          # Claude API integration
     i18n/               # Internationalization
     logging/            # Logging
   assets/
     i18n/               # Translation files
     icon.png            # App icon
+  .github/
+    workflows/          # GitHub Actions for automated builds
   Makefile              # Build automation
 ```
 
@@ -295,32 +383,38 @@ Contributions are welcome! Please:
 
 ## Roadmap
 
-### Completed Features ✅
+### Completed Features ✅ (v2.0)
+- [x] **SQLite database** as source-of-truth (v2.0!)
+- [x] **File attachments** support (v2.0!)
+- [x] **Currency conversion** fields (v2.0!)
+- [x] **Comments/notes** field (v2.0!)
+- [x] **USt-IdNr** (VAT ID) extraction (v2.0!)
+- [x] **Sortable file picker** with date column (v2.0!)
+- [x] **Resizable dialogs** with saved dimensions (v2.0!)
 - [x] Drag-and-drop support for PDF files
 - [x] Settings dialog with all configuration options
-- [x] Full invoice confirmation modal with all fields
+- [x] Full invoice confirmation modal
 - [x] Edit functionality for existing invoices
-- [x] Claude Vision support for scanned PDFs (OCR alternative)
+- [x] Claude Vision support for scanned PDFs
 - [x] E-invoice support (XRechnung, ZUGFeRD)
 - [x] Tooltips for long text fields
 - [x] Date picker with calendar widget
 - [x] Company-to-account mapping memory
 - [x] Customizable CSV column order
+- [x] Configurable CSV format (separator, encoding, quotes)
 
 ### Planned Features
-- [ ] Open folder in system file manager
+- [ ] SQL-based search and filtering (coming in v2.1)
 - [ ] Batch processing with progress indicator
-- [ ] Export to other formats (Excel, JSON, QuickBooks)
-- [ ] Search and filter in invoice table
+- [ ] Advanced reporting and statistics
+- [ ] Export to Excel/JSON formats
 - [ ] Keyboard shortcuts for common operations
 - [ ] Dark mode support
 - [ ] Additional language support (French, Italian, Spanish)
 - [ ] Cloud backup/sync support
-- [ ] Multi-user collaboration features
 - [ ] Invoice templates for recurring vendors
-- [ ] Automatic categorization with machine learning
 - [ ] Email invoice import
-- [ ] Receipt scanning via mobile app
+- [ ] Mobile companion app
 
 ## License
 
@@ -337,7 +431,9 @@ For issues, questions, or feature requests, please open an issue on [GitHub](htt
 ## Acknowledgments
 
 - Built with [Fyne](https://fyne.io/) - Cross-platform GUI toolkit for Go
+- Database powered by [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) - Pure Go SQLite
 - PDF extraction via [ledongthuc/pdf](https://github.com/ledongthuc/pdf)
+- E-invoice processing via [pdfcpu](https://pdfcpu.io/) and [go-fitz](https://github.com/gen2brain/go-fitz)
 - Secure key storage via [go-keyring](https://github.com/zalando/go-keyring)
 - AI extraction powered by [Anthropic Claude](https://www.anthropic.com/)
 
