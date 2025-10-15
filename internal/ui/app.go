@@ -112,6 +112,9 @@ func New(assetsDir string) (*App, error) {
 	eInvoiceExtractor := core.NewEInvoiceExtractor()
 	csvRepo := core.NewCSVRepository()
 	csvRepo.SetColumnOrder(settings.ColumnOrder)
+	csvRepo.SetSeparator(settings.CSVSeparator)
+	csvRepo.SetEncoding(settings.CSVEncoding)
+	csvRepo.SetDecimalSeparator(settings.DecimalSeparator)
 	storageManager := core.NewStorageManager(&settings)
 
 	// Determine current month (default to last month)
@@ -362,7 +365,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 			if a.settings.DebugMode {
 				a.logger.Debug("=== E-INVOICE METADATA ===")
 				a.logger.Debug("Format: %s", format)
-				a.logger.Debug("Company: %s", meta.Firmenname)
+				a.logger.Debug("Company: %s", meta.Auftraggeber)
 				a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
 				a.logger.Debug("Date: %s", meta.Rechnungsdatum)
 				a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
@@ -371,8 +374,8 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 			}
 
 			// Suggest account
-			if a.settings.AutoSelectAccount && meta.Firmenname != "" {
-				if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+			if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
+				if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 					meta.Gegenkonto = account
 				} else {
 					meta.Gegenkonto = a.settings.DefaultAccount
@@ -441,7 +444,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 
 	if a.settings.DebugMode {
 		a.logger.Debug("=== EXTRACTED METADATA ===")
-		a.logger.Debug("Company: %s", meta.Firmenname)
+		a.logger.Debug("Company: %s", meta.Auftraggeber)
 		a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
 		a.logger.Debug("Date: %s", meta.Rechnungsdatum)
 		a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
@@ -450,8 +453,8 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 	}
 
 	// Suggest account
-	if a.settings.AutoSelectAccount && meta.Firmenname != "" {
-		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+	if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
+		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 			meta.Gegenkonto = account
 		} else {
 			meta.Gegenkonto = a.settings.DefaultAccount
@@ -499,15 +502,15 @@ func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta,
 
 	if a.settings.DebugMode {
 		a.logger.Debug("=== EXTRACTED METADATA (VISION) ===")
-		a.logger.Debug("Company: %s", meta.Firmenname)
+		a.logger.Debug("Company: %s", meta.Auftraggeber)
 		a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
 		a.logger.Debug("Date: %s", meta.Rechnungsdatum)
 		a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
 	}
 
 	// Suggest account
-	if a.settings.AutoSelectAccount && meta.Firmenname != "" {
-		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+	if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
+		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 			meta.Gegenkonto = account
 		} else {
 			meta.Gegenkonto = a.settings.DefaultAccount

@@ -8,8 +8,8 @@ import (
 
 // Meta represents the invoice metadata extracted from a PDF.
 type Meta struct {
-	Firmenname          string  // Company name
-	Kurzbezeichnung     string  // Short description (max 80 chars)
+	Auftraggeber        string  // Company name (previously Firmenname)
+	Verwendungszweck    string  // Purpose/description (previously Kurzbezeichnung)
 	Rechnungsnummer     string  // Invoice number
 	BetragNetto         float64 // Net amount
 	SteuersatzProzent   float64 // Tax rate in percent
@@ -28,6 +28,7 @@ type Meta struct {
 	BetragNetto_EUR     float64 // Net amount in default currency (EUR) for foreign currency invoices
 	Gebuehr             float64 // Fee (e.g., currency exchange fee)
 	HatAnhaenge         bool    // Indicates if invoice has additional file attachments
+	UStIdNr             string  // VAT ID number of invoice issuer (2 letter country code + 8-12 digits)
 }
 
 // Account represents a user-defined account (Gegenkonto).
@@ -66,6 +67,8 @@ type Settings struct {
 	WindowY                int           `json:"window_y"`         // Window Y position
 	DialogWidth            int           `json:"dialog_width"`     // Invoice dialog width in pixels
 	DialogHeight           int           `json:"dialog_height"`    // Invoice dialog height in pixels
+	CSVSeparator           string        `json:"csv_separator"`    // CSV field separator: "," (comma), ";" (semicolon), "\t" (tab)
+	CSVEncoding            string        `json:"csv_encoding"`     // CSV file encoding: "ISO-8859-1" or "UTF-8"
 	ColumnOrder            []string      `json:"column_order"`     // Order of columns in table and CSV
 }
 
@@ -98,6 +101,8 @@ func DefaultSettings() Settings {
 		WindowY:                -1,
 		DialogWidth:            850,
 		DialogHeight:           700,
+		CSVSeparator:           ",",
+		CSVEncoding:            "ISO-8859-1",
 		ColumnOrder:            DefaultCSVColumns,
 	}
 }
@@ -125,8 +130,8 @@ type CSVRow struct {
 	Rechnungsdatum    string
 	Jahr              string
 	Monat             string
-	Firmenname        string
-	Kurzbezeichnung   string
+	Auftraggeber      string
+	Verwendungszweck  string
 	Rechnungsnummer   string
 	BetragNetto       float64
 	SteuersatzProzent float64
@@ -141,17 +146,24 @@ type CSVRow struct {
 	BetragNetto_EUR   float64
 	Gebuehr           float64
 	HatAnhaenge       bool
+	UStIdNr           string
 }
 
 // ToCSVRow converts Meta to CSVRow.
 func (m Meta) ToCSVRow() CSVRow {
+	// Set Verwendungszweck to "-" if empty
+	verwendungszweck := m.Verwendungszweck
+	if verwendungszweck == "" {
+		verwendungszweck = "-"
+	}
+
 	return CSVRow{
 		Dateiname:         m.Dateiname,
 		Rechnungsdatum:    m.Rechnungsdatum,
 		Jahr:              m.Jahr,
 		Monat:             m.Monat,
-		Firmenname:        m.Firmenname,
-		Kurzbezeichnung:   m.Kurzbezeichnung,
+		Auftraggeber:      m.Auftraggeber,
+		Verwendungszweck:  verwendungszweck,
 		Rechnungsnummer:   m.Rechnungsnummer,
 		BetragNetto:       m.BetragNetto,
 		SteuersatzProzent: m.SteuersatzProzent,
@@ -166,6 +178,7 @@ func (m Meta) ToCSVRow() CSVRow {
 		BetragNetto_EUR:   m.BetragNetto_EUR,
 		Gebuehr:           m.Gebuehr,
 		HatAnhaenge:       m.HatAnhaenge,
+		UStIdNr:           m.UStIdNr,
 	}
 }
 
@@ -176,8 +189,8 @@ func (r CSVRow) ToMeta() Meta {
 		Rechnungsdatum:    r.Rechnungsdatum,
 		Jahr:              r.Jahr,
 		Monat:             r.Monat,
-		Firmenname:        r.Firmenname,
-		Kurzbezeichnung:   r.Kurzbezeichnung,
+		Auftraggeber:      r.Auftraggeber,
+		Verwendungszweck:  r.Verwendungszweck,
 		Rechnungsnummer:   r.Rechnungsnummer,
 		BetragNetto:       r.BetragNetto,
 		SteuersatzProzent: r.SteuersatzProzent,
@@ -192,6 +205,7 @@ func (r CSVRow) ToMeta() Meta {
 		BetragNetto_EUR:   r.BetragNetto_EUR,
 		Gebuehr:           r.Gebuehr,
 		HatAnhaenge:       r.HatAnhaenge,
+		UStIdNr:           r.UStIdNr,
 	}
 }
 

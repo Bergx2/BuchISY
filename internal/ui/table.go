@@ -72,8 +72,8 @@ var columnWidthMap = map[string]float32{
 	"Rechnungsdatum":     120,
 	"Jahr":               80,
 	"Monat":              80,
-	"Firmenname":         200,
-	"Kurzbezeichnung":    220,
+	"Auftraggeber":       200,
+	"Verwendungszweck":   220,
 	"Rechnungsnummer":    160,
 	"BetragNetto":        120,
 	"Steuersatz_Prozent": 130,
@@ -85,6 +85,7 @@ var columnWidthMap = map[string]float32{
 	"BetragNetto_EUR":    120,
 	"Gebuehr":            100,
 	"HatAnhaenge":        80,
+	"UStIdNr":            140,
 }
 
 // NewInvoiceTable creates a new invoice table.
@@ -218,7 +219,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 					hoverLabel.SetText(cellValue)
 
 					// Add tooltip for columns that are often truncated
-					if colID == "Dateiname" || colID == "Firmenname" || colID == "Kurzbezeichnung" || colID == "Kommentar" {
+					if colID == "Dateiname" || colID == "Auftraggeber" || colID == "Verwendungszweck" || colID == "Kommentar" {
 						// Set tooltip to show full text on hover
 						if cellValue != "" && len(cellValue) > 0 {
 							hoverLabel.tooltip = cellValue
@@ -434,10 +435,10 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		return row.Jahr
 	case "Monat":
 		return row.Monat
-	case "Firmenname":
-		return row.Firmenname
-	case "Kurzbezeichnung":
-		return row.Kurzbezeichnung
+	case "Auftraggeber":
+		return row.Auftraggeber
+	case "Verwendungszweck":
+		return row.Verwendungszweck
 	case "Rechnungsnummer":
 		return row.Rechnungsnummer
 	case "BetragNetto":
@@ -481,6 +482,8 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 			return "📎"
 		}
 		return ""
+	case "UStIdNr":
+		return row.UStIdNr
 	default:
 		return ""
 	}

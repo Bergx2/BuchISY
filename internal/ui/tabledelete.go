@@ -15,7 +15,7 @@ func (a *App) showDeleteConfirmation(row core.CSVRow) {
 	message := a.bundle.T(
 		"table.delete.confirm.message",
 		row.Dateiname,
-		row.Firmenname,
+		row.Auftraggeber,
 		row.Bruttobetrag,
 		row.Waehrung,
 	)

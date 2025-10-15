@@ -255,7 +255,7 @@ func (e *EInvoiceExtractor) mapToMeta(invoice *CrossIndustryInvoice) Meta {
 	}
 
 	// Company name (seller)
-	meta.Firmenname = invoice.SupplyChainTradeTransaction.ApplicableHeaderTradeAgreement.SellerTradeParty.Name
+	meta.Auftraggeber = invoice.SupplyChainTradeTransaction.ApplicableHeaderTradeAgreement.SellerTradeParty.Name
 
 	// Currency
 	meta.Waehrung = invoice.SupplyChainTradeTransaction.ApplicableHeaderTradeSettlement.InvoiceCurrencyCode
@@ -279,9 +279,9 @@ func (e *EInvoiceExtractor) mapToMeta(invoice *CrossIndustryInvoice) Meta {
 		meta.Bezahldatum = e.convertDateFormat(dueDateStr)
 	}
 
-	// Kurzbezeichnung: Create a short description from the invoice number
+	// Verwendungszweck: Create a short description from the invoice number
 	// This can be customized based on needs
-	meta.Kurzbezeichnung = fmt.Sprintf("Rechnung %s", meta.Rechnungsnummer)
+	meta.Verwendungszweck = fmt.Sprintf("Rechnung %s", meta.Rechnungsnummer)
 
 	return meta
 }

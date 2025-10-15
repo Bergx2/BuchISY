@@ -21,14 +21,14 @@ import (
 func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	// Create form entries
 	companyEntry := widget.NewEntry()
-	companyEntry.SetText(meta.Firmenname)
+	companyEntry.SetText(meta.Auftraggeber)
 	companyEntry.SetPlaceHolder(a.bundle.T("field.company"))
 
 	shortDescEntry := widget.NewEntry()
-	shortDescEntry.SetText(meta.Kurzbezeichnung)
+	shortDescEntry.SetText(meta.Verwendungszweck)
 	shortDescEntry.SetPlaceHolder(a.bundle.T("field.shortdesc"))
 	// Show character count
-	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Kurzbezeichnung)))
+	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Verwendungszweck)))
 	shortDescEntry.OnChanged = func(s string) {
 		if len(s) > 80 {
 			shortDescEntry.SetText(s[:80])
@@ -212,8 +212,8 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	updateFilenamePreview := func() {
 		// Build meta from current form values
 		currentMeta := core.Meta{
-			Firmenname:        companyEntry.Text,
-			Kurzbezeichnung:   shortDescEntry.Text,
+			Auftraggeber:      companyEntry.Text,
+			Verwendungszweck:  shortDescEntry.Text,
 			Rechnungsnummer:   invoiceNumEntry.Text,
 			Rechnungsdatum:    dateEntry.Text,
 			BetragNetto:       parseFloat(netEntry.Text),
@@ -469,8 +469,8 @@ func (a *App) saveInvoice(
 ) error {
 	// Build meta
 	meta := core.Meta{
-		Firmenname:        company,
-		Kurzbezeichnung:   shortDesc,
+		Auftraggeber:      company,
+		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,
 		Rechnungsdatum:    invoiceDate,
 		Bezahldatum:       paymentDate,

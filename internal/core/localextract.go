@@ -28,7 +28,7 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 
 	// Extract company name (first substantial line, often at top)
 	if company := e.extractCompany(text); company != "" {
-		meta.Firmenname = company
+		meta.Auftraggeber = company
 		matched++
 	}
 	total++
@@ -69,7 +69,7 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 	}
 
 	// Generate short description
-	meta.Kurzbezeichnung = e.generateShortDesc(meta, text)
+	meta.Verwendungszweck = e.generateShortDesc(meta, text)
 
 	// Calculate confidence
 	if total > 0 {
@@ -256,8 +256,8 @@ func (e *LocalExtractor) generateShortDesc(meta Meta, text string) string {
 	}
 
 	// Fallback: use company name or "Rechnung"
-	if meta.Firmenname != "" {
-		return "Rechnung " + meta.Firmenname
+	if meta.Auftraggeber != "" {
+		return "Rechnung " + meta.Auftraggeber
 	}
 
 	return "Rechnung"
