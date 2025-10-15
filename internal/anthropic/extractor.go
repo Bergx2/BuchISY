@@ -87,7 +87,7 @@ func (e *Extractor) ExtractFromImage(ctx context.Context, apiKey, model, imageBa
 			e.logger.Debug("=== CLAUDE VISION API ERROR ===")
 			e.logger.Debug("Error: %v", err)
 		}
-		return core.Meta{}, 0, fmt.Errorf("Vision API request failed: %w", err)
+		return core.Meta{}, 0, fmt.Errorf("vision API request failed: %w", err)
 	}
 
 	// Debug logging: log response

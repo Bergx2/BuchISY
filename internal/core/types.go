@@ -8,27 +8,27 @@ import (
 
 // Meta represents the invoice metadata extracted from a PDF.
 type Meta struct {
-	Auftraggeber        string  // Company name (previously Firmenname)
-	Verwendungszweck    string  // Purpose/description (previously Kurzbezeichnung)
-	Rechnungsnummer     string  // Invoice number
-	BetragNetto         float64 // Net amount
-	SteuersatzProzent   float64 // Tax rate in percent
-	SteuersatzBetrag    float64 // Tax amount
-	Bruttobetrag        float64 // Gross amount
-	Waehrung            string  // Currency (EUR, USD, etc.)
-	Rechnungsdatum      string  // Invoice date DD.MM.YYYY
-	Jahr                string  // Year YYYY
-	Monat               string  // Month MM
-	Gegenkonto          int     // Account code
-	Bankkonto           string  // Bank account
-	Bezahldatum         string  // Payment date DD.MM.YYYY
-	Teilzahlung         bool    // Partial payment flag
-	Dateiname           string  // Final filename
-	Kommentar           string  // Comment/note for this invoice
-	BetragNetto_EUR     float64 // Net amount in default currency (EUR) for foreign currency invoices
-	Gebuehr             float64 // Fee (e.g., currency exchange fee)
-	HatAnhaenge         bool    // Indicates if invoice has additional file attachments
-	UStIdNr             string  // VAT ID number of invoice issuer (2 letter country code + 8-12 digits)
+	Auftraggeber      string  // Company name (previously Firmenname)
+	Verwendungszweck  string  // Purpose/description (previously Kurzbezeichnung)
+	Rechnungsnummer   string  // Invoice number
+	BetragNetto       float64 // Net amount
+	SteuersatzProzent float64 // Tax rate in percent
+	SteuersatzBetrag  float64 // Tax amount
+	Bruttobetrag      float64 // Gross amount
+	Waehrung          string  // Currency (EUR, USD, etc.)
+	Rechnungsdatum    string  // Invoice date DD.MM.YYYY
+	Jahr              string  // Year YYYY
+	Monat             string  // Month MM
+	Gegenkonto        int     // Account code
+	Bankkonto         string  // Bank account
+	Bezahldatum       string  // Payment date DD.MM.YYYY
+	Teilzahlung       bool    // Partial payment flag
+	Dateiname         string  // Final filename
+	Kommentar         string  // Comment/note for this invoice
+	BetragNetto_EUR   float64 // Net amount in default currency (EUR) for foreign currency invoices
+	Gebuehr           float64 // Fee (e.g., currency exchange fee)
+	HatAnhaenge       bool    // Indicates if invoice has additional file attachments
+	UStIdNr           string  // VAT ID number of invoice issuer (2 letter country code + 8-12 digits)
 }
 
 // Account represents a user-defined account (Gegenkonto).

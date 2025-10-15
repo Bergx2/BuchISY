@@ -45,19 +45,19 @@ func ApplyTemplate(template string, meta Meta, opts TemplateOpts) (string, error
 
 	// Replace canonical tokens
 	replacements := map[string]string{
-		"${YYYY}":              meta.Jahr,
-		"${MM}":                meta.Monat,
-		"${DD}":                extractDay(meta.Rechnungsdatum),
-		"${Company}":           meta.Auftraggeber,
-		"${InvoiceNumber}":     meta.Rechnungsnummer,
-		"${Kurzbezeichnung}":   meta.Verwendungszweck,  // Keep old token name for backward compatibility
-		"${Verwendungszweck}":  meta.Verwendungszweck,  // New token name
-		"${NetAmount}":       formatAmount(meta.BetragNetto),
-		"${TaxPercent}":      formatAmount(meta.SteuersatzProzent),
-		"${TaxAmount}":       formatAmount(meta.SteuersatzBetrag),
-		"${GrossAmount}":     formatAmount(meta.Bruttobetrag),
-		"${Currency}":        meta.Waehrung,
-		"${OriginalName}":    "", // Will be filled in by caller if needed
+		"${YYYY}":             meta.Jahr,
+		"${MM}":               meta.Monat,
+		"${DD}":               extractDay(meta.Rechnungsdatum),
+		"${Company}":          meta.Auftraggeber,
+		"${InvoiceNumber}":    meta.Rechnungsnummer,
+		"${Kurzbezeichnung}":  meta.Verwendungszweck, // Keep old token name for backward compatibility
+		"${Verwendungszweck}": meta.Verwendungszweck, // New token name
+		"${NetAmount}":        formatAmount(meta.BetragNetto),
+		"${TaxPercent}":       formatAmount(meta.SteuersatzProzent),
+		"${TaxAmount}":        formatAmount(meta.SteuersatzBetrag),
+		"${GrossAmount}":      formatAmount(meta.Bruttobetrag),
+		"${Currency}":         meta.Waehrung,
+		"${OriginalName}":     "", // Will be filled in by caller if needed
 	}
 
 	for token, value := range replacements {
