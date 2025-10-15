@@ -7,11 +7,11 @@
 
 > **Note:** The codebase is under heavy development and the documentation is constantly evolving. Give it a try and let us know what you think by [creating an issue](https://github.com/Bergx2/BuchISY/issues). Watch releases of this repo to get notified of updates. And give us a star if you like it!
 
-## 🆕 Version 2.2 - Community & Documentation Release
+## 🆕 Version 2.3 - Polish & Refinements
 
-**New in v2.2:**
-- **Code of Conduct** - Contributor Covenant for welcoming community
-- **Contributing Guidelines** - Comprehensive guide for contributors
+**New in v2.3:**
+- **Improved landing page** - Clearer hero messaging and benefit-focused copy
+- **Community foundation** - Code of Conduct and Contributing guidelines
 - **Sample PDFs** - XRechnung and ZUGFeRD examples for testing
 - **Security updates** - Updated dependencies (golang.org/x/crypto, net, sys, image)
 - **Website integration** - www.buchisy.de domain references throughout
@@ -320,13 +320,9 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
 
 ## Upgrading
 
-### From v2.1 to v2.2
+### From v2.x to v2.3
 
-**Good news:** v2.2 is a **non-breaking update** with community improvements and documentation enhancements. Simply download the latest version and replace your existing installation. All your data remains compatible.
-
-### From v2.0 to v2.1+
-
-**Good news:** v2.1+ releases are **non-breaking updates** with bug fixes and improvements. Simply download the latest version and replace your existing installation. All your data remains compatible.
+**Good news:** v2.3 is a **non-breaking update** with community improvements and documentation enhancements. Simply download the latest version and replace your existing installation. All your data remains compatible.
 
 ### From v1.x to v2.0+
 
@@ -442,7 +438,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ### Completed Features ✅
 
-**v2.2:**
+**v2.3:**
+- [x] **Improved landing page** - Clearer hero messaging, benefit-focused copy
 - [x] **Code of Conduct** - Contributor Covenant for open community
 - [x] **Contributing guidelines** - Comprehensive guide for contributors
 - [x] **Sample PDFs** - XRechnung and ZUGFeRD examples included
@@ -478,7 +475,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - [x] Configurable CSV format (separator, encoding, quotes)
 
 ### Planned Features
-- [ ] SQL-based search and filtering (coming in v2.3)
+- [ ] SQL-based search and filtering (coming in v2.4)
 - [ ] Batch processing with progress indicator
 - [ ] Advanced reporting and statistics
 - [ ] Export to Excel/JSON formats
