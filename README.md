@@ -3,15 +3,26 @@
 **BuchISY** is a desktop application for Windows and macOS that helps you centralize and structure company invoices for easy transfer to your bookkeeping agency.
 
 **Published by:** Bergx2 GmbH
+**Website:** [www.buchisy.de](https://www.buchisy.de)
 
-## 🆕 Version 2.0 - Major Update!
+## 🆕 Version 2.1 - ARM64 Fix & UI Improvements
 
-**⚠️ Breaking Changes:**
+**New in v2.1:**
+- **Fixed PDF vision extraction crash** on macOS ARM64 (Apple Silicon)
+- Platform-specific PDF rendering (external commands for ARM64, go-fitz for others)
+- **Optimized invoice modal header** with unified file information layout
+- Real-time filename preview updates in new/edit dialogs
+- Fixed file picker horizontal scrolling
+- Comprehensive PDF processing documentation
+
+## 📦 Version 2.0 - Major Update!
+
+**⚠️ Breaking Changes (v2.0):**
 - SQLite database replaces CSV as source-of-truth
 - Field renames: Firmenname → Auftraggeber, Kurzbezeichnung → Verwendungszweck
 - CSV files are now auto-generated exports (backward compatible reading)
 
-**New in v2.0:**
+**Features added in v2.0:**
 - SQLite database for faster, more reliable data management
 - USt-IdNr (VAT ID) field with automatic extraction
 - File attachments support
@@ -81,7 +92,9 @@ _Coming soon_
 
 ### Download
 
-1. Download the latest release for your platform from the [Releases](https://github.com/bergx2/buchisy/releases) page
+1. Download the latest release for your platform:
+   - **Website**: [www.buchisy.de](https://www.buchisy.de)
+   - **GitHub**: [Releases](https://github.com/bergx2/buchisy/releases) page
 2. **macOS**: Open the `.app` bundle
 3. **Windows**: Run the `.exe` file
 
@@ -160,6 +173,32 @@ MACOSX_DEPLOYMENT_TARGET=15.0 make package-macos
 - Best for standard German invoices
 - Does not support scanned PDFs
 - Faster processing for simple invoices
+
+### PDF Processing Details
+
+#### Processing Flow
+1. **E-Invoice Detection**: Check for XRechnung/ZUGFeRD structured XML data
+2. **Text Extraction**: Extract embedded text using native Go libraries
+3. **Metadata Extraction**: Process with Claude API or local pattern matching
+4. **Vision Fallback**: If no text found, convert to image for Claude Vision API
+
+#### Text Extraction (All Platforms)
+- **E-Invoice formats**: Native Go XML parsing for XRechnung/ZUGFeRD
+- **Regular PDFs**: `ledongthuc/pdf` library for text extraction
+- **Processing modes**:
+  - Claude API for AI-powered analysis
+  - Local mode for regex-based pattern matching
+
+#### Vision Extraction (Scanned PDFs)
+
+| Platform | Method | Implementation |
+|----------|--------|----------------|
+| **Windows** | go-fitz (MuPDF) | Native library rendering at 144 DPI |
+| **Linux** | go-fitz (MuPDF) | Native library rendering at 144 DPI |
+| **macOS Intel** | go-fitz (MuPDF) | Native library rendering at 144 DPI |
+| **macOS ARM64** | External commands | `sips` → `convert` → `gs` (fallback chain) |
+
+**Note**: macOS ARM64 (Apple Silicon) uses external commands to avoid signal handling issues with go-fitz. All other platforms use the go-fitz library for reliable PDF-to-image conversion.
 
 ### Configuration
 
@@ -267,19 +306,23 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
   logs\
 ```
 
-## Upgrading to v2.0
+## Upgrading
 
-### From v1.x to v2.0
+### From v2.0 to v2.1
+
+**Good news:** v2.1 is a **non-breaking update** with bug fixes and UI improvements. Simply download the latest version and replace your existing installation. All your data remains compatible.
+
+### From v1.x to v2.0+
 
 **Important Notes:**
-- v2.0 uses SQLite database instead of CSV as primary storage
+- v2.0+ uses SQLite database instead of CSV as primary storage
 - Old CSV files are backward compatible and can be read
-- Start fresh with v2.0 (recommended) or manually import old invoices
+- Start fresh with v2.0+ (recommended) or manually import old invoices
 
 **Migration Options:**
 
 **Option 1: Fresh Start (Recommended)**
-1. Install v2.0
+1. Install v2.1
 2. Start adding new invoices
 3. Old CSV files remain accessible for reference
 
@@ -288,7 +331,7 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
 - Old CSVs can still be read (backward compatible column names)
 - Manually re-process old invoices if you want them in the database
 
-**What Changes:**
+**What Changes (v2.0+):**
 - Database location: `~/Library/Application Support/BuchISY/invoices.db`
 - CSV files become exports (regenerated automatically)
 - Field names in database: Auftraggeber, Verwendungszweck (CSV backward compatible)
@@ -383,14 +426,23 @@ Contributions are welcome! Please:
 
 ## Roadmap
 
-### Completed Features ✅ (v2.0)
-- [x] **SQLite database** as source-of-truth (v2.0!)
-- [x] **File attachments** support (v2.0!)
-- [x] **Currency conversion** fields (v2.0!)
-- [x] **Comments/notes** field (v2.0!)
-- [x] **USt-IdNr** (VAT ID) extraction (v2.0!)
-- [x] **Sortable file picker** with date column (v2.0!)
-- [x] **Resizable dialogs** with saved dimensions (v2.0!)
+### Completed Features ✅
+
+**v2.1:**
+- [x] **Fixed PDF vision crash** on macOS ARM64 (Apple Silicon)
+- [x] **Platform-specific PDF rendering** (external commands for ARM64, go-fitz for others)
+- [x] **Optimized invoice modal UI** with unified header layout
+- [x] **Real-time filename preview** in new/edit dialogs
+- [x] **Fixed file picker scrolling** with optimized column widths
+
+**v2.0:**
+- [x] **SQLite database** as source-of-truth
+- [x] **File attachments** support
+- [x] **Currency conversion** fields
+- [x] **Comments/notes** field
+- [x] **USt-IdNr** (VAT ID) extraction
+- [x] **Sortable file picker** with date column
+- [x] **Resizable dialogs** with saved dimensions
 - [x] Drag-and-drop support for PDF files
 - [x] Settings dialog with all configuration options
 - [x] Full invoice confirmation modal
@@ -404,7 +456,7 @@ Contributions are welcome! Please:
 - [x] Configurable CSV format (separator, encoding, quotes)
 
 ### Planned Features
-- [ ] SQL-based search and filtering (coming in v2.1)
+- [ ] SQL-based search and filtering (coming in v2.2)
 - [ ] Batch processing with progress indicator
 - [ ] Advanced reporting and statistics
 - [ ] Export to Excel/JSON formats
@@ -426,7 +478,9 @@ You are free to use, modify, distribute, and sell this software without restrict
 
 ## Support
 
-For issues, questions, or feature requests, please open an issue on [GitHub](https://github.com/bergx2/buchisy/issues).
+- **Issues & Feature Requests**: [GitHub Issues](https://github.com/bergx2/buchisy/issues)
+- **Website**: [www.buchisy.de](https://www.buchisy.de)
+- **Enterprise Solutions**: Contact [info@bergx2.de](mailto:info@bergx2.de) or visit [www.bergx2.de](https://www.bergx2.de)
 
 ## Acknowledgments
 
@@ -440,3 +494,5 @@ For issues, questions, or feature requests, please open an issue on [GitHub](htt
 ---
 
 **BuchISY** - Simplifying invoice management for small businesses.
+
+🌐 [www.buchisy.de](https://www.buchisy.de) | 💻 [GitHub](https://github.com/Bergx2/BuchISY) | 🏢 [Bergx2 GmbH](https://www.bergx2.de)

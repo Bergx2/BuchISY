@@ -5,6 +5,7 @@
 *.so
 *.dylib
 *.app
+BuchISY.exe
 
 # Test binary, built with `go test -c`
 *.test
@@ -82,6 +83,9 @@ data/
 storage/
 *.log
 *.pid
+
+# Landing page (local development/drafts)
+landingpage/
 
 # API keys and secrets
 .env
