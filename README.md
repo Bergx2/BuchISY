@@ -122,9 +122,9 @@ make build
 
 # Or build for specific platforms
 MACOSX_DEPLOYMENT_TARGET=15.0 make build-macos      # macOS (Intel + ARM)
-MACOSX_DEPLOYMENT_TARGET=15.0 make build-windows    # Windows
+make build-windows                                  # Windows
 
-# Or apps
+# Or create macOS app bundle
 MACOSX_DEPLOYMENT_TARGET=15.0 make package-macos
 
 # Run the application
