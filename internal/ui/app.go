@@ -15,6 +15,7 @@ import (
 
 	"github.com/bergx2/buchisy/internal/anthropic"
 	"github.com/bergx2/buchisy/internal/core"
+	"github.com/bergx2/buchisy/internal/db"
 	"github.com/bergx2/buchisy/internal/i18n"
 	"github.com/bergx2/buchisy/internal/logging"
 	"github.com/zalando/go-keyring"
@@ -33,7 +34,8 @@ type App struct {
 	localExtractor     *core.LocalExtractor
 	anthropicExtractor *anthropic.Extractor
 	eInvoiceExtractor  *core.EInvoiceExtractor
-	csvRepo            *core.CSVRepository
+	dbRepo             *db.Repository
+	csvRepo            *core.CSVRepository // Kept for CSV export
 	storageManager     *core.StorageManager
 
 	// Current state
@@ -110,6 +112,16 @@ func New(assetsDir string) (*App, error) {
 	localExtractor := core.NewLocalExtractor()
 	anthropicExtractor := anthropic.NewExtractor(logger, settings.DebugMode)
 	eInvoiceExtractor := core.NewEInvoiceExtractor()
+
+	// Initialize SQLite database (global database for all invoices)
+	dbPath := db.GetGlobalDBPath(configDir)
+	dbRepo, err := db.NewRepository(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+	logger.Info("Initialized SQLite database: %s", dbPath)
+
+	// CSV repository for export and migration
 	csvRepo := core.NewCSVRepository()
 	csvRepo.SetColumnOrder(settings.ColumnOrder)
 	csvRepo.SetSeparator(settings.CSVSeparator)
@@ -134,6 +146,7 @@ func New(assetsDir string) (*App, error) {
 		localExtractor:     localExtractor,
 		anthropicExtractor: anthropicExtractor,
 		eInvoiceExtractor:  eInvoiceExtractor,
+		dbRepo:             dbRepo,
 		csvRepo:            csvRepo,
 		storageManager:     storageManager,
 		currentYear:        currentYear,
@@ -170,6 +183,9 @@ func (a *App) Run() {
 	a.window.ShowAndRun()
 
 	// Cleanup
+	if a.dbRepo != nil {
+		a.dbRepo.Close()
+	}
 	a.logger.Close()
 }
 
@@ -194,23 +210,20 @@ func (a *App) buildUI() fyne.CanvasObject {
 	// Create table first (before top bar, so callbacks don't crash)
 	a.invoiceTable = NewInvoiceTable(a.bundle, a)
 	a.invoiceTable.SetColumnOrder(a.settings.ColumnOrder)
+	a.invoiceTable.SetDecimalSeparator(a.settings.DecimalSeparator)
 	a.invoiceTable.SetWindow(a.window)
 
 	// Top bar (this may trigger callbacks when setting initial values)
 	topBar := a.buildTopBar()
 
-	// Main content: left panel (drop area) + right panel (table)
-	leftPanel := a.buildLeftPanel()
-	rightPanel := a.invoiceTable.Container()
-
-	mainContent := container.NewHSplit(leftPanel, rightPanel)
-	mainContent.SetOffset(0.35) // 35% left, 65% right
+	// Main content: just the invoice table (no more left panel)
+	tablePanel := a.invoiceTable.Container()
 
 	// Load initial data now that everything is set up
 	a.loadInvoices()
 
 	// Combine
-	return container.NewBorder(topBar, nil, nil, nil, mainContent)
+	return container.NewBorder(topBar, nil, nil, nil, tablePanel)
 }
 
 // buildTopBar creates the top toolbar.
@@ -244,6 +257,12 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	// Wrap month select in a container with minimum width
 	monthContainer := container.NewStack(a.monthSelect)
 
+	// Select file button
+	selectFileBtn := widget.NewButton(a.bundle.T("select.pdf"), func() {
+		a.selectPDFFiles()
+	})
+	selectFileBtn.Importance = widget.HighImportance
+
 	// Open folder button
 	openFolderBtn := widget.NewButton(a.bundle.T("menu.openTarget"), func() {
 		a.openTargetFolder()
@@ -261,31 +280,12 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		widget.NewLabel("-"),
 		monthContainer,
 		widget.NewSeparator(),
+		selectFileBtn,
 		openFolderBtn,
 		settingsBtn,
 	)
 }
 
-// buildLeftPanel creates the drag-and-drop area.
-func (a *App) buildLeftPanel() fyne.CanvasObject {
-	dropLabel := widget.NewLabel(a.bundle.T("dd.area"))
-	dropLabel.Wrapping = fyne.TextWrapWord
-	dropLabel.Alignment = fyne.TextAlignCenter
-
-	selectBtn := widget.NewButton(a.bundle.T("select.pdf"), func() {
-		a.selectPDFFiles()
-	})
-
-	return container.NewVBox(
-		widget.NewCard("", "", container.NewVBox(
-			dropLabel,
-			selectBtn,
-		)),
-	)
-}
-
-// buildRightPanel is no longer needed - table is created in buildUI
-// Kept for reference if needed later
 
 // onMonthChanged is called when the year or month selection changes.
 func (a *App) onMonthChanged() {
@@ -293,17 +293,19 @@ func (a *App) onMonthChanged() {
 	a.loadInvoices()
 }
 
-// loadInvoices loads invoices for the current month.
+// loadInvoices loads invoices for the current month from SQLite database.
 func (a *App) loadInvoices() {
 	// Safety check in case table isn't initialized yet
 	if a.invoiceTable == nil {
 		return
 	}
 
-	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
-	rows, err := a.csvRepo.Load(csvPath)
+	// Load from SQLite database
+	jahr := fmt.Sprintf("%04d", a.currentYear)
+	monat := fmt.Sprintf("%02d", a.currentMonth)
+	rows, err := a.dbRepo.List(jahr, monat)
 	if err != nil {
-		a.logger.Error("Failed to load invoices: %v", err)
+		a.logger.Error("Failed to load invoices from database: %v", err)
 		a.invoiceTable.SetData([]core.CSVRow{})
 		return
 	}

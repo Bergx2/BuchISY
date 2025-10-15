@@ -3,16 +3,25 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bergx2/buchisy/internal/core"
 )
+
+// fileEntry holds file information for the picker.
+type fileEntry struct {
+	entry   os.DirEntry
+	modTime time.Time
+	name    string
+	isDir   bool
+}
 
 // showCustomFilePicker shows a custom file picker with search functionality.
 func (a *App) showCustomFilePicker() {
@@ -20,9 +29,12 @@ func (a *App) showCustomFilePicker() {
 	startFolder := a.getStartingFolder()
 
 	currentPath := startFolder
-	allFiles := []os.DirEntry{}
-	filteredFiles := []os.DirEntry{}
+	allFiles := []fileEntry{}
+	filteredFiles := []fileEntry{}
 	selectedIndex := -1
+
+	// Sort state: 0 = name asc, 1 = name desc, 2 = date asc, 3 = date desc
+	sortState := 0
 
 	// Path label
 	pathLabel := widget.NewLabel(currentPath)
@@ -32,57 +44,169 @@ func (a *App) showCustomFilePicker() {
 	searchEntry := widget.NewEntry()
 	searchEntry.SetPlaceHolder("Dateiname suchen (z.B. rechnung, 2025-10, GmbH)...")
 
-	// File list
-	var fileList *widget.List
-	fileList = widget.NewList(
-		func() int {
-			return len(filteredFiles)
+	// Sort function
+	sortFiles := func() {
+		switch sortState {
+		case 0: // Name ascending
+			sort.Slice(filteredFiles, func(i, j int) bool {
+				// Directories first
+				if filteredFiles[i].isDir != filteredFiles[j].isDir {
+					return filteredFiles[i].isDir
+				}
+				return strings.ToLower(filteredFiles[i].name) < strings.ToLower(filteredFiles[j].name)
+			})
+		case 1: // Name descending
+			sort.Slice(filteredFiles, func(i, j int) bool {
+				if filteredFiles[i].isDir != filteredFiles[j].isDir {
+					return filteredFiles[i].isDir
+				}
+				return strings.ToLower(filteredFiles[i].name) > strings.ToLower(filteredFiles[j].name)
+			})
+		case 2: // Date ascending (oldest first)
+			sort.Slice(filteredFiles, func(i, j int) bool {
+				if filteredFiles[i].isDir != filteredFiles[j].isDir {
+					return filteredFiles[i].isDir
+				}
+				return filteredFiles[i].modTime.Before(filteredFiles[j].modTime)
+			})
+		case 3: // Date descending (newest first)
+			sort.Slice(filteredFiles, func(i, j int) bool {
+				if filteredFiles[i].isDir != filteredFiles[j].isDir {
+					return filteredFiles[i].isDir
+				}
+				return filteredFiles[i].modTime.After(filteredFiles[j].modTime)
+			})
+		}
+	}
+
+	// File table
+	var fileTable *widget.Table
+	fileTable = widget.NewTable(
+		func() (int, int) {
+			return len(filteredFiles) + 1, 2 // +1 for header row, 2 columns
 		},
 		func() fyne.CanvasObject {
-			icon := widget.NewIcon(nil)
-			label := widget.NewLabel("template")
-			return container.NewHBox(icon, label)
+			return widget.NewLabel("template")
 		},
-		func(id widget.ListItemID, item fyne.CanvasObject) {
-			if id >= len(filteredFiles) {
-				return
-			}
-			entry := filteredFiles[id]
-			box := item.(*fyne.Container)
-			icon := box.Objects[0].(*widget.Icon)
-			label := box.Objects[1].(*widget.Label)
+		func(id widget.TableCellID, cell fyne.CanvasObject) {
+			label := cell.(*widget.Label)
 
-			if entry.IsDir() {
-				icon.SetResource(theme.FolderIcon())
-				label.SetText("📁 " + entry.Name())
+			if id.Row == 0 {
+				// Header row
+				label.TextStyle.Bold = true
+				if id.Col == 0 {
+					label.SetText("Dateiname")
+				} else {
+					label.SetText("Datum")
+				}
 			} else {
-				icon.SetResource(theme.FileIcon())
-				label.SetText("📄 " + entry.Name())
+				// Data rows
+				label.TextStyle.Bold = false
+				dataRow := id.Row - 1
+				if dataRow >= len(filteredFiles) {
+					label.SetText("")
+					return
+				}
+
+				file := filteredFiles[dataRow]
+				if id.Col == 0 {
+					// Filename column
+					if file.isDir {
+						label.SetText("📁 " + file.name)
+					} else {
+						label.SetText("📄 " + file.name)
+					}
+				} else {
+					// Date column
+					if file.isDir {
+						label.SetText("")
+					} else {
+						// Shorter date format to fit in 80px
+						label.SetText(file.modTime.Format("02.01.06"))
+					}
+				}
 			}
 		},
 	)
 
-	// Load files function
-	loadFiles := func(path string) {
+	// Set column widths
+	fileTable.SetColumnWidth(0, 920) // Filename - takes most space
+	fileTable.SetColumnWidth(1, 80)  // Date - very compact (80px as requested)
+
+	// Define loadFiles function FIRST (before it's used in handlers)
+	var loadFiles func(string)
+	loadFiles = func(path string) {
 		entries, err := os.ReadDir(path)
 		if err != nil {
 			a.logger.Error("Failed to read directory: %v", err)
 			return
 		}
 
-		// Filter: only directories and PDF files
-		allFiles = []os.DirEntry{}
+		// Filter: only directories and PDF files, and get mod times
+		allFiles = []fileEntry{}
 		for _, entry := range entries {
 			if entry.IsDir() || strings.HasSuffix(strings.ToLower(entry.Name()), ".pdf") {
-				allFiles = append(allFiles, entry)
+				info, err := entry.Info()
+				modTime := time.Time{}
+				if err == nil {
+					modTime = info.ModTime()
+				}
+
+				allFiles = append(allFiles, fileEntry{
+					entry:   entry,
+					modTime: modTime,
+					name:    entry.Name(),
+					isDir:   entry.IsDir(),
+				})
 			}
 		}
 
 		filteredFiles = allFiles
+		sortFiles()
 		currentPath = path
 		pathLabel.SetText(currentPath)
 		searchEntry.SetText("") // Clear search
-		fileList.Refresh()
+		fileTable.Refresh()
+	}
+
+	// Header click handling for sorting
+	fileTable.OnSelected = func(id widget.TableCellID) {
+		if id.Row == 0 {
+			// Header clicked - toggle sort
+			if id.Col == 0 {
+				// Name column
+				if sortState == 0 {
+					sortState = 1 // Switch to descending
+				} else {
+					sortState = 0 // Switch to ascending
+				}
+			} else {
+				// Date column
+				if sortState == 2 {
+					sortState = 3 // Switch to descending
+				} else {
+					sortState = 2 // Switch to ascending
+				}
+			}
+			sortFiles()
+			fileTable.Refresh()
+			fileTable.UnselectAll()
+		} else {
+			// Data row clicked
+			selectedIndex = id.Row - 1
+			dataRow := selectedIndex
+			if dataRow >= 0 && dataRow < len(filteredFiles) {
+				file := filteredFiles[dataRow]
+				fullPath := filepath.Join(currentPath, file.name)
+
+				if file.isDir {
+					// Navigate into directory
+					loadFiles(fullPath)
+					fileTable.UnselectAll()
+					selectedIndex = -1
+				}
+			}
+		}
 	}
 
 	// Apply search filter
@@ -91,14 +215,15 @@ func (a *App) showCustomFilePicker() {
 		if query == "" {
 			filteredFiles = allFiles
 		} else {
-			filteredFiles = []os.DirEntry{}
-			for _, entry := range allFiles {
-				if strings.Contains(strings.ToLower(entry.Name()), query) {
-					filteredFiles = append(filteredFiles, entry)
+			filteredFiles = []fileEntry{}
+			for _, file := range allFiles {
+				if strings.Contains(strings.ToLower(file.name), query) {
+					filteredFiles = append(filteredFiles, file)
 				}
 			}
 		}
-		fileList.Refresh()
+		sortFiles()
+		fileTable.Refresh()
 	}
 
 	searchEntry.OnChanged = func(query string) {
@@ -121,23 +246,27 @@ func (a *App) showCustomFilePicker() {
 		}
 	})
 
-	// Selection handler
-	fileList.OnSelected = func(id widget.ListItemID) {
-		if id >= len(filteredFiles) {
-			return
+	// Desktop button
+	desktopBtn := widget.NewButton("🖥️ Desktop", func() {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			desktopPath := filepath.Join(home, "Desktop")
+			if _, err := os.Stat(desktopPath); err == nil {
+				loadFiles(desktopPath)
+			}
 		}
-		selectedIndex = id
-		entry := filteredFiles[id]
-		fullPath := filepath.Join(currentPath, entry.Name())
+	})
 
-		if entry.IsDir() {
-			// Navigate into directory
-			loadFiles(fullPath)
-			fileList.UnselectAll()
-			selectedIndex = -1
+	// Downloads button
+	downloadsBtn := widget.NewButton("📥 Downloads", func() {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			downloadsPath := filepath.Join(home, "Downloads")
+			if _, err := os.Stat(downloadsPath); err == nil {
+				loadFiles(downloadsPath)
+			}
 		}
-		// For files, keep selected (user will click Open button)
-	}
+	})
 
 	// Initial load
 	loadFiles(startFolder)
@@ -145,18 +274,18 @@ func (a *App) showCustomFilePicker() {
 	// Layout
 	content := container.NewBorder(
 		container.NewVBox(
-			container.NewHBox(upBtn, homeBtn),
+			container.NewHBox(upBtn, homeBtn, desktopBtn, downloadsBtn),
 			pathLabel,
 			searchEntry,
 			widget.NewSeparator(),
 		),
 		nil, nil, nil,
-		fileList,
+		fileTable,
 	)
 
 	// Custom dialog
 	customDialog := dialog.NewCustomConfirm(
-		"PDF auswählen",
+		"Datei auswählen",
 		"Öffnen",
 		"Abbrechen",
 		content,
@@ -167,17 +296,17 @@ func (a *App) showCustomFilePicker() {
 
 			// Get selected file
 			if selectedIndex < 0 || selectedIndex >= len(filteredFiles) {
-				a.showError("Fehler", "Bitte eine PDF-Datei auswählen.")
+				a.showError("Fehler", "Bitte eine Datei auswählen.")
 				return
 			}
 
-			entry := filteredFiles[selectedIndex]
-			if entry.IsDir() {
-				a.showError("Fehler", "Bitte eine PDF-Datei auswählen (kein Ordner).")
+			file := filteredFiles[selectedIndex]
+			if file.isDir {
+				a.showError("Fehler", "Bitte eine Datei auswählen (kein Ordner).")
 				return
 			}
 
-			fullPath := filepath.Join(currentPath, entry.Name())
+			fullPath := filepath.Join(currentPath, file.name)
 
 			// Remember folder
 			a.settings.LastUsedFolder = currentPath

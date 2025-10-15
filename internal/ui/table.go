@@ -54,17 +54,18 @@ func (hl *hoverLabel) MouseOut() {
 
 // InvoiceTable displays a table of invoices with filtering.
 type InvoiceTable struct {
-	bundle          *i18n.Bundle
-	data            []core.CSVRow
-	filtered        []core.CSVRow
-	table           *widget.Table
-	filterEntry     *widget.Entry
-	container       *fyne.Container
-	app             *App // Reference to main app for delete callback
-	lastSelectedRow int  // Track last selected row for context menu
-	window          fyne.Window
-	columnOrder     []string
-	tooltipPopup    *widget.PopUp // Shared tooltip popup
+	bundle           *i18n.Bundle
+	data             []core.CSVRow
+	filtered         []core.CSVRow
+	table            *widget.Table
+	filterEntry      *widget.Entry
+	container        *fyne.Container
+	app              *App // Reference to main app for delete callback
+	lastSelectedRow  int  // Track last selected row for context menu
+	window           fyne.Window
+	columnOrder      []string
+	tooltipPopup     *widget.PopUp // Shared tooltip popup
+	decimalSeparator string        // Decimal separator for display
 }
 
 var columnWidthMap = map[string]float32{
@@ -91,12 +92,13 @@ var columnWidthMap = map[string]float32{
 // NewInvoiceTable creates a new invoice table.
 func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 	it := &InvoiceTable{
-		bundle:          bundle,
-		data:            []core.CSVRow{},
-		filtered:        []core.CSVRow{},
-		app:             app,
-		lastSelectedRow: -1,
-		columnOrder:     sanitizeColumnOrder(nil),
+		bundle:           bundle,
+		data:             []core.CSVRow{},
+		filtered:         []core.CSVRow{},
+		app:              app,
+		lastSelectedRow:  -1,
+		columnOrder:      sanitizeColumnOrder(nil),
+		decimalSeparator: ",", // Default
 	}
 
 	it.filterEntry = widget.NewEntry()
@@ -375,6 +377,14 @@ func (it *InvoiceTable) SetColumnOrder(order []string) {
 	}
 }
 
+// SetDecimalSeparator sets the decimal separator for amount display.
+func (it *InvoiceTable) SetDecimalSeparator(sep string) {
+	it.decimalSeparator = sep
+	if it.table != nil {
+		it.table.Refresh()
+	}
+}
+
 // applyFilter filters the table data based on the query.
 func (it *InvoiceTable) applyFilter(query string) {
 	query = strings.ToLower(strings.TrimSpace(query))
@@ -425,6 +435,15 @@ func (it *InvoiceTable) getCellValue(row int, colID string) string {
 	return it.valueForColumn(it.filtered[row], colID)
 }
 
+// formatAmount formats a float with the configured decimal separator.
+func (it *InvoiceTable) formatAmount(amount float64) string {
+	formatted := fmt.Sprintf("%.2f", amount)
+	if it.decimalSeparator == "," {
+		formatted = strings.Replace(formatted, ".", ",", 1)
+	}
+	return formatted
+}
+
 func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	switch colID {
 	case "Dateiname":
@@ -442,13 +461,13 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	case "Rechnungsnummer":
 		return row.Rechnungsnummer
 	case "BetragNetto":
-		return fmt.Sprintf("%.2f", row.BetragNetto)
+		return it.formatAmount(row.BetragNetto)
 	case "Steuersatz_Prozent":
-		return fmt.Sprintf("%.2f", row.SteuersatzProzent)
+		return it.formatAmount(row.SteuersatzProzent)
 	case "Steuersatz_Betrag":
-		return fmt.Sprintf("%.2f", row.SteuersatzBetrag)
+		return it.formatAmount(row.SteuersatzBetrag)
 	case "Bruttobetrag":
-		return fmt.Sprintf("%.2f", row.Bruttobetrag)
+		return it.formatAmount(row.Bruttobetrag)
 	case "Waehrung":
 		return row.Waehrung
 	case "Gegenkonto":
@@ -469,12 +488,12 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		return row.Kommentar
 	case "BetragNetto_EUR":
 		if row.BetragNetto_EUR > 0 {
-			return fmt.Sprintf("%.2f", row.BetragNetto_EUR)
+			return it.formatAmount(row.BetragNetto_EUR)
 		}
 		return ""
 	case "Gebuehr":
 		if row.Gebuehr > 0 {
-			return fmt.Sprintf("%.2f", row.Gebuehr)
+			return it.formatAmount(row.Gebuehr)
 		}
 		return ""
 	case "HatAnhaenge":

@@ -44,6 +44,11 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	invoiceNumEntry.SetText(meta.Rechnungsnummer)
 	invoiceNumEntry.SetPlaceHolder(a.bundle.T("field.invoicenumber"))
 
+	// USt-IdNr field
+	ustIdNrEntry := widget.NewEntry()
+	ustIdNrEntry.SetText(meta.UStIdNr)
+	ustIdNrEntry.SetPlaceHolder(a.bundle.T("field.ustidnr"))
+
 	dateEntry := widget.NewEntry()
 	dateEntry.SetText(meta.Rechnungsdatum)
 	dateEntry.SetPlaceHolder(a.bundle.T("field.invoiceDate"))
@@ -153,6 +158,12 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	selectedAttachments := []string{}
 	attachmentsLabel := widget.NewLabel("")
 
+	// Create button with dummy callback (will be replaced after editWindow is created)
+	selectAttachmentsBtn := widget.NewButton(a.bundle.T("btn.addAttachments"), func() {
+		// Will be replaced
+	})
+	selectAttachmentsBtn.Importance = widget.LowImportance
+
 	// Update attachments label based on existing and new attachments
 	updateAttachmentsLabel := func() {
 		existingCount := 0
@@ -185,24 +196,6 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		}
 	}
 
-	// Button to add more attachments
-	selectAttachmentsBtn := widget.NewButton(a.bundle.T("btn.addAttachments"), func() {
-		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
-			if err != nil || reader == nil {
-				return
-			}
-			defer reader.Close()
-
-			filepath := reader.URI().Path()
-			selectedAttachments = append(selectedAttachments, filepath)
-			updateAttachmentsLabel()
-		}, a.window)
-
-		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx", ".txt"}))
-		fileDialog.Show()
-	})
-	selectAttachmentsBtn.Importance = widget.LowImportance
-
 	updateAttachmentsLabel()
 
 	// Open PDF button
@@ -218,30 +211,8 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	})
 	openAttachmentsBtn.Importance = widget.MediumImportance
 
-	// File actions container
+	// File actions container (will be populated after button creation)
 	fileActionsContainer := container.NewVBox()
-	updateFileActionsVisibility := func() {
-		actions := []fyne.CanvasObject{
-			container.NewHBox(openPDFBtn),
-		}
-
-		// Add open attachments button if attachments exist
-		if a.storageManager.HasAttachments(originalPath) {
-			actions = append(actions, container.NewHBox(openAttachmentsBtn))
-		}
-
-		// Always show the add attachments section
-		actions = append(actions,
-			widget.NewSeparator(),
-			widget.NewLabel(a.bundle.T("field.attachments")),
-			container.NewHBox(selectAttachmentsBtn, attachmentsLabel),
-		)
-
-		fileActionsContainer.Objects = actions
-		fileActionsContainer.Refresh()
-	}
-
-	updateFileActionsVisibility()
 
 	// Filename preview
 	filenamePreview := widget.NewLabel("")
@@ -309,6 +280,7 @@ func (a *App) showEditDialog(row core.CSVRow) {
 				widget.NewFormItem(a.bundle.T("field.company"), companyEntry),
 				widget.NewFormItem(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
 				widget.NewFormItem(a.bundle.T("field.invoicenumber"), invoiceNumEntry),
+				widget.NewFormItem(a.bundle.T("field.ustidnr"), ustIdNrEntry),
 				widget.NewFormItem(a.bundle.T("field.invoiceDate"), container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry)),
 				widget.NewFormItem(a.bundle.T("field.paymentDate"), container.NewBorder(nil, nil, nil, paymentDateCalendarBtn, paymentDateEntry)),
 				widget.NewFormItem(getCurrencyLabel("field.net"), netEntry),
@@ -386,6 +358,47 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	// Create resizable window
 	editWindow := a.app.NewWindow("Rechnung bearbeiten") // Edit title
 
+	// Now replace the button callback to use editWindow as parent
+	selectAttachmentsBtn.OnTapped = func() {
+		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			defer reader.Close()
+
+			filepath := reader.URI().Path()
+			selectedAttachments = append(selectedAttachments, filepath)
+			updateAttachmentsLabel()
+		}, editWindow)
+
+		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx", ".txt"}))
+		fileDialog.Resize(fyne.NewSize(1000, 700)) // Make it twice as big
+		fileDialog.Show()
+	}
+
+	// Now populate file actions container (all buttons exist)
+	updateFileActionsVisibility := func() {
+		actions := []fyne.CanvasObject{
+			container.NewHBox(openPDFBtn),
+		}
+
+		// Add open attachments button if attachments exist
+		if a.storageManager.HasAttachments(originalPath) {
+			actions = append(actions, container.NewHBox(openAttachmentsBtn))
+		}
+
+		// Always show the add attachments section
+		actions = append(actions,
+			widget.NewSeparator(),
+			widget.NewLabel(a.bundle.T("field.attachments")),
+			container.NewHBox(selectAttachmentsBtn, attachmentsLabel),
+		)
+
+		fileActionsContainer.Objects = actions
+		fileActionsContainer.Refresh()
+	}
+	updateFileActionsVisibility()
+
 	// Create buttons (now we can reference editWindow)
 	saveBtn := widget.NewButton(a.bundle.T("btn.save"), func() {
 		// Update the invoice
@@ -395,6 +408,7 @@ func (a *App) showEditDialog(row core.CSVRow) {
 			companyEntry.Text,
 			shortDescEntry.Text,
 			invoiceNumEntry.Text,
+			ustIdNrEntry.Text,
 			dateEntry.Text,
 			paymentDateEntry.Text,
 			parseFloat(netEntry.Text),
@@ -472,6 +486,7 @@ func (a *App) updateInvoice(
 	company string,
 	shortDesc string,
 	invoiceNum string,
+	ustIdNr string,
 	invoiceDate string,
 	paymentDate string,
 	net float64,
@@ -495,6 +510,7 @@ func (a *App) updateInvoice(
 		Auftraggeber:      company,
 		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,
+		UStIdNr:           ustIdNr,
 		Rechnungsdatum:    invoiceDate,
 		Bezahldatum:       paymentDate,
 		BetragNetto:       net,
@@ -511,11 +527,11 @@ func (a *App) updateInvoice(
 		HatAnhaenge:       willHaveAttachments,
 	}
 
-	// Extract year and month from invoice date
-	parts := strings.Split(invoiceDate, ".")
-	if len(parts) == 3 {
-		newMeta.Jahr = parts[2]  // Year is the third part
-		newMeta.Monat = parts[1] // Month is the second part
+	// Extract year and month from invoice date (for filename template)
+	invoiceDateParts := strings.Split(invoiceDate, ".")
+	if len(invoiceDateParts) == 3 {
+		newMeta.Jahr = invoiceDateParts[2]  // Year is the third part (for template)
+		newMeta.Monat = invoiceDateParts[1] // Month is the second part (for template)
 	}
 
 	// Generate new filename
@@ -530,6 +546,10 @@ func (a *App) updateInvoice(
 
 	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
 	newPath := filepath.Join(targetFolder, newFilename)
+
+	// Override Jahr/Monat with CURRENTLY SELECTED month for database storage
+	newMeta.Jahr = fmt.Sprintf("%04d", a.currentYear)
+	newMeta.Monat = fmt.Sprintf("%02d", a.currentMonth)
 
 	// Rename file if filename changed
 	if originalRow.Dateiname != newFilename {
@@ -590,38 +610,27 @@ func (a *App) updateInvoice(
 		a.logger.Info("Added %d new attachment(s)", len(newAttachments))
 	}
 
-	// Update CSV
-	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
-	existingRows, err := a.csvRepo.Load(csvPath)
+	// Update in SQLite database
+	jahr := fmt.Sprintf("%04d", a.currentYear)
+	monat := fmt.Sprintf("%02d", a.currentMonth)
+
+	newRow := newMeta.ToCSVRow()
+	newRow.Dateiname = newFilename
+
+	err = a.dbRepo.Update(jahr, monat, originalRow.Dateiname, newRow)
 	if err != nil {
-		return fmt.Errorf("failed to load CSV: %w", err)
+		return fmt.Errorf("failed to update database: %w", err)
 	}
 
-	// Find and update the row
-	updatedRows := make([]core.CSVRow, 0, len(existingRows))
-	found := false
-	for _, r := range existingRows {
-		if r.Dateiname == originalRow.Dateiname {
-			// Update this row
-			newRow := newMeta.ToCSVRow()
-			newRow.Dateiname = newFilename
-			updatedRows = append(updatedRows, newRow)
-			found = true
-		} else {
-			updatedRows = append(updatedRows, r)
-		}
-	}
+	a.logger.Info("Updated invoice in database: %s", newFilename)
 
-	if !found {
-		return fmt.Errorf("original row not found in CSV")
+	// Export to CSV
+	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	err = a.dbRepo.ExportToCSV(jahr, monat, csvPath, a.csvRepo)
+	if err != nil {
+		a.logger.Warn("Failed to export to CSV after update: %v", err)
+		// Continue even if CSV export fails
 	}
-
-	// Rewrite CSV
-	if err := a.rewriteCSV(csvPath, updatedRows); err != nil {
-		return fmt.Errorf("failed to update CSV: %w", err)
-	}
-
-	a.logger.Info("Updated invoice: %s", newFilename)
 
 	// Show success message
 	a.showInfo(

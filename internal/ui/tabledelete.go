@@ -48,35 +48,26 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 		a.logger.Info("Deleted PDF file: %s", filePath)
 	}
 
-	// Reload CSV, remove this row, and save
-	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
-	existingRows, err := a.csvRepo.Load(csvPath)
+	// Delete from SQLite database
+	jahr := fmt.Sprintf("%04d", a.currentYear)
+	monat := fmt.Sprintf("%02d", a.currentMonth)
+	err := a.dbRepo.Delete(jahr, monat, row.Dateiname)
 	if err != nil {
 		a.showError(
 			a.bundle.T("error.processing.title"),
-			fmt.Sprintf("Failed to load CSV: %v", err),
+			fmt.Sprintf("Failed to delete from database: %v", err),
 		)
 		return
 	}
 
-	// Filter out the deleted row
-	newRows := []core.CSVRow{}
-	for _, r := range existingRows {
-		if r.Dateiname != row.Dateiname {
-			newRows = append(newRows, r)
-		}
-	}
+	a.logger.Info("Deleted invoice from database: %s", row.Dateiname)
 
-	// Rewrite CSV file
-	if err := a.rewriteCSV(csvPath, newRows); err != nil {
-		a.showError(
-			a.bundle.T("error.processing.title"),
-			fmt.Sprintf("Failed to update CSV: %v", err),
-		)
-		return
+	// Export updated data to CSV
+	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	if err := a.dbRepo.ExportToCSV(jahr, monat, csvPath, a.csvRepo); err != nil {
+		a.logger.Warn("Failed to export to CSV after delete: %v", err)
+		// Continue even if CSV export fails
 	}
-
-	a.logger.Info("Deleted invoice from CSV: %s", row.Dateiname)
 
 	// Reload table
 	a.loadInvoices()
@@ -85,21 +76,4 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 		"Gelöscht",
 		fmt.Sprintf("Rechnung wurde gelöscht: %s", row.Dateiname),
 	)
-}
-
-// rewriteCSV rewrites a CSV file with new rows.
-func (a *App) rewriteCSV(csvPath string, rows []core.CSVRow) error {
-	// Delete old file
-	if err := os.Remove(csvPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove old CSV: %w", err)
-	}
-
-	// Write new rows
-	for _, row := range rows {
-		if err := a.csvRepo.Append(csvPath, row); err != nil {
-			return fmt.Errorf("failed to write row: %w", err)
-		}
-	}
-
-	return nil
 }

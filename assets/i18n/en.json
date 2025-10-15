@@ -5,8 +5,8 @@
   "menu.openTarget": "Open Target Folder",
   "menu.settings": "Settings",
 
-  "dd.area": "Drop PDF here or select file …",
-  "select.pdf": "Select PDF …",
+  "dd.area": "Drop file here or select …",
+  "select.pdf": "Select File …",
 
   "table.filter.placeholder": "Filter …",
   "table.col.date": "Invoice Date",
@@ -43,10 +43,10 @@
   "field.shortdesc": "Purpose (max. 80 chars)",
   "field.invoicenumber": "Invoice Number",
   "field.invoiceDate": "Invoice Date (DD.MM.YYYY)",
-  "field.net": "Net Amount",
-  "field.vatPercent": "Tax Rate in %",
-  "field.vatAmount": "Tax Amount",
-  "field.gross": "Gross Amount",
+  "field.net": "Amount Net",
+  "field.vatPercent": "VAT in %",
+  "field.vatAmount": "Amount VAT",
+  "field.gross": "Amount Gross",
   "field.currency": "Currency",
   "field.account": "Account",
   "field.bankAccount": "Bank Account",
@@ -59,6 +59,7 @@
   "field.attachments.none": "No attachments",
   "field.attachments.count.one": "%d file selected",
   "field.attachments.count.multiple": "%d files selected",
+  "field.ustidnr": "VAT ID",
 
   "checkbox.rememberMap": "Remember this mapping (Company→Account)",
 
@@ -105,6 +106,10 @@
   "settings.decimal": "Decimal Separator",
   "settings.currencyDefault": "Default Currency",
 
+  "settings.csv": "CSV Format",
+  "settings.csvSeparator": "CSV Separator",
+  "settings.csvEncoding": "CSV Encoding",
+
   "settings.processing": "Processing",
   "settings.mode.label": "Processing Mode",
   "settings.mode.claude": "Claude API",
@@ -134,6 +139,13 @@
   "settings.debug": "Advanced",
   "settings.debugMode": "Debug Mode (verbose logging)",
   "settings.debugMode.hint": "Enables detailed logs including API communication. Useful for troubleshooting.",
+
+  "settings.database": "Database",
+  "settings.wipeDatabase": "Wipe Database",
+  "settings.wipeDatabase.hint": "⚠️ WARNING: Deletes ALL invoice data from the database! CSV files will remain.",
+  "settings.wipeDatabase.confirm.title": "Really wipe database?",
+  "settings.wipeDatabase.confirm.message": "⚠️ WARNING: This action will delete ALL invoices from the database!\n\nPDF files and CSV files will remain on disk, but all database entries will be lost.\n\nDo you really want to proceed?",
+  "settings.wipeDatabase.success": "Database has been wiped. All invoice data has been deleted.",
 
   "settings.restoreDefaults": "Restore Defaults",
 

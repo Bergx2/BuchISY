@@ -40,6 +40,11 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	invoiceNumEntry.SetText(meta.Rechnungsnummer)
 	invoiceNumEntry.SetPlaceHolder(a.bundle.T("field.invoicenumber"))
 
+	// USt-IdNr field
+	ustIdNrEntry := widget.NewEntry()
+	ustIdNrEntry.SetText(meta.UStIdNr)
+	ustIdNrEntry.SetPlaceHolder(a.bundle.T("field.ustidnr"))
+
 	dateEntry := widget.NewEntry()
 	dateEntry.SetText(meta.Rechnungsdatum)
 	dateEntry.SetPlaceHolder(a.bundle.T("field.invoiceDate"))
@@ -151,27 +156,9 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	selectedAttachments := []string{}
 	attachmentsLabel := widget.NewLabel(a.bundle.T("field.attachments.none"))
 
-	// Button to select attachments
+	// Create button with dummy callback (will be replaced after dialogWindow is created)
 	selectAttachmentsBtn := widget.NewButton(a.bundle.T("btn.selectAttachments"), func() {
-		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
-			if err != nil || reader == nil {
-				return
-			}
-			defer reader.Close()
-
-			filepath := reader.URI().Path()
-			selectedAttachments = append(selectedAttachments, filepath)
-
-			// Update label
-			if len(selectedAttachments) == 1 {
-				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.one"), len(selectedAttachments)))
-			} else {
-				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.multiple"), len(selectedAttachments)))
-			}
-		}, a.window)
-
-		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx", ".txt"}))
-		fileDialog.Show()
+		// Will be replaced
 	})
 
 	// Remember mapping checkbox
@@ -293,6 +280,7 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 				widget.NewFormItem(a.bundle.T("field.company"), companyEntry),
 				widget.NewFormItem(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
 				widget.NewFormItem(a.bundle.T("field.invoicenumber"), invoiceNumEntry),
+				widget.NewFormItem(a.bundle.T("field.ustidnr"), ustIdNrEntry),
 				widget.NewFormItem(a.bundle.T("field.invoiceDate"), container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry)),
 				widget.NewFormItem(a.bundle.T("field.paymentDate"), container.NewBorder(nil, nil, nil, paymentDateCalendarBtn, paymentDateEntry)),
 				widget.NewFormItem(getCurrencyLabel("field.net"), netEntry),
@@ -352,6 +340,30 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 	// Create resizable window
 	dialogWindow := a.app.NewWindow(a.bundle.T("modal.title"))
 
+	// Now replace the button callback to use dialogWindow as parent
+	selectAttachmentsBtn.OnTapped = func() {
+		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			defer reader.Close()
+
+			filepath := reader.URI().Path()
+			selectedAttachments = append(selectedAttachments, filepath)
+
+			// Update label
+			if len(selectedAttachments) == 1 {
+				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.one"), len(selectedAttachments)))
+			} else {
+				attachmentsLabel.SetText(fmt.Sprintf(a.bundle.T("field.attachments.count.multiple"), len(selectedAttachments)))
+			}
+		}, dialogWindow)
+
+		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx", ".txt"}))
+		fileDialog.Resize(fyne.NewSize(1000, 700)) // Make it twice as big
+		fileDialog.Show()
+	}
+
 	// Create buttons (now we can reference dialogWindow)
 	saveBtn := widget.NewButton(a.bundle.T("btn.save"), func() {
 		// Save the invoice
@@ -360,6 +372,7 @@ func (a *App) showConfirmationModal(originalPath string, meta core.Meta) {
 			companyEntry.Text,
 			shortDescEntry.Text,
 			invoiceNumEntry.Text,
+			ustIdNrEntry.Text,
 			dateEntry.Text,
 			paymentDateEntry.Text,
 			parseFloat(netEntry.Text),
@@ -451,6 +464,7 @@ func (a *App) saveInvoice(
 	company string,
 	shortDesc string,
 	invoiceNum string,
+	ustIdNr string,
 	invoiceDate string,
 	paymentDate string,
 	net float64,
@@ -472,6 +486,7 @@ func (a *App) saveInvoice(
 		Auftraggeber:      company,
 		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,
+		UStIdNr:           ustIdNr,
 		Rechnungsdatum:    invoiceDate,
 		Bezahldatum:       paymentDate,
 		BetragNetto:       net,
@@ -488,12 +503,12 @@ func (a *App) saveInvoice(
 		HatAnhaenge:       len(attachments) > 0,
 	}
 
-	// Extract year and month from invoice date (for filename and CSV fields)
+	// Extract year and month from invoice date (for filename template only)
 	// Date is in DD.MM.YYYY format
-	parts := strings.Split(invoiceDate, ".")
-	if len(parts) == 3 {
-		meta.Jahr = parts[2]  // Year is the third part
-		meta.Monat = parts[1] // Month is the second part
+	invoiceDateParts := strings.Split(invoiceDate, ".")
+	if len(invoiceDateParts) == 3 {
+		meta.Jahr = invoiceDateParts[2]  // Year is the third part (for template)
+		meta.Monat = invoiceDateParts[1] // Month is the second part (for template)
 	}
 
 	// Generate filename
@@ -511,13 +526,24 @@ func (a *App) saveInvoice(
 	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
 	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
 
-	a.logger.Debug("Saving to folder: %s (current month: %d-%02d)", targetFolder, a.currentYear, a.currentMonth)
-	a.logger.Debug("Invoice date month: %s-%s", meta.Jahr, meta.Monat)
+	// Override Jahr/Monat with CURRENTLY SELECTED month for database storage
+	// This ensures the invoice is stored in the month folder where it physically resides
+	meta.Jahr = fmt.Sprintf("%04d", a.currentYear)
+	meta.Monat = fmt.Sprintf("%02d", a.currentMonth)
 
-	// Check for duplicates
-	existingRows, _ := a.csvRepo.Load(csvPath)
+	a.logger.Debug("Saving to folder: %s (current month: %d-%02d)", targetFolder, a.currentYear, a.currentMonth)
+	a.logger.Debug("Invoice date: %s, but storing in month: %s-%s", invoiceDate, meta.Jahr, meta.Monat)
+
+	// Prepare CSV row
 	newRow := meta.ToCSVRow()
 	newRow.Dateiname = filename
+
+	// Check for duplicates in database
+	isDuplicate, err := a.dbRepo.IsDuplicate(meta.Jahr, meta.Monat, newRow)
+	if err != nil {
+		a.logger.Warn("Failed to check duplicate in database: %v", err)
+		isDuplicate = false // Continue anyway
+	}
 
 	// Helper function to complete the save
 	completeSave := func() error {
@@ -545,9 +571,17 @@ func (a *App) saveInvoice(
 			}
 		}
 
-		// Append to CSV
-		if err := a.csvRepo.Append(csvPath, newRow); err != nil {
-			return fmt.Errorf("failed to append to CSV: %w", err)
+		// Insert into SQLite database
+		_, err = a.dbRepo.Insert(newRow)
+		if err != nil {
+			return fmt.Errorf("failed to insert into database: %w", err)
+		}
+
+		// Export to CSV (database is source of truth)
+		err = a.dbRepo.ExportToCSV(meta.Jahr, meta.Monat, csvPath, a.csvRepo)
+		if err != nil {
+			a.logger.Warn("Failed to export to CSV: %v", err)
+			// Don't fail the whole operation if CSV export fails
 		}
 
 		// Remember company mapping if requested
@@ -565,7 +599,7 @@ func (a *App) saveInvoice(
 		return nil
 	}
 
-	if core.IsDuplicate(existingRows, newRow) {
+	if isDuplicate {
 		// Show confirmation dialog (async)
 		dialog.ShowConfirm(
 			a.bundle.T("error.duplicate"),
