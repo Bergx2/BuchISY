@@ -411,18 +411,16 @@ make test-coverage  # With coverage report
 
 ### Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before submitting pull requests.
 
+**Quick start:**
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Run `make fmt && make lint && make test`
+5. Submit a pull request
 
-### Code Style
-
-- Run `make fmt` before committing
-- Run `make lint` to check for issues (requires [golangci-lint](https://golangci-lint.run/))
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## Roadmap
 
