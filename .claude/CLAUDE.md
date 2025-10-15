@@ -6,7 +6,7 @@ BuchISY is a **desktop invoice management application** (macOS/Windows) that hel
 
 **Published by:** Bergx2 GmbH
 **Website:** [www.buchisy.de](https://www.buchisy.de)
-**Current Version:** v2.1
+**Current Version:** v2.2
 
 ## Core Features
 
@@ -510,7 +510,15 @@ Kommentar, BetragNetto_EUR, Gebuehr, HatAnhaenge, UStIdNr
 
 ## Version History
 
-### v2.1 (Current)
+### v2.2 (Current)
+- Added Code of Conduct (Contributor Covenant)
+- Added Contributing guidelines
+- Added sample PDFs (XRechnung, ZUGFeRD) for testing
+- Updated dependencies (security patches)
+- Website integration (www.buchisy.de)
+- Documentation improvements
+
+### v2.1
 - Fixed PDF vision extraction crash on macOS ARM64
 - Platform-specific PDF rendering implementation
 - Optimized invoice modal UI with unified header

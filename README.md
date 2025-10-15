@@ -7,7 +7,17 @@
 
 > **Note:** The codebase is under heavy development and the documentation is constantly evolving. Give it a try and let us know what you think by [creating an issue](https://github.com/Bergx2/BuchISY/issues). Watch releases of this repo to get notified of updates. And give us a star if you like it!
 
-## 🆕 Version 2.1 - ARM64 Fix & UI Improvements
+## 🆕 Version 2.2 - Community & Documentation Release
+
+**New in v2.2:**
+- **Code of Conduct** - Contributor Covenant for welcoming community
+- **Contributing Guidelines** - Comprehensive guide for contributors
+- **Sample PDFs** - XRechnung and ZUGFeRD examples for testing
+- **Security updates** - Updated dependencies (golang.org/x/crypto, net, sys, image)
+- **Website integration** - www.buchisy.de domain references throughout
+- **Documentation improvements** - Updated architecture docs and build instructions
+
+## Version 2.1 - ARM64 Fix & UI Improvements
 
 **New in v2.1:**
 - **Fixed PDF vision extraction crash** on macOS ARM64 (Apple Silicon)
@@ -310,9 +320,13 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
 
 ## Upgrading
 
-### From v2.0 to v2.1
+### From v2.1 to v2.2
 
-**Good news:** v2.1 is a **non-breaking update** with bug fixes and UI improvements. Simply download the latest version and replace your existing installation. All your data remains compatible.
+**Good news:** v2.2 is a **non-breaking update** with community improvements and documentation enhancements. Simply download the latest version and replace your existing installation. All your data remains compatible.
+
+### From v2.0 to v2.1+
+
+**Good news:** v2.1+ releases are **non-breaking updates** with bug fixes and improvements. Simply download the latest version and replace your existing installation. All your data remains compatible.
 
 ### From v1.x to v2.0+
 
@@ -428,6 +442,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ### Completed Features ✅
 
+**v2.2:**
+- [x] **Code of Conduct** - Contributor Covenant for open community
+- [x] **Contributing guidelines** - Comprehensive guide for contributors
+- [x] **Sample PDFs** - XRechnung and ZUGFeRD examples included
+- [x] **Security updates** - Updated all dependencies with security patches
+- [x] **Website integration** - www.buchisy.de domain throughout docs
+- [x] **Documentation improvements** - Updated architecture and build docs
+
 **v2.1:**
 - [x] **Fixed PDF vision crash** on macOS ARM64 (Apple Silicon)
 - [x] **Platform-specific PDF rendering** (external commands for ARM64, go-fitz for others)
@@ -456,7 +478,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - [x] Configurable CSV format (separator, encoding, quotes)
 
 ### Planned Features
-- [ ] SQL-based search and filtering (coming in v2.2)
+- [ ] SQL-based search and filtering (coming in v2.3)
 - [ ] Batch processing with progress indicator
 - [ ] Advanced reporting and statistics
 - [ ] Export to Excel/JSON formats
