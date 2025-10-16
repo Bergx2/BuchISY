@@ -167,6 +167,7 @@ func (a *App) showCustomFilePicker() {
 		pathLabel.SetText(currentPath)
 		searchEntry.SetText("") // Clear search
 		fileTable.Refresh()
+		fileTable.ScrollToTop() // Reset scroll position when navigating to new folder
 	}
 
 	// Header click handling for sorting
