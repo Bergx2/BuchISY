@@ -35,7 +35,6 @@ var DefaultCSVColumns = []string{
 	"BetragNetto_EUR",
 	"Gebuehr",
 	"HatAnhaenge",
-	"UStIdNr",
 	"AnzahlAnhaenge",
 	"Unterordner",
 	"BuchungRef",
@@ -50,7 +49,7 @@ var ColumnDisplayNames = map[string]string{
 	"Auftraggeber":       "Auftraggeber",
 	"Verwendungszweck":   "Verwendungszweck",
 	"Rechnungsnummer":    "Rechnungsnummer",
-	"VATID":              "VAT-ID Nr.",
+	"VATID":              "USt-IdNr.",
 	"BetragNetto":        "Betrag Netto",
 	"Steuersatz_Prozent": "Steuersatz %",
 	"Steuersatz_Betrag":  "Steuerbetrag",
@@ -64,7 +63,6 @@ var ColumnDisplayNames = map[string]string{
 	"BetragNetto_EUR":    "Betrag Netto (EUR)",
 	"Gebuehr":            "Gebühr",
 	"HatAnhaenge":        "Anhänge",
-	"UStIdNr":            "USt-IdNr",
 	"AnzahlAnhaenge":     "Anzahl Anhänge",
 	"Unterordner":        "Unterordner",
 	"BuchungRef":         "Buchungs-Ref",
@@ -93,7 +91,6 @@ var ColumnTranslationKeys = map[string]string{
 	"BetragNetto_EUR":    "table.col.net_eur",
 	"Gebuehr":            "table.col.fee",
 	"HatAnhaenge":        "table.col.hasattachments",
-	"UStIdNr":            "table.col.ustidnr",
 	"AnzahlAnhaenge":     "table.col.attachmentcount",
 	"Unterordner":        "table.col.unterordner",
 	"BuchungRef":         "table.col.buchungref",
@@ -238,6 +235,13 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			verwendungszweck = valueForColumn(record, headerMap, "Kurzbezeichnung")
 		}
 
+		// VATID and the former separate "UStIdNr" column are the same concept
+		// (the issuer's VAT-ID); read the legacy column when VATID is empty.
+		vatID := valueForColumn(record, headerMap, "VATID")
+		if vatID == "" {
+			vatID = valueForColumn(record, headerMap, "UStIdNr")
+		}
+
 		row := CSVRow{
 			Dateiname:         valueForColumn(record, headerMap, "Dateiname"),
 			Rechnungsdatum:    valueForColumn(record, headerMap, "Rechnungsdatum"),
@@ -246,7 +250,7 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			Auftraggeber:      auftraggeber,
 			Verwendungszweck:  verwendungszweck,
 			Rechnungsnummer:   valueForColumn(record, headerMap, "Rechnungsnummer"),
-			VATID:             valueForColumn(record, headerMap, "VATID"),
+			VATID:             vatID,
 			BetragNetto:       parseFloat(valueForColumn(record, headerMap, "BetragNetto")),
 			SteuersatzProzent: parseFloat(valueForColumn(record, headerMap, "Steuersatz_Prozent")),
 			SteuersatzBetrag:  parseFloat(valueForColumn(record, headerMap, "Steuersatz_Betrag")),
@@ -260,7 +264,6 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			BetragNetto_EUR:   parseFloat(valueForColumn(record, headerMap, "BetragNetto_EUR")),
 			Gebuehr:           parseFloat(valueForColumn(record, headerMap, "Gebuehr")),
 			HatAnhaenge:       parseBool(valueForColumn(record, headerMap, "HatAnhaenge")),
-			UStIdNr:           valueForColumn(record, headerMap, "UStIdNr"),
 			AnzahlAnhaenge:    parseInt(valueForColumn(record, headerMap, "AnzahlAnhaenge")),
 			Unterordner:       valueForColumn(record, headerMap, "Unterordner"),
 			BuchungRef:        valueForColumn(record, headerMap, "BuchungRef"),
@@ -453,7 +456,6 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"BetragNetto_EUR":    r.formatFloat(row.BetragNetto_EUR),
 		"Gebuehr":            r.formatFloat(row.Gebuehr),
 		"HatAnhaenge":        formatBool(row.HatAnhaenge),
-		"UStIdNr":            row.UStIdNr,
 		"AnzahlAnhaenge":     strconv.Itoa(row.AnzahlAnhaenge),
 		"Unterordner":        row.Unterordner,
 		"BuchungRef":         row.BuchungRef,

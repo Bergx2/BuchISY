@@ -163,3 +163,68 @@ func TestMoveAndRenameRemovesSource(t *testing.T) {
 		t.Errorf("source file should be gone after move")
 	}
 }
+
+func TestAttachmentPathsIn(t *testing.T) {
+	dir := t.TempDir()
+	main := "2026-04-01_AWS_EUR.pdf"
+	// Create the main file plus three attachments (out of order) and a decoy.
+	for _, n := range []string{
+		main,
+		"2026-04-01_AWS_EUR_Anhang2.pdf",
+		"2026-04-01_AWS_EUR_Anhang1.xlsx",
+		"2026-04-01_AWS_EUR_Anhang10.png",
+		"other_Anhang1.pdf",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := AttachmentPathsIn(dir, main)
+	if len(paths) != 3 {
+		t.Fatalf("got %d attachments, want 3: %v", len(paths), paths)
+	}
+	// Must be ordered by index: 1, 2, 10.
+	wantOrder := []string{"_Anhang1.xlsx", "_Anhang2.pdf", "_Anhang10.png"}
+	for i, suffix := range wantOrder {
+		if filepath.Base(paths[i]) != "2026-04-01_AWS_EUR"+suffix {
+			t.Errorf("paths[%d] = %q, want suffix %q", i, filepath.Base(paths[i]), suffix)
+		}
+	}
+	if CountAttachmentsIn(dir, main) != 3 {
+		t.Errorf("CountAttachmentsIn = %d, want 3", CountAttachmentsIn(dir, main))
+	}
+}
+
+func TestMoveInvoiceAttachments(t *testing.T) {
+	root := t.TempDir()
+	oldDir := filepath.Join(root, "old")
+	newDir := filepath.Join(root, "new")
+	if err := os.MkdirAll(oldDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(newDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	oldName := "a.pdf"
+	for _, n := range []string{"a_Anhang1.xlsx", "a_Anhang2.pdf"} {
+		if err := os.WriteFile(filepath.Join(oldDir, n), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sm := NewStorageManager(&Settings{StorageRoot: root})
+	newName := "b.pdf"
+	if err := sm.MoveInvoiceAttachments(oldDir, oldName, newDir, newName); err != nil {
+		t.Fatalf("MoveInvoiceAttachments: %v", err)
+	}
+	// Old attachments gone; new ones present with the new base name.
+	if CountAttachmentsIn(oldDir, oldName) != 0 {
+		t.Errorf("old attachments should be gone")
+	}
+	moved := AttachmentPathsIn(newDir, newName)
+	if len(moved) != 2 {
+		t.Fatalf("got %d moved attachments, want 2: %v", len(moved), moved)
+	}
+	if filepath.Base(moved[0]) != "b_Anhang1.xlsx" || filepath.Base(moved[1]) != "b_Anhang2.pdf" {
+		t.Errorf("renamed attachments = %v", moved)
+	}
+}

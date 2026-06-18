@@ -29,7 +29,6 @@ type Meta struct {
 	BetragNetto_EUR   float64 // Net amount in default currency (EUR) for foreign currency invoices
 	Gebuehr           float64 // Fee (e.g., currency exchange fee)
 	HatAnhaenge       bool    // Indicates if invoice has additional file attachments
-	UStIdNr           string  // VAT ID number of invoice issuer (2 letter country code + 8-12 digits)
 	// BuchungRef is "<statementFilename>|<page>|<lineIdx>" pointing to
 	// a booking on a bank statement; empty when this invoice is not
 	// linked to a statement. The statement is identified within the
@@ -173,7 +172,6 @@ type CSVRow struct {
 	BetragNetto_EUR   float64
 	Gebuehr           float64
 	HatAnhaenge       bool
-	UStIdNr           string
 	AnzahlAnhaenge    int
 	Unterordner       string // "" | "Bar" | "Ausgangsrechnungen"
 	BuchungRef        string // statementFilename|page|lineIdx (within the Bankkonto's folder)
@@ -209,7 +207,6 @@ func (m Meta) ToCSVRow() CSVRow {
 		BetragNetto_EUR:   m.BetragNetto_EUR,
 		Gebuehr:           m.Gebuehr,
 		HatAnhaenge:       m.HatAnhaenge,
-		UStIdNr:           m.UStIdNr,
 		BuchungRef:        m.BuchungRef,
 	}
 }
@@ -238,7 +235,6 @@ func (r CSVRow) ToMeta() Meta {
 		BetragNetto_EUR:   r.BetragNetto_EUR,
 		Gebuehr:           r.Gebuehr,
 		HatAnhaenge:       r.HatAnhaenge,
-		UStIdNr:           r.UStIdNr,
 		BuchungRef:        r.BuchungRef,
 	}
 }

@@ -59,3 +59,25 @@ func TestAttachmentName(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestParseAttachmentName(t *testing.T) {
+	main := "2025-08-01_AWS_EUR.pdf"
+	cases := []struct {
+		name    string
+		wantIdx int
+		wantOK  bool
+	}{
+		{"2025-08-01_AWS_EUR_Anhang1.xlsx", 1, true},
+		{"2025-08-01_AWS_EUR_Anhang12.pdf", 12, true},
+		{"2025-08-01_AWS_EUR.pdf", 0, false},      // the main file itself
+		{"2025-08-01_AWS_EUR_Anhang0.pdf", 0, false}, // 0 is not a valid index
+		{"2025-08-01_AWS_EUR_AnhangX.pdf", 0, false}, // non-numeric
+		{"other_Anhang1.pdf", 0, false},              // different invoice
+	}
+	for _, c := range cases {
+		idx, ok := ParseAttachmentName(c.name, main)
+		if ok != c.wantOK || idx != c.wantIdx {
+			t.Errorf("ParseAttachmentName(%q) = (%d,%v), want (%d,%v)", c.name, idx, ok, c.wantIdx, c.wantOK)
+		}
+	}
+}

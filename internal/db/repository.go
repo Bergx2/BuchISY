@@ -89,7 +89,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.Auftraggeber, row.Verwendungszweck, row.Rechnungsnummer,
 		row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag,
 		row.Waehrung, row.Gegenkonto, row.Bankkonto, row.Bezahldatum, row.Teilzahlung,
-		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.UStIdNr,
+		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.VATID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert invoice: %w", err)
@@ -103,7 +103,10 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 	return id, nil
 }
 
-// Update updates an existing invoice by dateiname (within a specific month).
+// Update updates an existing invoice located by (jahr, monat, oldDateiname).
+// The row's own Jahr/Monat become the new filing period, so this also handles
+// moving an invoice to a different month in a single statement (no
+// delete-and-reinsert needed).
 func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CSVRow) error {
 	query := `
 		UPDATE invoices SET
@@ -125,7 +128,9 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			betrag_netto_eur = ?,
 			gebuehr = ?,
 			hat_anhaenge = ?,
-			ustidnr = ?
+			ustidnr = ?, -- stores the issuer VAT-ID (core.CSVRow.VATID)
+			jahr = ?,
+			monat = ?
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
 	`
 
@@ -148,7 +153,8 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.BetragNetto_EUR,
 		row.Gebuehr,
 		row.HatAnhaenge,
-		row.UStIdNr,
+		row.VATID,
+		row.Jahr, row.Monat,
 		jahr, monat, oldDateiname,
 	)
 
@@ -209,7 +215,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
 			&row.BetragNetto, &row.SteuersatzProzent, &row.SteuersatzBetrag, &row.Bruttobetrag,
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
-			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.UStIdNr,
+			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.VATID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)

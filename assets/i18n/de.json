@@ -32,7 +32,6 @@
   "table.col.net_eur": "Betrag netto (EUR)",
   "table.col.fee": "Gebühr",
   "table.col.hasattachments": "Anhänge",
-  "table.col.ustidnr": "USt-IdNr",
   "table.col.attachmentcount": "Anzahl Anhänge",
   "table.col.unterordner": "Unterordner",
   "table.col.buchungref": "Buchung",
@@ -68,7 +67,6 @@
   "field.attachments.none": "Keine Anhänge",
   "field.attachments.count.one": "%d Datei ausgewählt",
   "field.attachments.count.multiple": "%d Dateien ausgewählt",
-  "field.ustidnr": "USt-IdNr",
 
   "checkbox.rememberMap": "Diese Zuordnung (Firma→Konto) merken",
 

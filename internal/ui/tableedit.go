@@ -619,21 +619,7 @@ func (a *App) updateInvoice(
 	finalName := newFilename
 	intendedPath := filepath.Join(targetFolder, newFilename)
 	if intendedPath != originalPath {
-		// Move the folder-based attachments alongside the invoice first, so
-		// the "<base>-files" folder keeps tracking its invoice. Best-effort:
-		// a failure here is logged but does not abort the update.
-		if a.storageManager.HasAttachments(originalPath) {
-			oldAttachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
-			newAttachmentsFolder := a.storageManager.GetAttachmentsFolder(intendedPath)
-			a.logger.Info("Renaming attachments folder from %s to %s",
-				filepath.Base(oldAttachmentsFolder), filepath.Base(newAttachmentsFolder))
-			if err := os.MkdirAll(filepath.Dir(newAttachmentsFolder), 0755); err != nil {
-				a.logger.Warn("Failed to prepare attachments folder: %v", err)
-			} else if err := os.Rename(oldAttachmentsFolder, newAttachmentsFolder); err != nil {
-				a.logger.Warn("Failed to rename attachments folder: %v", err)
-			}
-		}
-
+		oldFolder := filepath.Dir(originalPath)
 		if _, statErr := os.Stat(originalPath); statErr == nil {
 			moved, mvErr := a.storageManager.MoveAndRename(originalPath, targetFolder, newFilename)
 			if mvErr != nil {
@@ -646,6 +632,13 @@ func (a *App) updateInvoice(
 		}
 		// else: source gone but the file is already at intendedPath — a
 		// prior attempt moved it; treat the move as already done.
+
+		// Move the numbered "_Anhang<N>" attachment siblings alongside the
+		// invoice: they adopt the invoice's final base name and target
+		// folder so invoiceAttachmentPaths keeps finding them. Best-effort.
+		if err := a.storageManager.MoveInvoiceAttachments(oldFolder, originalRow.Dateiname, targetFolder, finalName); err != nil {
+			a.logger.Warn("Failed to move attachments: %v", err)
+		}
 	}
 
 	// Jahr/Monat in der CSV = Ablage-Periode (wohin die Datei gelegt
@@ -667,19 +660,11 @@ func (a *App) updateInvoice(
 	tgtJahr := newMeta.Jahr
 	tgtMonat := newMeta.Monat
 
-	if sameMonth {
-		// In-place update within the same filing month.
-		if err := a.dbRepo.Update(srcJahr, srcMonat, originalRow.Dateiname, newRow); err != nil {
-			return fmt.Errorf("failed to update database: %w", err)
-		}
-	} else {
-		// Cross-month move: remove from the source month, insert into target.
-		if err := a.dbRepo.Delete(srcJahr, srcMonat, originalRow.Dateiname); err != nil {
-			return fmt.Errorf("failed to remove invoice from source month: %w", err)
-		}
-		if _, err := a.dbRepo.Insert(newRow); err != nil {
-			return fmt.Errorf("failed to insert invoice into target month: %w", err)
-		}
+	// Single UPDATE handles both an in-place edit and a move to another
+	// filing month: the row is located by its source (jahr, monat, dateiname)
+	// and its jahr/monat columns are rewritten to the target period.
+	if err := a.dbRepo.Update(srcJahr, srcMonat, originalRow.Dateiname, newRow); err != nil {
+		return fmt.Errorf("failed to update database: %w", err)
 	}
 
 	a.logger.Info("Updated invoice in database: %s", finalName)

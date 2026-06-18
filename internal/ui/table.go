@@ -177,7 +177,6 @@ var columnWidthMap = map[string]float32{
 	"BetragNetto_EUR":    120,
 	"Gebuehr":            100,
 	"HatAnhaenge":        80,
-	"UStIdNr":            140,
 }
 
 // NewInvoiceTable creates a new invoice table.
@@ -892,8 +891,6 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 			return "📎"
 		}
 		return ""
-	case "UStIdNr":
-		return row.UStIdNr
 	case "AnzahlAnhaenge":
 		if row.AnzahlAnhaenge > 0 {
 			return fmt.Sprintf("%d", row.AnzahlAnhaenge)
