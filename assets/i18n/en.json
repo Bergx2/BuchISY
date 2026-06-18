@@ -32,7 +32,6 @@
   "table.col.net_eur": "Net Amount (EUR)",
   "table.col.fee": "Fee",
   "table.col.hasattachments": "Attachments",
-  "table.col.ustidnr": "VAT ID",
   "table.col.attachmentcount": "Attachment Count",
   "table.col.unterordner": "Subfolder",
   "table.col.buchungref": "Booking",
@@ -68,7 +67,6 @@
   "field.attachments.none": "No attachments",
   "field.attachments.count.one": "%d file selected",
   "field.attachments.count.multiple": "%d files selected",
-  "field.ustidnr": "VAT ID",
 
   "checkbox.rememberMap": "Remember this mapping (Company→Account)",
 

@@ -89,7 +89,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.Auftraggeber, row.Verwendungszweck, row.Rechnungsnummer,
 		row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag,
 		row.Waehrung, row.Gegenkonto, row.Bankkonto, row.Bezahldatum, row.Teilzahlung,
-		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.UStIdNr,
+		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.VATID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert invoice: %w", err)
@@ -125,7 +125,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			betrag_netto_eur = ?,
 			gebuehr = ?,
 			hat_anhaenge = ?,
-			ustidnr = ?
+			ustidnr = ? -- stores the issuer VAT-ID (core.CSVRow.VATID)
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
 	`
 
@@ -148,7 +148,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.BetragNetto_EUR,
 		row.Gebuehr,
 		row.HatAnhaenge,
-		row.UStIdNr,
+		row.VATID,
 		jahr, monat, oldDateiname,
 	)
 
@@ -209,7 +209,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
 			&row.BetragNetto, &row.SteuersatzProzent, &row.SteuersatzBetrag, &row.Bruttobetrag,
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
-			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.UStIdNr,
+			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.VATID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)

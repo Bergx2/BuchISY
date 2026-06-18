@@ -26,8 +26,7 @@ Ziel: Liefere ausschließlich ein strenges JSON-Objekt mit genau diesen Schlüss
   "waehrung": "EUR|USD|andere ISO4217 oder null",
   "rechnungsdatum": "dd.MM.yyyy oder null",
   "jahr": "YYYY oder null",
-  "monat": "MM oder null",
-  "ustidnr": "string oder null"
+  "monat": "MM oder null"
 }
 
 Regeln:
@@ -43,7 +42,6 @@ Regeln:
 - waehrung: Verwende ISO-Code (z. B. EUR, USD). "€" ⇒ EUR.
 - jahr / monat: aus rechnungsdatum ableiten (YYYY, MM).
 - verwendungszweck: kurze menschliche Zusammenfassung (max. ~80 Zeichen), z. B. "Cloud-Abo Oktober 2025".
-- ustidnr: Die Umsatzsteuer-Identifikationsnummer des Rechnungsausstellers (Format: 2 Buchstaben Ländercode + 8-12 Ziffern, z.B. "DE123456789"). Falls nicht vorhanden: null.
 
 vat_id (Umsatzsteuer-Identifikationsnummer des Rechnungsstellers):
 - Beispiele für gültige Formate: "DE123456789", "ATU12345678", "FR12345678901", "GB123456789", "VAT-Nr.", "USt-IdNr.", "VAT-ID", "TAX-ID", "Tax Number".
@@ -368,7 +366,6 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 		Rechnungsdatum    *string  `json:"rechnungsdatum"`
 		Jahr              *string  `json:"jahr"`
 		Monat             *string  `json:"monat"`
-		UStIdNr           *string  `json:"ustidnr"`
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
@@ -420,9 +417,6 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 	}
 	if result.Monat != nil {
 		meta.Monat = *result.Monat
-	}
-	if result.UStIdNr != nil {
-		meta.UStIdNr = *result.UStIdNr
 	}
 
 	return meta, nil
