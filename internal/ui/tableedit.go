@@ -660,19 +660,11 @@ func (a *App) updateInvoice(
 	tgtJahr := newMeta.Jahr
 	tgtMonat := newMeta.Monat
 
-	if sameMonth {
-		// In-place update within the same filing month.
-		if err := a.dbRepo.Update(srcJahr, srcMonat, originalRow.Dateiname, newRow); err != nil {
-			return fmt.Errorf("failed to update database: %w", err)
-		}
-	} else {
-		// Cross-month move: remove from the source month, insert into target.
-		if err := a.dbRepo.Delete(srcJahr, srcMonat, originalRow.Dateiname); err != nil {
-			return fmt.Errorf("failed to remove invoice from source month: %w", err)
-		}
-		if _, err := a.dbRepo.Insert(newRow); err != nil {
-			return fmt.Errorf("failed to insert invoice into target month: %w", err)
-		}
+	// Single UPDATE handles both an in-place edit and a move to another
+	// filing month: the row is located by its source (jahr, monat, dateiname)
+	// and its jahr/monat columns are rewritten to the target period.
+	if err := a.dbRepo.Update(srcJahr, srcMonat, originalRow.Dateiname, newRow); err != nil {
+		return fmt.Errorf("failed to update database: %w", err)
 	}
 
 	a.logger.Info("Updated invoice in database: %s", finalName)

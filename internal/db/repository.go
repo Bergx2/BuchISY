@@ -103,7 +103,10 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 	return id, nil
 }
 
-// Update updates an existing invoice by dateiname (within a specific month).
+// Update updates an existing invoice located by (jahr, monat, oldDateiname).
+// The row's own Jahr/Monat become the new filing period, so this also handles
+// moving an invoice to a different month in a single statement (no
+// delete-and-reinsert needed).
 func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CSVRow) error {
 	query := `
 		UPDATE invoices SET
@@ -125,7 +128,9 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			betrag_netto_eur = ?,
 			gebuehr = ?,
 			hat_anhaenge = ?,
-			ustidnr = ? -- stores the issuer VAT-ID (core.CSVRow.VATID)
+			ustidnr = ?, -- stores the issuer VAT-ID (core.CSVRow.VATID)
+			jahr = ?,
+			monat = ?
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
 	`
 
@@ -149,6 +154,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.Gebuehr,
 		row.HatAnhaenge,
 		row.VATID,
+		row.Jahr, row.Monat,
 		jahr, monat, oldDateiname,
 	)
 
