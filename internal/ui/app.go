@@ -198,6 +198,15 @@ func (a *App) startProfile(profile string) {
 		logger.Warn("Bar migration failed: %v", err)
 	}
 
+	// Back-fill the database from existing CSVs the first time a profile runs
+	// on the SQLite build (no-op once the database holds invoices). Without
+	// this, a profile migrated from the CSV-only era shows an empty table.
+	if imported, err := dbRepo.MigrateCSVToDatabase(settings.StorageRoot, csvRepo, logger); err != nil {
+		logger.Warn("CSV-to-database import failed: %v", err)
+	} else if imported > 0 {
+		logger.Info("Imported %d invoices from CSV into the database", imported)
+	}
+
 	now := time.Now()
 
 	a.bundle = bundle

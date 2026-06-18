@@ -165,6 +165,15 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 	return nil
 }
 
+// Count returns the total number of invoices stored in the database.
+func (r *Repository) Count() (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT count(*) FROM invoices`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("failed to count invoices: %w", err)
+	}
+	return n, nil
+}
+
 // Delete removes an invoice from the database.
 func (r *Repository) Delete(jahr, monat, dateiname string) error {
 	query := `DELETE FROM invoices WHERE jahr = ? AND monat = ? AND dateiname = ?`
