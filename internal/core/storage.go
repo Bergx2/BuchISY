@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -28,8 +29,18 @@ func (sm *StorageManager) GetMonthFolder(year int, month time.Month) string {
 		return sm.settings.StorageRoot
 	}
 
-	folderName := fmt.Sprintf("%04d-%02d", year, month)
-	return filepath.Join(sm.settings.StorageRoot, folderName)
+	yearName := fmt.Sprintf("%04d", year)
+	monthName := fmt.Sprintf("%04d-%02d", year, month)
+	return filepath.Join(sm.settings.StorageRoot, yearName, monthName)
+}
+
+// InvoiceFilePath returns the full path of an invoice's main file inside
+// its month folder, honouring the row's category subfolder.
+func InvoiceFilePath(monthFolder string, row CSVRow) string {
+	if row.Unterordner == "" {
+		return filepath.Join(monthFolder, row.Dateiname)
+	}
+	return filepath.Join(monthFolder, row.Unterordner, row.Dateiname)
 }
 
 // EnsureMonthFolder creates the month folder if it doesn't exist.
@@ -44,43 +55,62 @@ func (sm *StorageManager) GetCSVPath(year int, month time.Month) string {
 	return filepath.Join(folder, "invoices.csv")
 }
 
-// MoveAndRename moves a file to the target location with a new name.
-// It handles collisions by appending _2, _3, etc.
-func (sm *StorageManager) MoveAndRename(sourcePath, targetFolder, newName string) (string, error) {
-	// Ensure target folder exists
+// prepareTarget ensures targetFolder exists and returns a collision-free
+// final name and full path within it (appending _2, _3, … as needed).
+func prepareTarget(targetFolder, newName string) (finalName, targetPath string, err error) {
 	if err := os.MkdirAll(targetFolder, 0755); err != nil {
-		return "", fmt.Errorf("failed to create target folder: %w", err)
+		return "", "", fmt.Errorf("failed to create target folder: %w", err)
 	}
-
-	// Handle filename collisions
-	finalName := newName
-	targetPath := filepath.Join(targetFolder, finalName)
+	finalName = newName
+	targetPath = filepath.Join(targetFolder, finalName)
 	counter := 2
-
 	for {
-		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
-			break
+		if _, statErr := os.Stat(targetPath); statErr != nil {
+			if os.IsNotExist(statErr) {
+				break
+			}
+			return "", "", fmt.Errorf("failed to check target path: %w", statErr)
 		}
-
-		// File exists, try with counter
 		ext := filepath.Ext(newName)
 		base := newName[:len(newName)-len(ext)]
 		finalName = fmt.Sprintf("%s_%d%s", base, counter, ext)
 		targetPath = filepath.Join(targetFolder, finalName)
 		counter++
 	}
+	return finalName, targetPath, nil
+}
 
-	// Move the file
+// MoveAndRename moves a file to the target location with a new name,
+// handling collisions with _2, _3, … suffixes. If the source cannot be
+// removed after a fallback copy (e.g. it is locked by another program),
+// the operation still counts as successful — the file is already at its
+// destination.
+func (sm *StorageManager) MoveAndRename(sourcePath, targetFolder, newName string) (string, error) {
+	finalName, targetPath, err := prepareTarget(targetFolder, newName)
+	if err != nil {
+		return "", err
+	}
 	if err := os.Rename(sourcePath, targetPath); err != nil {
-		// If rename fails (e.g., cross-device), try copy + delete
+		// Rename failed (cross-device, or source locked): copy instead.
 		if err := copyFile(sourcePath, targetPath); err != nil {
 			return "", fmt.Errorf("failed to copy file: %w", err)
 		}
-		if err := os.Remove(sourcePath); err != nil {
-			return "", fmt.Errorf("failed to remove source file: %w", err)
-		}
+		// Best-effort source removal; a locked source must not fail the op.
+		_ = os.Remove(sourcePath)
 	}
+	return finalName, nil
+}
 
+// CopyAndRename copies a file to the target location with a new name,
+// leaving the source file untouched. Collisions get _2, _3, … suffixes.
+func (sm *StorageManager) CopyAndRename(sourcePath, targetFolder, newName string) (string, error) {
+	finalName, targetPath, err := prepareTarget(targetFolder, newName)
+	if err != nil {
+		return "", err
+	}
+	if err := copyFile(sourcePath, targetPath); err != nil {
+		return "", fmt.Errorf("failed to copy file: %w", err)
+	}
 	return finalName, nil
 }
 
@@ -133,4 +163,113 @@ func (sm *StorageManager) ListAllCSVPaths() ([]string, error) {
 	}
 
 	return paths, nil
+}
+
+// monthFolderPattern matches a bare YYYY-MM folder name.
+var monthFolderPattern = regexp.MustCompile(`^(\d{4})-(\d{2})$`)
+
+// MigrateToYearFolders moves bare YYYY-MM folders directly under the
+// storage root into a YYYY year folder. Idempotent: a second run finds
+// nothing to move. warn is called with a message for each skipped folder.
+func (sm *StorageManager) MigrateToYearFolders(warn func(string)) error {
+	if !sm.settings.UseMonthSubfolders {
+		return nil
+	}
+	root := sm.settings.StorageRoot
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read storage root: %w", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		m := monthFolderPattern.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		yearDir := filepath.Join(root, m[1])
+		if err := os.MkdirAll(yearDir, 0755); err != nil {
+			return fmt.Errorf("failed to create year folder %s: %w", yearDir, err)
+		}
+		target := filepath.Join(yearDir, e.Name())
+		if _, err := os.Stat(target); err == nil {
+			warn(fmt.Sprintf("Monatsordner %s übersprungen — Ziel existiert bereits", e.Name()))
+			continue
+		}
+		if err := os.Rename(filepath.Join(root, e.Name()), target); err != nil {
+			return fmt.Errorf("failed to move %s: %w", e.Name(), err)
+		}
+	}
+	return nil
+}
+
+// MigrateCashToBar moves already-filed invoices that are booked to a cash
+// account into a Bar/ subfolder and sets their Unterordner. cashAccounts
+// is the set of cash-account names. Idempotent: rows with a non-empty
+// Unterordner are skipped. warn is called for each unmovable file.
+func (sm *StorageManager) MigrateCashToBar(repo *CSVRepository, cashAccounts map[string]struct{}, warn func(string)) error {
+	if !sm.settings.UseMonthSubfolders || len(cashAccounts) == 0 {
+		return nil
+	}
+	csvPaths, err := sm.ListAllCSVPaths()
+	if err != nil {
+		return err
+	}
+	for _, csvPath := range csvPaths {
+		monthFolder := filepath.Dir(csvPath)
+		rows, err := repo.Load(csvPath)
+		if err != nil {
+			warn(fmt.Sprintf("CSV %s übersprungen: %v", csvPath, err))
+			continue
+		}
+		// Is there anything to move in this folder?
+		needsMove := false
+		for i := range rows {
+			if rows[i].Unterordner != "" {
+				continue
+			}
+			if _, isCash := cashAccounts[rows[i].Bankkonto]; isCash {
+				needsMove = true
+				break
+			}
+		}
+		if !needsMove {
+			continue
+		}
+		// Probe: confirm the CSV is writable BEFORE moving any file, so a
+		// write failure cannot leave files relocated but the CSV stale.
+		if err := repo.Rewrite(csvPath, rows); err != nil {
+			warn(fmt.Sprintf("CSV %s nicht schreibbar — übersprungen: %v", csvPath, err))
+			continue
+		}
+		barDir := filepath.Join(monthFolder, "Bar")
+		for i := range rows {
+			if rows[i].Unterordner != "" {
+				continue
+			}
+			if _, isCash := cashAccounts[rows[i].Bankkonto]; !isCash {
+				continue
+			}
+			src := filepath.Join(monthFolder, rows[i].Dateiname)
+			if _, err := os.Stat(src); err != nil {
+				warn(fmt.Sprintf("Beleg %s nicht gefunden — übersprungen", src))
+				continue
+			}
+			finalName, err := sm.MoveAndRename(src, barDir, rows[i].Dateiname)
+			if err != nil {
+				warn(fmt.Sprintf("Verschieben von %s fehlgeschlagen: %v", src, err))
+				continue
+			}
+			rows[i].Dateiname = finalName
+			rows[i].Unterordner = "Bar"
+		}
+		if err := repo.Rewrite(csvPath, rows); err != nil {
+			return fmt.Errorf("failed to rewrite %s: %w", csvPath, err)
+		}
+	}
+	return nil
 }

@@ -18,6 +18,7 @@ var DefaultCSVColumns = []string{
 	"Firmenname",
 	"Kurzbezeichnung",
 	"Rechnungsnummer",
+	"VATID",
 	"BetragNetto",
 	"Steuersatz_Prozent",
 	"Steuersatz_Betrag",
@@ -27,6 +28,9 @@ var DefaultCSVColumns = []string{
 	"Bankkonto",
 	"Bezahldatum",
 	"Teilzahlung",
+	"AnzahlAnhaenge",
+	"Unterordner",
+	"BuchungRef",
 }
 
 // ColumnDisplayNames maps column IDs to German display names.
@@ -38,15 +42,19 @@ var ColumnDisplayNames = map[string]string{
 	"Firmenname":         "Firmenname",
 	"Kurzbezeichnung":    "Kurzbezeichnung",
 	"Rechnungsnummer":    "Rechnungsnummer",
+	"VATID":              "VAT-ID Nr.",
 	"BetragNetto":        "Betrag Netto",
 	"Steuersatz_Prozent": "Steuersatz %",
 	"Steuersatz_Betrag":  "Steuerbetrag",
 	"Bruttobetrag":       "Bruttobetrag",
 	"Waehrung":           "Währung",
 	"Gegenkonto":         "Gegenkonto",
-	"Bankkonto":          "Bankkonto",
+	"Bankkonto":          "Zahlungskonto",
 	"Bezahldatum":        "Bezahldatum",
 	"Teilzahlung":        "Teilzahlung",
+	"AnzahlAnhaenge":     "Anzahl Anhänge",
+	"Unterordner":        "Unterordner",
+	"BuchungRef":         "Buchungs-Ref",
 }
 
 // ColumnTranslationKeys maps column IDs to translation keys.
@@ -58,6 +66,7 @@ var ColumnTranslationKeys = map[string]string{
 	"Firmenname":         "table.col.company",
 	"Kurzbezeichnung":    "table.col.shortdesc",
 	"Rechnungsnummer":    "table.col.invoicenumber",
+	"VATID":              "table.col.vatid",
 	"BetragNetto":        "table.col.net",
 	"Steuersatz_Prozent": "table.col.vatPercent",
 	"Steuersatz_Betrag":  "table.col.vatAmount",
@@ -67,6 +76,9 @@ var ColumnTranslationKeys = map[string]string{
 	"Bankkonto":          "table.col.bankaccount",
 	"Bezahldatum":        "table.col.paymentdate",
 	"Teilzahlung":        "table.col.partialpayment",
+	"AnzahlAnhaenge":     "table.col.attachmentcount",
+	"Unterordner":        "table.col.unterordner",
+	"BuchungRef":         "table.col.buchungref",
 }
 
 var validColumns = func() map[string]struct{} {
@@ -89,13 +101,25 @@ func NewCSVRepository() *CSVRepository {
 	}
 }
 
-// SetColumnOrder sets the column order for CSV operations.
+// SetColumnOrder sets the column order for CSV operations. Any column
+// from DefaultCSVColumns missing from order is appended, so a legacy
+// saved order still includes columns added in newer versions.
 func (r *CSVRepository) SetColumnOrder(order []string) {
 	if len(order) == 0 {
 		r.columnOrder = append([]string{}, DefaultCSVColumns...)
 		return
 	}
-	r.columnOrder = append([]string{}, order...)
+	result := append([]string{}, order...)
+	present := make(map[string]struct{}, len(result))
+	for _, c := range result {
+		present[c] = struct{}{}
+	}
+	for _, c := range DefaultCSVColumns {
+		if _, ok := present[c]; !ok {
+			result = append(result, c)
+		}
+	}
+	r.columnOrder = result
 }
 
 // GetHeader returns the header based on current column order.
@@ -146,6 +170,7 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			Firmenname:        valueForColumn(record, headerMap, "Firmenname"),
 			Kurzbezeichnung:   valueForColumn(record, headerMap, "Kurzbezeichnung"),
 			Rechnungsnummer:   valueForColumn(record, headerMap, "Rechnungsnummer"),
+			VATID:             valueForColumn(record, headerMap, "VATID"),
 			BetragNetto:       parseFloat(valueForColumn(record, headerMap, "BetragNetto")),
 			SteuersatzProzent: parseFloat(valueForColumn(record, headerMap, "Steuersatz_Prozent")),
 			SteuersatzBetrag:  parseFloat(valueForColumn(record, headerMap, "Steuersatz_Betrag")),
@@ -155,7 +180,13 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			Bankkonto:         valueForColumn(record, headerMap, "Bankkonto"),
 			Bezahldatum:       valueForColumn(record, headerMap, "Bezahldatum"),
 			Teilzahlung:       parseBool(valueForColumn(record, headerMap, "Teilzahlung")),
+			AnzahlAnhaenge:    parseInt(valueForColumn(record, headerMap, "AnzahlAnhaenge")),
+			Unterordner:       valueForColumn(record, headerMap, "Unterordner"),
+			BuchungRef:        valueForColumn(record, headerMap, "BuchungRef"),
 		}
+		// HatAnhaenge is derived from AnzahlAnhaenge (single source of truth);
+		// it is not persisted as its own CSV column.
+		row.HatAnhaenge = row.AnzahlAnhaenge > 0
 		rows = append(rows, row)
 	}
 
@@ -212,6 +243,25 @@ func (r *CSVRepository) Append(path string, row CSVRow) error {
 	return nil
 }
 
+// WriteTo writes the header and all rows as CSV to w, using the current
+// column order.
+func (r *CSVRepository) WriteTo(w io.Writer, rows []CSVRow) error {
+	writer := csv.NewWriter(w)
+	if err := writer.Write(r.GetHeader()); err != nil {
+		return fmt.Errorf("failed to write CSV header: %w", err)
+	}
+	for _, row := range rows {
+		if err := writer.Write(r.rowToRecord(row)); err != nil {
+			return fmt.Errorf("failed to write CSV row: %w", err)
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("failed to flush CSV writer: %w", err)
+	}
+	return nil
+}
+
 // Rewrite overwrites the CSV file with the provided rows using the current column order.
 func (r *CSVRepository) Rewrite(path string, rows []CSVRow) error {
 	file, err := os.Create(path)
@@ -219,25 +269,7 @@ func (r *CSVRepository) Rewrite(path string, rows []CSVRow) error {
 		return fmt.Errorf("failed to recreate CSV: %w", err)
 	}
 	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	if err := writer.Write(r.GetHeader()); err != nil {
-		return fmt.Errorf("failed to write CSV header: %w", err)
-	}
-
-	for _, row := range rows {
-		if err := writer.Write(r.rowToRecord(row)); err != nil {
-			return fmt.Errorf("failed to write CSV row: %w", err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("failed to flush CSV writer: %w", err)
-	}
-
-	return nil
+	return r.WriteTo(file, rows)
 }
 
 // parseFloat parses a float from a string, returning 0 on error.
@@ -275,6 +307,7 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"Firmenname":         row.Firmenname,
 		"Kurzbezeichnung":    row.Kurzbezeichnung,
 		"Rechnungsnummer":    row.Rechnungsnummer,
+		"VATID":              row.VATID,
 		"BetragNetto":        formatFloat(row.BetragNetto),
 		"Steuersatz_Prozent": formatFloat(row.SteuersatzProzent),
 		"Steuersatz_Betrag":  formatFloat(row.SteuersatzBetrag),
@@ -284,6 +317,9 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"Bankkonto":          row.Bankkonto,
 		"Bezahldatum":        row.Bezahldatum,
 		"Teilzahlung":        formatBool(row.Teilzahlung),
+		"AnzahlAnhaenge":     strconv.Itoa(row.AnzahlAnhaenge),
+		"Unterordner":        row.Unterordner,
+		"BuchungRef":         row.BuchungRef,
 	}
 
 	// Build record in configured order

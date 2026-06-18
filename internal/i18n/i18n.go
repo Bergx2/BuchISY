@@ -4,9 +4,12 @@ package i18n
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/bergx2/buchisy/assets"
 )
 
 // Bundle holds translations for a specific language.
@@ -44,13 +47,29 @@ func Load(assetsDir, lang string) (*Bundle, error) {
 }
 
 // loadFile loads a JSON translation file into the given map.
+// It first tries the on-disk path (useful for development) and falls
+// back to the embedded translations shipped with the binary.
 func (b *Bundle) loadFile(path string, target map[string]string) error {
-	data, err := os.ReadFile(path)
+	if data, err := os.ReadFile(path); err == nil {
+		return json.Unmarshal(data, &target)
+	}
+
+	// Fallback to embedded assets: derive the relative path from the
+	// disk path (".../assets/i18n/<lang>.json" -> "i18n/<lang>.json").
+	embeddedPath := embeddedPathFromDisk(path)
+	data, err := fs.ReadFile(assets.Translations, embeddedPath)
 	if err != nil {
 		return err
 	}
-
 	return json.Unmarshal(data, &target)
+}
+
+// embeddedPathFromDisk converts a disk path of the form
+// ".../assets/i18n/<lang>.json" into the embedded FS key "i18n/<lang>.json".
+func embeddedPathFromDisk(diskPath string) string {
+	base := filepath.Base(diskPath)
+	dir := filepath.Base(filepath.Dir(diskPath))
+	return filepath.ToSlash(filepath.Join(dir, base))
 }
 
 // T returns the translation for the given key.
@@ -77,12 +96,18 @@ func (b *Bundle) T(key string, args ...interface{}) string {
 	return key
 }
 
-// AvailableLanguages returns the list of available languages by scanning the assets directory.
+// AvailableLanguages returns the list of available languages by scanning
+// the assets directory on disk, falling back to the embedded translations.
 func AvailableLanguages(assetsDir string) []string {
+	var entries []fs.DirEntry
+
 	i18nDir := filepath.Join(assetsDir, "i18n")
-	entries, err := os.ReadDir(i18nDir)
-	if err != nil {
-		return []string{"de"} // fallback
+	if diskEntries, err := os.ReadDir(i18nDir); err == nil {
+		for _, e := range diskEntries {
+			entries = append(entries, e)
+		}
+	} else if embeddedEntries, err := fs.ReadDir(assets.Translations, "i18n"); err == nil {
+		entries = embeddedEntries
 	}
 
 	var langs []string

@@ -15,7 +15,7 @@ func SanitizeFilename(name string) string {
 	// Remove or replace other unsafe characters
 	// Keep: letters, digits, dots, hyphens, underscores, umlauts
 	// Remove: < > : " | ? * , and control characters
-	unsafeChars := regexp.MustCompile(`[<>:"|?*,\x00-\x1f]`)
+	unsafeChars := regexp.MustCompile(`[<>:"|?*\x00-\x1f]`)
 	name = unsafeChars.ReplaceAllString(name, "")
 
 	// Replace multiple spaces with a single space

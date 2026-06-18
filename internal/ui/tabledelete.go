@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"fyne.io/fyne/v2/dialog"
 
@@ -38,12 +37,16 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 
 	// Build file path
 	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
-	filePath := filepath.Join(targetFolder, row.Dateiname)
+	filePath := core.InvoiceFilePath(targetFolder, row)
 
-	// Delete PDF file
+	// Delete PDF file. A missing file is fine (nothing to delete); any
+	// other failure is reported to the user after the CSV entry is removed.
+	fileRemoveFailed := false
 	if err := os.Remove(filePath); err != nil {
-		a.logger.Error("Failed to delete PDF file: %v", err)
-		// Continue anyway to remove from CSV
+		if !os.IsNotExist(err) {
+			fileRemoveFailed = true
+			a.logger.Error("Failed to delete PDF file: %v", err)
+		}
 	} else {
 		a.logger.Info("Deleted PDF file: %s", filePath)
 	}
@@ -81,10 +84,18 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 	// Reload table
 	a.loadInvoices()
 
-	a.showInfo(
-		"Gelöscht",
-		fmt.Sprintf("Rechnung wurde gelöscht: %s", row.Dateiname),
-	)
+	if fileRemoveFailed {
+		// Bigger problem — keep the modal so the user notices the
+		// orphan file warning.
+		a.showInfo(
+			"Gelöscht",
+			fmt.Sprintf("Der Eintrag wurde gelöscht, aber die Datei konnte nicht "+
+				"entfernt werden — evtl. ist sie in einem anderen Programm geöffnet: %s",
+				row.Dateiname),
+		)
+	} else {
+		a.showToast(fmt.Sprintf("✓ Rechnung gelöscht: %s", row.Dateiname))
+	}
 }
 
 // rewriteCSV rewrites a CSV file with new rows.

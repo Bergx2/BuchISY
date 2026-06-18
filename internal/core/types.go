@@ -11,6 +11,7 @@ type Meta struct {
 	Firmenname        string  // Company name
 	Kurzbezeichnung   string  // Short description (max 80 chars)
 	Rechnungsnummer   string  // Invoice number
+	VATID             string  // VAT-ID Nr. of the SENDER (e.g. DE123456789)
 	BetragNetto       float64 // Net amount
 	SteuersatzProzent float64 // Tax rate in percent
 	SteuersatzBetrag  float64 // Tax amount
@@ -24,6 +25,11 @@ type Meta struct {
 	Bezahldatum       string  // Payment date DD.MM.YYYY
 	Teilzahlung       bool    // Partial payment flag
 	Dateiname         string  // Final filename
+	// BuchungRef is "<statementFilename>|<page>|<lineIdx>" pointing to
+	// a booking on a bank statement; empty when this invoice is not
+	// linked to a statement. The statement is identified within the
+	// invoice's Bankkonto (Zahlungskonto) folder.
+	BuchungRef string
 }
 
 // Account represents a user-defined account (Gegenkonto).
@@ -32,14 +38,27 @@ type Account struct {
 	Label string `json:"label"`
 }
 
-// BankAccount represents a user-defined bank account (Bankkonto).
+// Account type values for BankAccount.AccountType.
+const (
+	AccountTypeBank       = "bank"
+	AccountTypeCreditCard = "creditcard"
+	AccountTypeCash       = "cash"
+)
+
+// BankAccount represents a user-defined payment account (Zahlungskonto):
+// a bank account, a credit card / clearing account, or a cash register.
 type BankAccount struct {
-	Name string `json:"name"`
+	Name              string `json:"name"`
+	IBAN              string `json:"iban"`
+	AccountType       string `json:"account_type"`       // bank | creditcard | cash
+	SettlementAccount string `json:"settlement_account"` // account that settles a credit card monthly
+	IsCreditCard      bool   `json:"is_credit_card"`     // legacy flag, kept only for migration
 }
 
 // Settings represents the application settings.
 type Settings struct {
 	StorageRoot            string        `json:"storage_root"`
+	ScanInboxFolder        string        `json:"scan_inbox_folder"`
 	UseMonthSubfolders     bool          `json:"use_month_subfolders"`
 	NamingTemplate         string        `json:"naming_template"`
 	DecimalSeparator       string        `json:"decimal_separator"`
@@ -51,16 +70,21 @@ type Settings struct {
 	DefaultAccount         int           `json:"default_account"`
 	Accounts               []Account     `json:"accounts"`
 	DefaultBankAccount     string        `json:"default_bank_account"`
+	DefaultBankAccountIBAN string        `json:"default_bank_account_iban"`
 	BankAccounts           []BankAccount `json:"bank_accounts"`
 	RememberCompanyAccount bool          `json:"remember_company_account"`
 	AutoSelectAccount      bool          `json:"auto_select_account"`
-	LastUsedFolder         string        `json:"last_used_folder"` // Last folder used in file picker
+	LastUsedFolder         string        `json:"last_used_folder"`      // Last folder for Belege / attachments
+	LastStatementFolder    string        `json:"last_statement_folder"` // Last folder for Kontoauszüge
+	OwnVATID               string        `json:"own_vat_id"`            // The user's own company VAT-ID — excluded during auto-extract
 	DebugMode              bool          `json:"debug_mode"`       // Enable verbose debug logging
 	WindowWidth            int           `json:"window_width"`     // Window width in pixels
 	WindowHeight           int           `json:"window_height"`    // Window height in pixels
 	WindowX                int           `json:"window_x"`         // Window X position
 	WindowY                int           `json:"window_y"`         // Window Y position
 	ColumnOrder            []string      `json:"column_order"`     // Order of columns in table and CSV
+	UIScale                float32       `json:"ui_scale"`         // UI zoom factor (1.0 = 100%)
+	PreviewSplitOffset     float64       `json:"preview_split_offset"` // Divider position in the confirmation window (0..1)
 }
 
 // DefaultSettings returns the default application settings.
@@ -68,10 +92,10 @@ func DefaultSettings() Settings {
 	return Settings{
 		StorageRoot:        "", // Will be set to Documents/BuchISY on first run
 		UseMonthSubfolders: true,
-		NamingTemplate:     "${YYYY}-${MM}-${DD}_${Company}_${GrossAmount}_${Currency}.pdf",
+		NamingTemplate:     "${YYYY}-${MM}-${DD}_${Company}_${Kurzbez8}_${InvoiceNumber}_${Currency}_${GrossAmount}.pdf",
 		DecimalSeparator:   ",",
 		CurrencyDefault:    "EUR",
-		AnthropicModel:     "claude-sonnet-4-5",
+		AnthropicModel:     "claude-sonnet-4-6",
 		AnthropicAPIKeyRef: "claude", // keyring account name
 		Language:           "de",
 		ProcessingMode:     "claude",
@@ -81,7 +105,7 @@ func DefaultSettings() Settings {
 		},
 		DefaultBankAccount: "Sparkasse",
 		BankAccounts: []BankAccount{
-			{Name: "Sparkasse"},
+			{Name: "Sparkasse", AccountType: AccountTypeBank},
 		},
 		RememberCompanyAccount: true,
 		AutoSelectAccount:      true,
@@ -91,6 +115,8 @@ func DefaultSettings() Settings {
 		WindowX:                -1, // -1 means center on screen
 		WindowY:                -1,
 		ColumnOrder:            DefaultCSVColumns,
+		UIScale:                1.0,
+		PreviewSplitOffset:     0.33,
 	}
 }
 
@@ -120,6 +146,7 @@ type CSVRow struct {
 	Firmenname        string
 	Kurzbezeichnung   string
 	Rechnungsnummer   string
+	VATID             string // VAT-ID Nr. of the sender
 	BetragNetto       float64
 	SteuersatzProzent float64
 	SteuersatzBetrag  float64
@@ -129,6 +156,10 @@ type CSVRow struct {
 	Bankkonto         string
 	Bezahldatum       string
 	Teilzahlung       bool
+	HatAnhaenge       bool
+	AnzahlAnhaenge    int
+	Unterordner       string // "" | "Bar" | "Ausgangsrechnungen"
+	BuchungRef        string // statementFilename|page|lineIdx (within the Bankkonto's folder)
 }
 
 // ToCSVRow converts Meta to CSVRow.
@@ -141,6 +172,7 @@ func (m Meta) ToCSVRow() CSVRow {
 		Firmenname:        m.Firmenname,
 		Kurzbezeichnung:   m.Kurzbezeichnung,
 		Rechnungsnummer:   m.Rechnungsnummer,
+		VATID:             m.VATID,
 		BetragNetto:       m.BetragNetto,
 		SteuersatzProzent: m.SteuersatzProzent,
 		SteuersatzBetrag:  m.SteuersatzBetrag,
@@ -150,6 +182,7 @@ func (m Meta) ToCSVRow() CSVRow {
 		Bankkonto:         m.Bankkonto,
 		Bezahldatum:       m.Bezahldatum,
 		Teilzahlung:       m.Teilzahlung,
+		BuchungRef:        m.BuchungRef,
 	}
 }
 
@@ -163,6 +196,7 @@ func (r CSVRow) ToMeta() Meta {
 		Firmenname:        r.Firmenname,
 		Kurzbezeichnung:   r.Kurzbezeichnung,
 		Rechnungsnummer:   r.Rechnungsnummer,
+		VATID:             r.VATID,
 		BetragNetto:       r.BetragNetto,
 		SteuersatzProzent: r.SteuersatzProzent,
 		SteuersatzBetrag:  r.SteuersatzBetrag,
@@ -172,6 +206,7 @@ func (r CSVRow) ToMeta() Meta {
 		Bankkonto:         r.Bankkonto,
 		Bezahldatum:       r.Bezahldatum,
 		Teilzahlung:       r.Teilzahlung,
+		BuchungRef:        r.BuchungRef,
 	}
 }
 

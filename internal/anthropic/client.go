@@ -129,6 +129,53 @@ func (c *Client) Send(ctx context.Context, apiKey, model, systemPrompt, userMess
 	return "", fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
 }
 
+// SendWithImages sends a request with multiple images to the Claude
+// API. Used for multi-page PDF extraction (e.g. bank statements where
+// the closing balance is on the last page).
+func (c *Client) SendWithImages(ctx context.Context, apiKey, model, systemPrompt, userMessage string, imagesBase64 []string, mediaType string) (string, error) {
+	content := make([]ContentBlock, 0, len(imagesBase64)+1)
+	for _, b := range imagesBase64 {
+		content = append(content, ContentBlock{
+			Type: "image",
+			Source: &ImageSource{
+				Type:      "base64",
+				MediaType: mediaType,
+				Data:      b,
+			},
+		})
+	}
+	content = append(content, ContentBlock{Type: "text", Text: userMessage})
+
+	req := Request{
+		Model:     model,
+		MaxTokens: 4096,
+		Messages: []Message{
+			{Role: "user", Content: content},
+		},
+		System: systemPrompt,
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(retryDelay * time.Duration(attempt)):
+			}
+		}
+		resp, err := c.doRequest(ctx, apiKey, req)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !shouldRetry(err) {
+			break
+		}
+	}
+	return "", fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+}
+
 // SendWithImage sends a request with an image to the Claude API.
 func (c *Client) SendWithImage(ctx context.Context, apiKey, model, systemPrompt, userMessage, imageBase64, mediaType string) (string, error) {
 	content := []ContentBlock{
