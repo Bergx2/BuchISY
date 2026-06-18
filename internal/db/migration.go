@@ -9,60 +9,52 @@ import (
 	"github.com/bergx2/buchisy/internal/logging"
 )
 
-// MigrateCSVToDatabase imports all existing CSV files into the SQLite database.
-// This is run once on first startup to migrate from CSV-based storage to database.
+// MigrateCSVToDatabase imports existing invoices.csv files found under
+// storageRoot into the SQLite database — but ONLY when the database is still
+// empty. This back-fills the database for users coming from the pre-SQLite,
+// CSV-only storage (where the per-month invoices.csv files are the data), and
+// is a cheap no-op once the database holds invoices. Import is idempotent:
+// rows already present are skipped (see ImportFromCSV / IsDuplicate).
 func (r *Repository) MigrateCSVToDatabase(storageRoot string, csvRepo *core.CSVRepository, logger *logging.Logger) (int, error) {
-	logger.Info("Starting CSV to SQLite migration...")
-
-	totalImported := 0
-
-	// Check if migration marker exists
-	markerPath := filepath.Join(filepath.Dir(r.getDBPath()), ".migrated")
-	if _, err := os.Stat(markerPath); err == nil {
-		logger.Info("Migration already completed (marker file exists)")
+	existing, err := r.Count()
+	if err != nil {
+		return 0, err
+	}
+	if existing > 0 {
+		// Database already populated — nothing to migrate.
+		return 0, nil
+	}
+	if storageRoot == "" {
 		return 0, nil
 	}
 
-	// Find all CSV files in storage root
+	logger.Info("Database is empty — importing existing CSV invoices from %s", storageRoot)
+
 	var csvFiles []string
-	err := filepath.Walk(storageRoot, func(path string, info os.FileInfo, err error) error {
+	walkErr := filepath.Walk(storageRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			return nil // skip unreadable entries, keep scanning
 		}
 		if !info.IsDir() && filepath.Base(path) == "invoices.csv" {
 			csvFiles = append(csvFiles, path)
 		}
 		return nil
 	})
-
-	if err != nil {
-		return 0, fmt.Errorf("failed to scan for CSV files: %w", err)
+	if walkErr != nil {
+		return 0, fmt.Errorf("failed to scan for CSV files: %w", walkErr)
 	}
 
-	logger.Info("Found %d CSV files to migrate", len(csvFiles))
-
-	// Import each CSV file
+	total := 0
 	for _, csvPath := range csvFiles {
 		count, err := r.ImportFromCSV(csvPath, csvRepo)
 		if err != nil {
 			logger.Warn("Failed to import %s: %v", csvPath, err)
 			continue
 		}
-		totalImported += count
-		logger.Info("Imported %d invoices from %s", count, filepath.Base(csvPath))
+		total += count
+		logger.Info("Imported %d invoices from %s", count, filepath.Base(filepath.Dir(csvPath)))
 	}
 
-	// Create migration marker file
-	if err := os.WriteFile(markerPath, []byte("migrated"), 0644); err != nil {
-		logger.Warn("Failed to create migration marker: %v", err)
-	}
-
-	logger.Info("Migration complete! Imported %d total invoices", totalImported)
-
-	return totalImported, nil
-}
-
-// getDBPath returns the database file path.
-func (r *Repository) getDBPath() string {
-	return r.dbPath
+	logger.Info("CSV import complete: %d invoices imported", total)
+	return total, nil
 }

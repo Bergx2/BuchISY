@@ -1,10 +1,12 @@
 package db
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/bergx2/buchisy/internal/core"
+	"github.com/bergx2/buchisy/internal/logging"
 )
 
 func newTestRepo(t *testing.T) *Repository {
@@ -88,5 +90,52 @@ func TestVATIDPersistsThroughDB(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].VATID != "ATU12345678" {
 		t.Errorf("VATID did not round-trip through DB: %+v", rows)
+	}
+}
+
+// TestMigrateCSVToDatabaseBackfillsEmptyDB verifies the CSV→DB import that was
+// previously never wired up: an empty database is back-filled from invoices.csv
+// files under the storage root, and a second run is a no-op (idempotent).
+func TestMigrateCSVToDatabaseBackfillsEmptyDB(t *testing.T) {
+	repo := newTestRepo(t)
+	logger, err := logging.New(t.TempDir(), logging.ERROR)
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+	csvRepo := core.NewCSVRepository()
+
+	// Build a storage root with one month folder containing a legacy CSV
+	// (old Firmenname column → read via backward-compat into Auftraggeber).
+	root := t.TempDir()
+	monthDir := filepath.Join(root, "2026", "2026-03")
+	if err := os.MkdirAll(monthDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	row := core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "03", Auftraggeber: "AWS", Bruttobetrag: 10}
+	if err := csvRepo.Append(filepath.Join(monthDir, "invoices.csv"), row); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty DB → import should bring the row in.
+	n, err := repo.MigrateCSVToDatabase(root, csvRepo, logger)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("imported %d, want 1", n)
+	}
+	rows, _ := repo.List("2026", "03")
+	if len(rows) != 1 || rows[0].Auftraggeber != "AWS" {
+		t.Fatalf("row not imported: %+v", rows)
+	}
+
+	// Second run: DB already populated → no-op.
+	n2, err := repo.MigrateCSVToDatabase(root, csvRepo, logger)
+	if err != nil {
+		t.Fatalf("migrate (2nd): %v", err)
+	}
+	if n2 != 0 {
+		t.Errorf("second run imported %d, want 0 (db not empty)", n2)
 	}
 }
