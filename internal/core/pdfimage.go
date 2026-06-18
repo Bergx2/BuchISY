@@ -67,6 +67,36 @@ func pdfToImageGoFitz(path string) (string, string, error) {
 	return encoded, "image/png", nil
 }
 
+// PDFAllPagesToBase64 renders every page of the PDF as a PNG and
+// returns the pages as base64 strings (plus the shared media type).
+// Used for statement extraction where the closing balance often lives
+// on the last page, not the first.
+func PDFAllPagesToBase64(path string) ([]string, string, error) {
+	doc, err := fitz.New(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to open PDF: %w", err)
+	}
+	defer doc.Close()
+
+	n := doc.NumPage()
+	if n < 1 {
+		return nil, "", fmt.Errorf("PDF has no pages")
+	}
+	out := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		img, err := doc.Image(i)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to render PDF page %d: %w", i+1, err)
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			return nil, "", fmt.Errorf("failed to encode page %d as PNG: %w", i+1, err)
+		}
+		out = append(out, base64.StdEncoding.EncodeToString(buf.Bytes()))
+	}
+	return out, "image/png", nil
+}
+
 // pdfToImageExternal uses external commands to convert PDF to image on macOS.
 // This avoids the signal handling issues with go-fitz on ARM64.
 func pdfToImageExternal(path string) (string, string, error) {

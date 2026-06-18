@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -34,13 +33,9 @@ func ApplyTemplate(template string, meta Meta, opts TemplateOpts) (string, error
 		result = strings.ReplaceAll(result, alias, canonical)
 	}
 
-	// Format amounts according to decimal separator
+	// Format amounts with decimal + thousands separators.
 	formatAmount := func(amount float64) string {
-		formatted := fmt.Sprintf("%.2f", amount)
-		if opts.DecimalSeparator == "," {
-			formatted = strings.Replace(formatted, ".", ",", 1)
-		}
-		return formatted
+		return FormatAmount(amount, opts.DecimalSeparator)
 	}
 
 	// Replace canonical tokens
@@ -52,6 +47,7 @@ func ApplyTemplate(template string, meta Meta, opts TemplateOpts) (string, error
 		"${InvoiceNumber}":    meta.Rechnungsnummer,
 		"${Kurzbezeichnung}":  meta.Verwendungszweck, // Keep old token name for backward compatibility
 		"${Verwendungszweck}": meta.Verwendungszweck, // New token name
+		"${Kurzbez8}":         first8(meta.Verwendungszweck),
 		"${NetAmount}":        formatAmount(meta.BetragNetto),
 		"${TaxPercent}":       formatAmount(meta.SteuersatzProzent),
 		"${TaxAmount}":        formatAmount(meta.SteuersatzBetrag),
@@ -89,4 +85,13 @@ func FormatGermanDate(ddMmYyyy string) string {
 // Since dates are now stored in DD.MM.YYYY format, this returns the input unchanged.
 func ParseGermanDate(ddMmYyyy string) string {
 	return ddMmYyyy
+}
+
+// first8 returns the first 8 runes of s (fewer if s is shorter).
+func first8(s string) string {
+	r := []rune(s)
+	if len(r) > 8 {
+		r = r[:8]
+	}
+	return string(r)
 }

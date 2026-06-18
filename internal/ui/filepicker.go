@@ -5,9 +5,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
+	"github.com/bergx2/buchisy/internal/core"
 )
 
 // selectPDFFiles shows a custom file picker with search functionality.
@@ -16,9 +19,185 @@ func (a *App) selectPDFFiles() {
 	a.showCustomFilePicker()
 }
 
-// processPDFAsync processes a PDF file in the background.
-func (a *App) processPDFAsync(path string) {
-	a.logger.Info("Processing PDF: %s", path)
+// pickerKind selects which per-profile "last used folder" the file
+// picker reads its initial location from and saves to afterwards.
+type pickerKind int
+
+const (
+	pickerBeleg pickerKind = iota
+	pickerKontoauszug
+)
+
+// lastFolderFor returns the saved starting folder for the given picker
+// kind (per-profile).
+func (a *App) lastFolderFor(kind pickerKind) string {
+	switch kind {
+	case pickerKontoauszug:
+		return a.settings.LastStatementFolder
+	}
+	return a.settings.LastUsedFolder
+}
+
+// rememberFolderFor persists the directory of `path` as the new
+// "last used" folder for the given kind. No-op when no profile is
+// active or when the value hasn't changed.
+func (a *App) rememberFolderFor(kind pickerKind, path string) {
+	if a.settingsMgr == nil || path == "" {
+		return
+	}
+	dir := filepath.Dir(path)
+	switch kind {
+	case pickerKontoauszug:
+		if a.settings.LastStatementFolder == dir {
+			return
+		}
+		a.settings.LastStatementFolder = dir
+	default:
+		if a.settings.LastUsedFolder == dir {
+			return
+		}
+		a.settings.LastUsedFolder = dir
+	}
+	if err := a.settingsMgr.Save(a.settings); err != nil && a.logger != nil {
+		a.logger.Warn("Failed to persist last folder: %v", err)
+	}
+}
+
+// showFilesPickerFor opens a multi-select file open dialog scoped to
+// the given pickerKind: starts in that kind's remembered folder and
+// remembers wherever the user navigates to. Native dialog on Windows;
+// Fyne fallback on other platforms (single-file).
+func (a *App) showFilesPickerFor(kind pickerKind, onPicked func(paths []string)) {
+	initial := a.lastFolderFor(kind)
+	if nativePickerAvailable() {
+		paths, ok := pickFilesNative(initial, "Dateien auswählen")
+		if ok && len(paths) > 0 {
+			a.rememberFolderFor(kind, paths[0])
+			onPicked(paths)
+		}
+		return
+	}
+	fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+		if err != nil || reader == nil {
+			return
+		}
+		path := uriToNativePath(reader.URI())
+		reader.Close()
+		a.rememberFolderFor(kind, path)
+		onPicked([]string{path})
+	}, a.window)
+	fd.Resize(fyne.NewSize(900, 700))
+	if initial != "" {
+		if uri := parseFolderURI(initial); uri != nil {
+			fd.SetLocation(uri)
+		}
+	}
+	fd.Show()
+}
+
+// showFilePickerFor opens a single-file picker scoped to the given
+// pickerKind. Saves the folder the user picked from.
+func (a *App) showFilePickerFor(kind pickerKind, onPicked func(path string)) {
+	initial := a.lastFolderFor(kind)
+	if nativePickerAvailable() {
+		path, ok := pickFileNative(initial, "Datei auswählen")
+		if ok && path != "" {
+			a.rememberFolderFor(kind, path)
+			onPicked(path)
+		}
+		return
+	}
+	fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+		if err != nil || reader == nil {
+			return
+		}
+		path := uriToNativePath(reader.URI())
+		reader.Close()
+		a.rememberFolderFor(kind, path)
+		onPicked(path)
+	}, a.window)
+	fd.Resize(fyne.NewSize(900, 700))
+	if initial != "" {
+		if uri := parseFolderURI(initial); uri != nil {
+			fd.SetLocation(uri)
+		}
+	}
+	fd.Show()
+}
+
+// showFilesPicker / showFilePicker are backward-compatible Belege-
+// scoped wrappers — used by the invoice attachment "+ Anhang" flows.
+func (a *App) showFilesPicker(onPicked func(paths []string)) {
+	a.showFilesPickerFor(pickerBeleg, onPicked)
+}
+
+func (a *App) showFilePicker(onPicked func(path string)) {
+	a.showFilePickerFor(pickerBeleg, onPicked)
+}
+
+// parseFolderURI converts a folder path to a Fyne URI.
+func parseFolderURI(path string) fyne.ListableURI {
+	uri, err := storage.ParseURI("file://" + path)
+	if err != nil {
+		return nil
+	}
+	listable, ok := uri.(fyne.ListableURI)
+	if !ok {
+		return nil
+	}
+	return listable
+}
+
+// getDocumentsURI returns the URI for the Documents folder.
+func getDocumentsURI() (fyne.ListableURI, error) {
+	docsDir, err := core.GetDocumentsDir()
+	if err != nil {
+		return nil, err
+	}
+	return parseFolderURI(docsDir), nil
+}
+
+// processSubmission processes a selected main file plus its attachments.
+// A PDF main file is run through metadata extraction; a non-PDF main file
+// skips extraction and opens the confirmation modal for manual entry.
+func (a *App) processSubmission(mainPath string, attachments []string, onComplete func()) {
+	a.logger.Info("Processing submission: main=%s, attachments=%d", mainPath, len(attachments))
+
+	if !core.IsPDF(mainPath) {
+		// Image files (jpg/png/gif/webp) can go through Claude's vision
+		// extractor exactly like a PDF — pre-fills the form from a
+		// screenshot. Fall back to a blank form on any failure.
+		if core.ImageMediaType(mainPath) != "" && a.settings.ProcessingMode == "claude" {
+			progress := dialog.NewProgressInfinite(
+				a.bundle.T("processing.title"),
+				a.bundle.T("processing.message"),
+				a.window,
+			)
+			progress.Show()
+			go func() {
+				ctx := context.Background()
+				meta, err := a.extractImageData(ctx, mainPath)
+				progress.Hide()
+				time.Sleep(150 * time.Millisecond)
+				if err != nil {
+					a.logger.Warn("Image vision extraction failed, opening blank form: %v", err)
+					meta = core.Meta{
+						Waehrung:   a.settings.CurrencyDefault,
+						Gegenkonto: a.settings.DefaultAccount,
+					}
+				}
+				a.showConfirmationModal(mainPath, attachments, meta, onComplete)
+			}()
+			return
+		}
+
+		emptyMeta := core.Meta{
+			Waehrung:   a.settings.CurrencyDefault,
+			Gegenkonto: a.settings.DefaultAccount,
+		}
+		a.showConfirmationModal(mainPath, attachments, emptyMeta, onComplete)
+		return
+	}
 
 	// Show loading indicator
 	progressBar := widget.NewProgressBarInfinite()
@@ -33,37 +212,30 @@ func (a *App) processPDFAsync(path string) {
 	)
 	progress.Show()
 
-	// Process in background
 	go func() {
 		ctx := context.Background()
-
-		// Extract and process (background work)
-		meta, err := a.extractPDFData(ctx, path)
-
-		// UI operations in Fyne v2 are thread-safe and can be called from goroutines
+		meta, err := a.extractPDFData(ctx, mainPath)
 		progress.Hide()
-
-		// Wait for progress dialog to fully hide before showing next dialog
 		time.Sleep(150 * time.Millisecond)
 
 		if err != nil {
 			a.logger.Error("Failed to process PDF: %v", err)
-
-			// Check if it's "no text" error
 			if err.Error() == "no text found in PDF" {
-				a.handleNoTextPDF(path)
+				a.handleNoTextPDF(mainPath, attachments, onComplete)
 			} else {
 				a.showError(
 					a.bundle.T("error.processing.title"),
 					a.bundle.T("error.processing.message", err.Error()),
 				)
+				if onComplete != nil {
+					onComplete()
+				}
 			}
 			return
 		}
 
-		// Show confirmation modal with extracted data
-		a.logger.Info("Showing confirmation modal for: %s", filepath.Base(path))
-		a.showConfirmationModal(path, meta)
+		a.logger.Info("Showing confirmation modal for: %s", filepath.Base(mainPath))
+		a.showConfirmationModal(mainPath, attachments, meta, onComplete)
 	}()
 }
 

@@ -3,249 +3,315 @@ package ui
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bergx2/buchisy/internal/core"
 )
 
-// fileEntry holds file information for the picker.
-type fileEntry struct {
-	entry   os.DirEntry
-	modTime time.Time
-	name    string
-	isDir   bool
-}
-
-// showCustomFilePicker shows a custom file picker with search functionality.
+// showCustomFilePicker shows a custom multi-select file picker with search.
 func (a *App) showCustomFilePicker() {
-	// Determine starting folder
 	startFolder := a.getStartingFolder()
-
 	currentPath := startFolder
-	allFiles := []fileEntry{}
-	filteredFiles := []fileEntry{}
-	selectedIndex := -1
+	allFiles := []os.DirEntry{}
+	filteredFiles := []os.DirEntry{}
 
-	// Sort state: 0 = name asc, 1 = name desc, 2 = date asc, 3 = date desc
-	sortState := 0
+	// Persistent selection across folder navigation.
+	selected := []string{} // absolute paths, in selection order
+	mainPath := ""         // which selected path is the invoice main file
 
-	// Path label
-	pathLabel := widget.NewLabel(currentPath)
-	pathLabel.Wrapping = fyne.TextWrapBreak
+	isSelected := func(path string) bool {
+		for _, s := range selected {
+			if s == path {
+				return true
+			}
+		}
+		return false
+	}
 
-	// Search entry
+	// Clickable breadcrumb path bar. loadFiles is forward-declared so the
+	// breadcrumb segment buttons can navigate.
+	var loadFiles func(path string)
+	breadcrumb := container.NewHBox()
+	breadcrumbScroll := container.NewHScroll(breadcrumb)
+
+	updateBreadcrumb := func(path string) {
+		breadcrumb.RemoveAll()
+		segments := splitPathSegments(path)
+		cumulative := ""
+		for i, seg := range segments {
+			if i == 0 {
+				cumulative = seg
+			} else {
+				cumulative = filepath.Join(cumulative, seg)
+			}
+			if i == len(segments)-1 {
+				breadcrumb.Add(widget.NewLabelWithStyle(
+					seg, fyne.TextAlignLeading, fyne.TextStyle{Bold: true},
+				))
+				continue
+			}
+			target := cumulative
+			segBtn := widget.NewButton(seg, func() { loadFiles(target) })
+			segBtn.Importance = widget.LowImportance
+			breadcrumb.Add(segBtn)
+			breadcrumb.Add(widget.NewLabel("›"))
+		}
+		breadcrumb.Refresh()
+		breadcrumbScroll.ScrollToOffset(fyne.NewPos(breadcrumb.MinSize().Width, 0))
+	}
+
 	searchEntry := widget.NewEntry()
 	searchEntry.SetPlaceHolder("Dateiname suchen (z.B. rechnung, 2025-10, GmbH)...")
 
-	// Sort function
-	sortFiles := func() {
-		switch sortState {
-		case 0: // Name ascending
-			sort.Slice(filteredFiles, func(i, j int) bool {
-				// Directories first
-				if filteredFiles[i].isDir != filteredFiles[j].isDir {
-					return filteredFiles[i].isDir
-				}
-				return strings.ToLower(filteredFiles[i].name) < strings.ToLower(filteredFiles[j].name)
-			})
-		case 1: // Name descending
-			sort.Slice(filteredFiles, func(i, j int) bool {
-				if filteredFiles[i].isDir != filteredFiles[j].isDir {
-					return filteredFiles[i].isDir
-				}
-				return strings.ToLower(filteredFiles[i].name) > strings.ToLower(filteredFiles[j].name)
-			})
-		case 2: // Date ascending (oldest first)
-			sort.Slice(filteredFiles, func(i, j int) bool {
-				if filteredFiles[i].isDir != filteredFiles[j].isDir {
-					return filteredFiles[i].isDir
-				}
-				return filteredFiles[i].modTime.Before(filteredFiles[j].modTime)
-			})
-		case 3: // Date descending (newest first)
-			sort.Slice(filteredFiles, func(i, j int) bool {
-				if filteredFiles[i].isDir != filteredFiles[j].isDir {
-					return filteredFiles[i].isDir
-				}
-				return filteredFiles[i].modTime.After(filteredFiles[j].modTime)
-			})
+	// Selection tray (rebuilt on every change). Rows can be reordered by
+	// dragging; the order determines attachment numbering.
+	selectionList := container.NewVBox()
+	var fileList *widget.List
+	var trayRows []*draggableRow
+	var refreshSelection func()
+
+	// swapColumns-style in-place adjacent swap, used during a drag so the
+	// dragged widget stays attached (no full rebuild mid-drag).
+	swapSelected := func(a, b int) {
+		n := len(selected)
+		if a < 0 || b < 0 || a >= n || b >= n || a == b {
+			return
+		}
+		selected[a], selected[b] = selected[b], selected[a]
+		trayRows[a], trayRows[b] = trayRows[b], trayRows[a]
+		selectionList.Objects[a], selectionList.Objects[b] = selectionList.Objects[b], selectionList.Objects[a]
+		trayRows[a].index = a
+		trayRows[b].index = b
+		selectionList.Refresh()
+	}
+
+	onTrayDragEnd := func(row *draggableRow) { row.dragAccum = 0 }
+
+	onTrayDrag := func(row *draggableRow, dy float32) {
+		row.dragAccum += dy
+
+		pitch := row.Size().Height
+		if idx := row.index; idx+1 < len(trayRows) {
+			pitch = trayRows[idx+1].Position().Y - row.Position().Y
+		} else if idx > 0 {
+			pitch = row.Position().Y - trayRows[idx-1].Position().Y
+		}
+		if pitch <= 0 {
+			return
+		}
+
+		for row.dragAccum > pitch/2 && row.index < len(trayRows)-1 {
+			swapSelected(row.index, row.index+1)
+			row.dragAccum -= pitch
+		}
+		for row.dragAccum < -pitch/2 && row.index > 0 {
+			swapSelected(row.index, row.index-1)
+			row.dragAccum += pitch
 		}
 	}
 
-	// File table
-	fileTable := widget.NewTable(
-		func() (int, int) {
-			return len(filteredFiles) + 1, 2 // +1 for header row, 2 columns
-		},
-		func() fyne.CanvasObject {
-			return widget.NewLabel("template")
-		},
-		func(id widget.TableCellID, cell fyne.CanvasObject) {
-			label := cell.(*widget.Label)
+	refreshSelection = func() {
+		selectionList.RemoveAll()
+		trayRows = nil
+		if len(selected) == 0 {
+			selectionList.Add(widget.NewLabel("Noch keine Dateien ausgewählt."))
+			selectionList.Refresh()
+			return
+		}
+		for i, p := range selected {
+			path := p
+			isMain := path == mainPath
 
-			if id.Row == 0 {
-				// Header row
-				label.TextStyle.Bold = true
-				if id.Col == 0 {
-					label.SetText("Dateiname")
-				} else {
-					label.SetText("Datum")
-				}
+			star := "☆"
+			if isMain {
+				star = "★"
+			}
+			starBtn := widget.NewButton(star, func() {
+				mainPath = path
+				refreshSelection()
+			})
+			if isMain {
+				starBtn.Importance = widget.HighImportance
 			} else {
-				// Data rows
-				label.TextStyle.Bold = false
-				dataRow := id.Row - 1
-				if dataRow >= len(filteredFiles) {
-					label.SetText("")
-					return
-				}
+				starBtn.Importance = widget.LowImportance
+			}
 
-				file := filteredFiles[dataRow]
-				if id.Col == 0 {
-					// Filename column
-					if file.isDir {
-						label.SetText("📁 " + file.name)
-					} else {
-						label.SetText("📄 " + file.name)
+			removeBtn := widget.NewButton("Entfernen", func() {
+				next := make([]string, 0, len(selected))
+				for _, s := range selected {
+					if s != path {
+						next = append(next, s)
 					}
-				} else {
-					// Date column
-					if file.isDir {
-						label.SetText("")
-					} else {
-						// Shorter date format to fit in 80px
-						label.SetText(file.modTime.Format("02.01.06"))
+				}
+				selected = next
+				if mainPath == path {
+					mainPath = ""
+					if len(selected) > 0 {
+						mainPath = selected[0]
 					}
+				}
+				refreshSelection()
+				if fileList != nil {
+					fileList.Refresh()
+				}
+			})
+			removeBtn.Importance = widget.LowImportance
+
+			grip := widget.NewLabel("↕")
+			nameLabel := widget.NewLabel(filepath.Base(path))
+			nameLabel.Truncation = fyne.TextTruncateEllipsis
+
+			content := container.NewBorder(
+				nil, nil,
+				container.NewHBox(grip, starBtn),
+				removeBtn,
+				nameLabel,
+			)
+			row := newDraggableRow(content, i)
+			row.onDrag = onTrayDrag
+			row.onDragEnd = onTrayDragEnd
+			trayRows = append(trayRows, row)
+			selectionList.Add(row)
+		}
+		selectionList.Refresh()
+	}
+
+	toggleSelected := func(path string, checked bool) {
+		if checked {
+			if !isSelected(path) {
+				selected = append(selected, path)
+				if mainPath == "" {
+					mainPath = path
 				}
 			}
+		} else {
+			next := make([]string, 0, len(selected))
+			for _, s := range selected {
+				if s != path {
+					next = append(next, s)
+				}
+			}
+			selected = next
+			if mainPath == path {
+				mainPath = ""
+				if len(selected) > 0 {
+					mainPath = selected[0]
+				}
+			}
+		}
+		refreshSelection()
+	}
+
+	fileList = widget.NewList(
+		func() int { return len(filteredFiles) },
+		func() fyne.CanvasObject {
+			return container.NewHBox(
+				widget.NewCheck("", nil),
+				widget.NewIcon(nil),
+				widget.NewLabel("template"),
+			)
+		},
+		func(id widget.ListItemID, item fyne.CanvasObject) {
+			if id >= len(filteredFiles) {
+				return
+			}
+			entry := filteredFiles[id]
+			box := item.(*fyne.Container)
+			check := box.Objects[0].(*widget.Check)
+			icon := box.Objects[1].(*widget.Icon)
+			label := box.Objects[2].(*widget.Label)
+			fullPath := filepath.Join(currentPath, entry.Name())
+
+			if entry.IsDir() {
+				check.OnChanged = nil
+				check.SetChecked(false)
+				check.Hide()
+				icon.SetResource(theme.FolderIcon())
+				label.SetText("📁 " + entry.Name())
+				return
+			}
+
+			check.Show()
+			check.OnChanged = nil // avoid SetChecked firing the handler
+			check.SetChecked(isSelected(fullPath))
+			check.OnChanged = func(checked bool) {
+				toggleSelected(fullPath, checked)
+			}
+			icon.SetResource(theme.FileIcon())
+			label.SetText("📄 " + entry.Name())
 		},
 	)
 
-	// Set column widths (total should be less than dialog width minus padding/scrollbars)
-	fileTable.SetColumnWidth(0, 880) // Filename - takes most space
-	fileTable.SetColumnWidth(1, 80)  // Date - very compact (80px as requested)
-
-	// Define loadFiles function FIRST (before it's used in handlers)
-	// Note: must be var because it's recursive
-	var loadFiles func(string)
 	loadFiles = func(path string) {
 		entries, err := os.ReadDir(path)
 		if err != nil {
 			a.logger.Error("Failed to read directory: %v", err)
 			return
 		}
-
-		// Filter: only directories and PDF files, and get mod times
-		allFiles = []fileEntry{}
+		allFiles = []os.DirEntry{}
 		for _, entry := range entries {
-			if entry.IsDir() || strings.HasSuffix(strings.ToLower(entry.Name()), ".pdf") {
-				info, err := entry.Info()
-				modTime := time.Time{}
-				if err == nil {
-					modTime = info.ModTime()
-				}
-
-				allFiles = append(allFiles, fileEntry{
-					entry:   entry,
-					modTime: modTime,
-					name:    entry.Name(),
-					isDir:   entry.IsDir(),
-				})
+			if entry.IsDir() || core.IsSupportedFile(entry.Name()) {
+				allFiles = append(allFiles, entry)
 			}
 		}
-
 		filteredFiles = allFiles
-		sortFiles()
 		currentPath = path
-		pathLabel.SetText(currentPath)
-		searchEntry.SetText("") // Clear search
-		fileTable.Refresh()
-		fileTable.ScrollToTop() // Reset scroll position when navigating to new folder
+		updateBreadcrumb(currentPath)
+		searchEntry.SetText("")
+		fileList.Refresh()
 	}
 
-	// Header click handling for sorting
-	fileTable.OnSelected = func(id widget.TableCellID) {
-		if id.Row == 0 {
-			// Header clicked - toggle sort
-			if id.Col == 0 {
-				// Name column
-				if sortState == 0 {
-					sortState = 1 // Switch to descending
-				} else {
-					sortState = 0 // Switch to ascending
-				}
-			} else {
-				// Date column
-				if sortState == 2 {
-					sortState = 3 // Switch to descending
-				} else {
-					sortState = 2 // Switch to ascending
-				}
-			}
-			sortFiles()
-			fileTable.Refresh()
-			fileTable.UnselectAll()
-		} else {
-			// Data row clicked
-			selectedIndex = id.Row - 1
-			dataRow := selectedIndex
-			if dataRow >= 0 && dataRow < len(filteredFiles) {
-				file := filteredFiles[dataRow]
-				fullPath := filepath.Join(currentPath, file.name)
-
-				if file.isDir {
-					// Navigate into directory
-					loadFiles(fullPath)
-					fileTable.UnselectAll()
-					selectedIndex = -1
-				}
-			}
-		}
-	}
-
-	// Apply search filter
 	applyFilter := func(query string) {
 		query = strings.ToLower(strings.TrimSpace(query))
 		if query == "" {
 			filteredFiles = allFiles
 		} else {
-			filteredFiles = []fileEntry{}
-			for _, file := range allFiles {
-				if strings.Contains(strings.ToLower(file.name), query) {
-					filteredFiles = append(filteredFiles, file)
+			filteredFiles = []os.DirEntry{}
+			for _, entry := range allFiles {
+				if strings.Contains(strings.ToLower(entry.Name()), query) {
+					filteredFiles = append(filteredFiles, entry)
 				}
 			}
 		}
-		sortFiles()
-		fileTable.Refresh()
+		fileList.Refresh()
 	}
+	searchEntry.OnChanged = func(query string) { applyFilter(query) }
 
-	searchEntry.OnChanged = func(query string) {
-		applyFilter(query)
-	}
-
-	// Up button (parent folder)
 	upBtn := widget.NewButton("⬆️ Übergeordneter Ordner", func() {
 		parent := filepath.Dir(currentPath)
 		if parent != currentPath {
 			loadFiles(parent)
 		}
 	})
-
-	// Home button
 	homeBtn := widget.NewButton("🏠 Dokumente", func() {
-		docsDir, err := core.GetDocumentsDir()
-		if err == nil {
+		if docsDir, err := core.GetDocumentsDir(); err == nil {
 			loadFiles(docsDir)
 		}
 	})
+
+	fileList.OnSelected = func(id widget.ListItemID) {
+		if id >= len(filteredFiles) {
+			fileList.UnselectAll()
+			return
+		}
+		entry := filteredFiles[id]
+		if entry.IsDir() {
+			loadFiles(filepath.Join(currentPath, entry.Name()))
+			fileList.UnselectAll()
+			return
+		}
+		// Left-click on a file row toggles its checkbox.
+		fullPath := filepath.Join(currentPath, entry.Name())
+		toggleSelected(fullPath, !isSelected(fullPath))
+		fileList.Refresh()
+		fileList.UnselectAll()
+	}
 
 	// Desktop button
 	desktopBtn := widget.NewButton("🖥️ Desktop", func() {
@@ -269,60 +335,74 @@ func (a *App) showCustomFilePicker() {
 		}
 	})
 
-	// Initial load
 	loadFiles(startFolder)
+	refreshSelection()
 
-	// Layout
+	selectionScroll := container.NewVScroll(selectionList)
+	selectionScroll.SetMinSize(fyne.NewSize(0, 150))
+
+	// Compact theme override: reduced padding so more rows fit on screen.
+	compactList := container.NewThemeOverride(fileList, newCompactListTheme(a.theme))
+	// Compact breadcrumb: reduced padding so the path segments sit tightly.
+	compactBreadcrumb := container.NewThemeOverride(breadcrumbScroll, newCompactListTheme(a.theme))
+
 	content := container.NewBorder(
 		container.NewVBox(
 			container.NewHBox(upBtn, homeBtn, desktopBtn, downloadsBtn),
-			pathLabel,
+			compactBreadcrumb,
 			searchEntry,
 			widget.NewSeparator(),
 		),
-		nil, nil, nil,
-		fileTable,
+		container.NewVBox(
+			widget.NewSeparator(),
+			widget.NewLabelWithStyle(
+				"Auswahl (★ = Hauptdatei)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true},
+			),
+			selectionScroll,
+		),
+		nil, nil,
+		compactList,
 	)
 
-	// Custom dialog
-	customDialog := dialog.NewCustomConfirm(
-		"Datei auswählen",
-		"Öffnen",
-		"Abbrechen",
-		content,
-		func(open bool) {
-			if !open {
-				return
+	// Separate, user-resizable window (a Fyne dialog cannot be drag-resized).
+	pickerWin := a.app.NewWindow("Dateien auswählen")
+
+	abbrechenBtn := widget.NewButton("Abbrechen", func() {
+		pickerWin.Close()
+	})
+	oeffnenBtn := widget.NewButton("Öffnen", nil)
+	oeffnenBtn.Importance = widget.HighImportance
+	oeffnenBtn.OnTapped = func() {
+		if len(selected) == 0 {
+			dialog.ShowInformation("Fehler", "Bitte mindestens eine Datei auswählen.", pickerWin)
+			return
+		}
+		if mainPath == "" {
+			dialog.ShowInformation("Fehler", "Bitte eine Hauptdatei markieren (★).", pickerWin)
+			return
+		}
+		attachments := make([]string, 0, len(selected))
+		for _, s := range selected {
+			if s != mainPath {
+				attachments = append(attachments, s)
 			}
+		}
+		a.settings.LastUsedFolder = currentPath
+		if err := a.settingsMgr.Save(a.settings); err != nil {
+			a.logger.Warn("Failed to save last used folder: %v", err)
+		}
+		pickerWin.Close()
+		a.processSubmission(mainPath, attachments, nil)
+	}
 
-			// Get selected file
-			if selectedIndex < 0 || selectedIndex >= len(filteredFiles) {
-				a.showError("Fehler", "Bitte eine Datei auswählen.")
-				return
-			}
-
-			file := filteredFiles[selectedIndex]
-			if file.isDir {
-				a.showError("Fehler", "Bitte eine Datei auswählen (kein Ordner).")
-				return
-			}
-
-			fullPath := filepath.Join(currentPath, file.name)
-
-			// Remember folder
-			a.settings.LastUsedFolder = currentPath
-			if err := a.settingsMgr.Save(a.settings); err != nil {
-				a.logger.Warn("Failed to save last used folder: %v", err)
-			}
-
-			// Process the PDF
-			a.processPDFAsync(fullPath)
-		},
-		a.window,
+	buttonBar := container.NewBorder(nil, nil, nil,
+		container.NewHBox(abbrechenBtn, oeffnenBtn),
 	)
 
-	customDialog.Resize(fyne.NewSize(1100, 700))
-	customDialog.Show()
+	pickerWin.SetContent(container.NewBorder(nil, buttonBar, nil, nil, content))
+	pickerWin.Resize(fyne.NewSize(1000, 760))
+	pickerWin.CenterOnScreen()
+	pickerWin.Show()
 }
 
 // getStartingFolder determines the best starting folder for the file picker.
@@ -347,4 +427,23 @@ func (a *App) getStartingFolder() string {
 
 	home, _ := os.UserHomeDir()
 	return home
+}
+
+// splitPathSegments breaks an absolute path into its components, with the
+// first element being the root (e.g. "C:\"). Each element joined with the
+// preceding ones yields a navigable folder path.
+func splitPathSegments(p string) []string {
+	p = filepath.Clean(p)
+	var parts []string
+	for {
+		parent := filepath.Dir(p)
+		if parent == p {
+			// Reached the root (e.g. "C:\" or "/").
+			parts = append([]string{p}, parts...)
+			break
+		}
+		parts = append([]string{filepath.Base(p)}, parts...)
+		p = parent
+	}
+	return parts
 }

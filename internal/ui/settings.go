@@ -3,10 +3,13 @@ package ui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/zalando/go-keyring"
 
@@ -14,8 +17,23 @@ import (
 	"github.com/bergx2/buchisy/internal/logging"
 )
 
-// showSettingsDialog shows the settings dialog.
-func (a *App) showSettingsDialog() {
+// persistBankAccounts writes the given bank account list to disk and
+// to the in-memory settings immediately, so a newly added Zahlungskonto
+// is usable without waiting for the outer "Speichern" button. Other
+// dialog fields stay unsaved until the user clicks Speichern. Also
+// (re)creates the per-account storage folder for every entry.
+func (a *App) persistBankAccounts(accounts []core.BankAccount) {
+	a.settings.BankAccounts = accounts
+	if err := a.settingsMgr.Save(a.settings); err != nil {
+		a.logger.Warn("Auto-save of bank accounts failed: %v", err)
+	}
+	a.ensureAccountFolders()
+}
+
+// showSettingsView replaces the main window content with a full-page
+// settings view containing the four sub-pages (Allgemein, Verarbeitung,
+// Konten, Erweitert) as tabs.
+func (a *App) showSettingsView() {
 	// Storage section
 	storageRootEntry := widget.NewEntry()
 	storageRootEntry.SetText(a.settings.StorageRoot)
@@ -26,6 +44,19 @@ func (a *App) showSettingsDialog() {
 				return
 			}
 			storageRootEntry.SetText(uri.Path())
+		}, a.window)
+	})
+
+	scanInboxEntry := widget.NewEntry()
+	scanInboxEntry.SetText(a.settings.ScanInboxFolder)
+	scanInboxEntry.SetPlaceHolder("leer = aus")
+
+	browseScanInboxBtn := widget.NewButton("...", func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			scanInboxEntry.SetText(uri.Path())
 		}, a.window)
 	})
 
@@ -40,7 +71,7 @@ func (a *App) showSettingsDialog() {
 	templateEntry.SetText(a.settings.NamingTemplate)
 	templateEntry.SetPlaceHolder(a.bundle.T("settings.template"))
 
-	templateHelp := widget.NewLabel(a.bundle.T("settings.templateHelp"))
+	templateHelp := newCopyableLabel(a.bundle, a.bundle.T("settings.templateHelp"))
 	templateHelp.Wrapping = fyne.TextWrapWord
 
 	// Decimal separator
@@ -63,6 +94,13 @@ func (a *App) showSettingsDialog() {
 	currencyEntry := widget.NewEntry()
 	currencyEntry.SetText(a.settings.CurrencyDefault)
 
+	// Own VAT-IDs (comma-separated). Used to exclude the user's own
+	// company VAT-IDs from auto-extraction so the extractor returns
+	// the SENDER's VAT-ID and not the receiver's.
+	ownVATIDEntry := widget.NewEntry()
+	ownVATIDEntry.SetPlaceHolder("z. B. DE287472874, DE319686097")
+	ownVATIDEntry.SetText(a.settings.OwnVATID)
+
 	// Processing mode
 	modeSelect := widget.NewRadioGroup([]string{
 		a.bundle.T("settings.mode.claude"),
@@ -81,7 +119,7 @@ func (a *App) showSettingsDialog() {
 	// API Key
 	apiKeyEntry := widget.NewPasswordEntry()
 	// Try to load existing key
-	existingKey, err := keyring.Get("BuchISY", a.settings.AnthropicAPIKeyRef)
+	existingKey, err := keyring.Get("BuchISY", a.keyringAccount())
 	if err == nil && existingKey != "" {
 		apiKeyEntry.SetText(existingKey)
 	}
@@ -141,58 +179,60 @@ func (a *App) showSettingsDialog() {
 		accountsList.Refresh()
 	}
 
-	// Add account controls
+	// Add account controls — Code/Bezeichnung stay hidden until the button
+	// is clicked once; a further click then adds the account. The fields are
+	// narrowed to ~1/3 of the row width.
 	newAccountCodeEntry := widget.NewEntry()
 	newAccountCodeEntry.SetPlaceHolder(a.bundle.T("settings.accountCode"))
-	newAccountCodeEntry.SetText("")
 
 	newAccountLabelEntry := widget.NewEntry()
 	newAccountLabelEntry.SetPlaceHolder(a.bundle.T("settings.accountLabel"))
-	newAccountLabelEntry.SetText("")
 
-	addAccountBtn := widget.NewButton("+ Konto hinzufügen", func() {
+	addAccountFields := container.NewGridWithColumns(3,
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.accountCode")), nil, newAccountCodeEntry),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.accountLabel")), nil, newAccountLabelEntry),
+	)
+	addAccountFields.Hide()
+
+	addAccountBtn := widget.NewButton("+ Konto hinzufügen", nil)
+	addAccountBtn.OnTapped = func() {
+		if !addAccountFields.Visible() {
+			addAccountFields.Show()
+			return
+		}
 		code, err := strconv.Atoi(newAccountCodeEntry.Text)
 		if err != nil || code <= 0 {
 			a.showError("Fehler", "Ungültiger Kontocode. Bitte eine Zahl eingeben.")
 			return
 		}
-
 		label := newAccountLabelEntry.Text
 		if label == "" {
 			a.showError("Fehler", "Bitte eine Bezeichnung eingeben.")
 			return
 		}
-
-		// Check for duplicate codes
 		for _, acc := range tempAccounts {
 			if acc.Code == code {
 				a.showError("Fehler", fmt.Sprintf("Konto mit Code %d existiert bereits.", code))
 				return
 			}
 		}
-
-		// Check limit
 		if len(tempAccounts) >= 10 {
 			a.showError("Fehler", "Maximal 10 Konten erlaubt.")
 			return
 		}
-
-		// Add account
 		tempAccounts = append(tempAccounts, core.Account{
 			Code:  code,
 			Label: label,
 		})
-
-		// Clear inputs
 		newAccountCodeEntry.SetText("")
 		newAccountLabelEntry.SetText("")
-
+		addAccountFields.Hide()
 		refreshAccounts()
-	})
+	}
 
 	refreshAccounts()
 
-	accountsNote := widget.NewLabel(a.bundle.T("settings.accountsNote"))
+	accountsNote := newCopyableLabel(a.bundle, a.bundle.T("settings.accountsNote"))
 	accountsNote.Wrapping = fyne.TextWrapWord
 
 	rememberCompanyCheck := widget.NewCheck(
@@ -207,84 +247,227 @@ func (a *App) showSettingsDialog() {
 	)
 	autoSelectCheck.SetChecked(a.settings.AutoSelectAccount)
 
-	// Bank accounts
-	defaultBankAccountEntry := widget.NewEntry()
-	defaultBankAccountEntry.SetText(a.settings.DefaultBankAccount)
-
-	// Bank account list (make a copy to modify)
+	// Bank account list (working copy, edited inline, persisted on save)
 	tempBankAccounts := make([]core.BankAccount, len(a.settings.BankAccounts))
 	copy(tempBankAccounts, a.settings.BankAccounts)
 
-	// Bank account list container
 	bankAccountsList := container.NewVBox()
+
+	// Drag-and-drop reorder for bank accounts (mirrors the column-order
+	// list further down). swapBankAccounts performs an in-place adjacent
+	// swap; the drag handler accumulates pixel distance and fires the
+	// swap once half a row pitch has passed.
+	var bankAccountRows []*draggableRow
+	swapBankAccounts := func(i, j int) {
+		n := len(tempBankAccounts)
+		if i < 0 || j < 0 || i >= n || j >= n || i == j {
+			return
+		}
+		tempBankAccounts[i], tempBankAccounts[j] = tempBankAccounts[j], tempBankAccounts[i]
+		bankAccountRows[i], bankAccountRows[j] = bankAccountRows[j], bankAccountRows[i]
+		bankAccountsList.Objects[i], bankAccountsList.Objects[j] =
+			bankAccountsList.Objects[j], bankAccountsList.Objects[i]
+		bankAccountRows[i].index = i
+		bankAccountRows[j].index = j
+		bankAccountsList.Refresh()
+	}
+	onBankAccountDragEnd := func(row *draggableRow) {
+		row.dragAccum = 0
+		a.persistBankAccounts(tempBankAccounts)
+	}
+	onBankAccountDrag := func(row *draggableRow, dy float32) {
+		row.dragAccum += dy
+		pitch := row.Size().Height
+		if idx := row.index; idx+1 < len(bankAccountRows) {
+			pitch = bankAccountRows[idx+1].Position().Y - row.Position().Y
+		} else if idx > 0 {
+			pitch = row.Position().Y - bankAccountRows[idx-1].Position().Y
+		}
+		if pitch <= 0 {
+			return
+		}
+		for row.dragAccum > pitch/2 && row.index < len(bankAccountRows)-1 {
+			swapBankAccounts(row.index, row.index+1)
+			row.dragAccum -= pitch
+		}
+		for row.dragAccum < -pitch/2 && row.index > 0 {
+			swapBankAccounts(row.index, row.index-1)
+			row.dragAccum += pitch
+		}
+	}
 
 	var refreshBankAccounts func()
 	refreshBankAccounts = func() {
 		bankAccountsList.Objects = bankAccountsList.Objects[:0]
+		bankAccountRows = bankAccountRows[:0]
 
-		for idx, ba := range tempBankAccounts {
+		for idx := range tempBankAccounts {
 			currentIdx := idx
-			label := widget.NewLabel(fmt.Sprintf("  %s", ba.Name))
-			label.Alignment = fyne.TextAlignLeading
-			label.Wrapping = fyne.TextWrapOff
+
+			nameEntry := widget.NewEntry()
+			nameEntry.SetPlaceHolder("Name")
+			nameEntry.SetText(tempBankAccounts[currentIdx].Name)
+			nameEntry.OnChanged = func(s string) {
+				tempBankAccounts[currentIdx].Name = s
+			}
+
+			ibanEntry := widget.NewEntry()
+			ibanEntry.SetPlaceHolder("IBAN / Konto")
+			ibanEntry.SetText(tempBankAccounts[currentIdx].IBAN)
+			ibanEntry.OnChanged = func(s string) {
+				tempBankAccounts[currentIdx].IBAN = s
+			}
+
+			// Settlement-Konto: dropdown of every OTHER configured
+			// payment account. Only relevant for credit-card rows; the
+			// stored value is the chosen account's Name.
+			settlementOptions := make([]string, 0, len(tempBankAccounts))
+			for i, ba := range tempBankAccounts {
+				if i == currentIdx || ba.Name == "" {
+					continue
+				}
+				settlementOptions = append(settlementOptions, ba.Name)
+			}
+			settlementSelect := widget.NewSelect(settlementOptions, func(sel string) {
+				tempBankAccounts[currentIdx].SettlementAccount = sel
+			})
+			settlementSelect.PlaceHolder = "Ausgleich über"
+			if cur := tempBankAccounts[currentIdx].SettlementAccount; cur != "" {
+				settlementSelect.SetSelected(cur)
+			}
+			if tempBankAccounts[currentIdx].AccountType != core.AccountTypeCreditCard {
+				settlementSelect.Disable()
+			}
+
+			typeSelect := widget.NewSelect([]string{"Bank", "Kreditkarte", "Barkasse"}, nil)
+			switch tempBankAccounts[currentIdx].AccountType {
+			case core.AccountTypeCreditCard:
+				typeSelect.SetSelected("Kreditkarte")
+			case core.AccountTypeCash:
+				typeSelect.SetSelected("Barkasse")
+			default:
+				typeSelect.SetSelected("Bank")
+			}
+
+			// Borders for each field column — built once, slotted into a
+			// dynamic grid depending on whether "Ausgleich" applies.
+			nameBox := container.NewBorder(nil, nil, widget.NewLabel("Name"), nil, nameEntry)
+			ibanBox := container.NewBorder(nil, nil, widget.NewLabel("IBAN / Konto"), nil, ibanEntry)
+			typeBox := container.NewBorder(nil, nil, widget.NewLabel("Typ"), nil, typeSelect)
+			settlementBox := container.NewBorder(nil, nil, widget.NewLabel("Ausgleich"), nil, settlementSelect)
+			fields := container.New(layout.NewGridLayoutWithColumns(4))
+
+			showSettlement := func(visible bool) {
+				if visible {
+					fields.Layout = layout.NewGridLayoutWithColumns(4)
+					fields.Objects = []fyne.CanvasObject{nameBox, ibanBox, typeBox, settlementBox}
+				} else {
+					fields.Layout = layout.NewGridLayoutWithColumns(3)
+					fields.Objects = []fyne.CanvasObject{nameBox, ibanBox, typeBox}
+				}
+				fields.Refresh()
+			}
+			showSettlement(tempBankAccounts[currentIdx].AccountType == core.AccountTypeCreditCard)
+
+			typeSelect.OnChanged = func(sel string) {
+				switch sel {
+				case "Kreditkarte":
+					tempBankAccounts[currentIdx].AccountType = core.AccountTypeCreditCard
+					settlementSelect.Enable()
+					showSettlement(true)
+				case "Barkasse":
+					tempBankAccounts[currentIdx].AccountType = core.AccountTypeCash
+					settlementSelect.Disable()
+					showSettlement(false)
+				default:
+					tempBankAccounts[currentIdx].AccountType = core.AccountTypeBank
+					settlementSelect.Disable()
+					showSettlement(false)
+				}
+			}
 
 			removeBtn := widget.NewButton("Entfernen", func() {
-				// Remove this bank account
 				if currentIdx < len(tempBankAccounts) {
 					tempBankAccounts = append(tempBankAccounts[:currentIdx], tempBankAccounts[currentIdx+1:]...)
 					refreshBankAccounts()
+					a.persistBankAccounts(tempBankAccounts)
 				}
 			})
 			removeBtn.Importance = widget.LowImportance
 
-			row := container.NewBorder(nil, nil, nil, removeBtn, label)
-			bankAccountsList.Add(container.NewPadded(row))
+			grip := widget.NewLabel("↕")
+			content := container.NewPadded(
+				container.NewBorder(nil, nil, grip, removeBtn, fields),
+			)
+			row := newDraggableRow(content, currentIdx)
+			row.onDrag = onBankAccountDrag
+			row.onDragEnd = onBankAccountDragEnd
+			bankAccountRows = append(bankAccountRows, row)
+			bankAccountsList.Add(row)
 		}
 
 		bankAccountsList.Refresh()
 	}
 
-	// Add bank account controls
+	// Add payment account controls — the input fields stay hidden until the
+	// "+ Zahlungskonto hinzufügen" button is clicked; the fields row carries
+	// its own "Zahlungskonto anlegen" button (far left) that creates it.
 	newBankAccountEntry := widget.NewEntry()
-	newBankAccountEntry.SetPlaceHolder("Bankkonto Name")
-	newBankAccountEntry.SetText("")
+	newBankAccountEntry.SetPlaceHolder("Zahlungskonto Name")
 
-	addBankAccountBtn := widget.NewButton("+ Bankkonto hinzufügen", func() {
+	newBankAccountIBANEntry := widget.NewEntry()
+	newBankAccountIBANEntry.SetPlaceHolder("IBAN / Konto")
+
+	createBankAccountBtn := widget.NewButton("Zahlungskonto anlegen", nil)
+	createBankAccountBtn.Importance = widget.HighImportance
+
+	addBankFields := container.NewBorder(nil, nil, createBankAccountBtn, nil,
+		container.NewGridWithColumns(2,
+			container.NewBorder(nil, nil, widget.NewLabel("Zahlungskonto Name"), nil, newBankAccountEntry),
+			container.NewBorder(nil, nil, widget.NewLabel("IBAN / Konto"), nil, newBankAccountIBANEntry),
+		),
+	)
+	addBankFields.Hide()
+
+	createBankAccountBtn.OnTapped = func() {
 		name := newBankAccountEntry.Text
 		if name == "" {
 			a.showError("Fehler", "Bitte einen Namen eingeben.")
 			return
 		}
-
-		// Check for duplicate names
 		for _, ba := range tempBankAccounts {
 			if ba.Name == name {
-				a.showError("Fehler", fmt.Sprintf("Bankkonto '%s' existiert bereits.", name))
+				a.showError("Fehler", fmt.Sprintf("Zahlungskonto '%s' existiert bereits.", name))
 				return
 			}
 		}
-
-		// Check limit
-		if len(tempBankAccounts) >= 10 {
-			a.showError("Fehler", "Maximal 10 Bankkonten erlaubt.")
+		if len(tempBankAccounts) >= 30 {
+			a.showError("Fehler", "Maximal 30 Zahlungskonten erlaubt.")
 			return
 		}
-
-		// Add bank account
 		tempBankAccounts = append(tempBankAccounts, core.BankAccount{
-			Name: name,
+			Name:        name,
+			IBAN:        newBankAccountIBANEntry.Text,
+			AccountType: core.AccountTypeBank,
 		})
-
-		// Clear input
 		newBankAccountEntry.SetText("")
-
+		newBankAccountIBANEntry.SetText("")
+		addBankFields.Hide()
 		refreshBankAccounts()
-	})
+		a.persistBankAccounts(tempBankAccounts)
+	}
+
+	// Header button: only toggles the visibility of the input fields.
+	addBankAccountBtn := widget.NewButton("+ Zahlungskonto hinzufügen", nil)
+	addBankAccountBtn.OnTapped = func() {
+		if addBankFields.Visible() {
+			addBankFields.Hide()
+		} else {
+			addBankFields.Show()
+		}
+	}
 
 	refreshBankAccounts()
-
-	bankAccountsNote := widget.NewLabel("Verwalten Sie Ihre Bankkonten hier.")
-	bankAccountsNote.Wrapping = fyne.TextWrapWord
 
 	// Language
 	languageSelect := widget.NewSelect([]string{
@@ -304,7 +487,7 @@ func (a *App) showSettingsDialog() {
 	)
 	debugModeCheck.SetChecked(a.settings.DebugMode)
 
-	debugHint := widget.NewLabel(a.bundle.T("settings.debugMode.hint"))
+	debugHint := newCopyableLabel(a.bundle, a.bundle.T("settings.debugMode.hint"))
 	debugHint.Wrapping = fyne.TextWrapWord
 
 	// Wipe database button
@@ -374,61 +557,108 @@ func (a *App) showSettingsDialog() {
 	}
 
 	columnList := container.NewVBox()
+	var columnRows []*draggableRow
 
-	var refreshColumns func()
-	refreshColumns = func() {
-		columnList.Objects = columnList.Objects[:0]
-
-		for idx, colID := range tempColumnOrder {
-			currentIdx := idx
-			displayName := core.ColumnDisplayNames[colID]
-			if displayName == "" {
-				displayName = colID
-			}
-
-			label := widget.NewLabel(fmt.Sprintf("%d. %s", idx+1, displayName))
-			label.Alignment = fyne.TextAlignLeading
-			label.Wrapping = fyne.TextWrapOff
-
-			upBtn := widget.NewButton("↑", func() {
-				if currentIdx > 0 {
-					tempColumnOrder[currentIdx], tempColumnOrder[currentIdx-1] = tempColumnOrder[currentIdx-1], tempColumnOrder[currentIdx]
-					refreshColumns()
-				}
-			})
-			downBtn := widget.NewButton("↓", func() {
-				if currentIdx < len(tempColumnOrder)-1 {
-					tempColumnOrder[currentIdx], tempColumnOrder[currentIdx+1] = tempColumnOrder[currentIdx+1], tempColumnOrder[currentIdx]
-					refreshColumns()
-				}
-			})
-
-			if currentIdx == 0 {
-				upBtn.Disable()
+	// syncColumnRows refreshes every row's label and button states to
+	// match its current position in tempColumnOrder.
+	syncColumnRows := func() {
+		n := len(columnRows)
+		for i, row := range columnRows {
+			row.index = i
+			colID := tempColumnOrder[i]
+			name := columnHeaderFor(a.bundle, colID)
+			row.rowLabel.SetText(fmt.Sprintf("%d. %s", i+1, name))
+			if i == 0 {
+				row.upBtn.Disable()
 			} else {
-				upBtn.Enable()
+				row.upBtn.Enable()
 			}
-
-			if currentIdx == len(tempColumnOrder)-1 {
-				downBtn.Disable()
+			if i == n-1 {
+				row.downBtn.Disable()
 			} else {
-				downBtn.Enable()
+				row.downBtn.Enable()
 			}
-
-			upBtn.Importance = widget.LowImportance
-			downBtn.Importance = widget.LowImportance
-
-			buttons := container.NewHBox(upBtn, downBtn)
-			row := container.NewBorder(nil, nil, nil, buttons, label)
-			columnList.Add(container.NewPadded(row))
 		}
+	}
 
+	// swapColumns swaps two adjacent entries in the column order and the
+	// UI in place, keeping any in-progress drag attached to its widget.
+	swapColumns := func(a, b int) {
+		n := len(tempColumnOrder)
+		if a < 0 || b < 0 || a >= n || b >= n || a == b {
+			return
+		}
+		tempColumnOrder[a], tempColumnOrder[b] = tempColumnOrder[b], tempColumnOrder[a]
+		columnRows[a], columnRows[b] = columnRows[b], columnRows[a]
+		columnList.Objects[a], columnList.Objects[b] = columnList.Objects[b], columnList.Objects[a]
+		syncColumnRows()
 		columnList.Refresh()
 	}
 
-	refreshColumns()
+	onColumnDragEnd := func(row *draggableRow) {
+		row.dragAccum = 0
+	}
 
-	columnHint := widget.NewLabel(a.bundle.T("settings.columns.hint"))
+	// onColumnDrag accumulates the vertical drag distance and swaps the
+	// row with a neighbour each time it crosses half a row's height.
+	onColumnDrag := func(row *draggableRow, dy float32) {
+		row.dragAccum += dy
+
+		pitch := row.Size().Height
+		if idx := row.index; idx+1 < len(columnRows) {
+			pitch = columnRows[idx+1].Position().Y - row.Position().Y
+		} else if idx > 0 {
+			pitch = row.Position().Y - columnRows[idx-1].Position().Y
+		}
+		if pitch <= 0 {
+			return
+		}
+
+		for row.dragAccum > pitch/2 && row.index < len(columnRows)-1 {
+			swapColumns(row.index, row.index+1)
+			row.dragAccum -= pitch
+		}
+		for row.dragAccum < -pitch/2 && row.index > 0 {
+			swapColumns(row.index, row.index-1)
+			row.dragAccum += pitch
+		}
+	}
+
+	for idx := range tempColumnOrder {
+		rowLabel := widget.NewLabel("")
+		rowLabel.Alignment = fyne.TextAlignLeading
+		rowLabel.Wrapping = fyne.TextWrapOff
+
+		grip := widget.NewLabel("↕")
+
+		upBtn := widget.NewButton("↑", nil)
+		downBtn := widget.NewButton("↓", nil)
+		upBtn.Importance = widget.LowImportance
+		downBtn.Importance = widget.LowImportance
+
+		buttons := container.NewHBox(upBtn, downBtn)
+		content := container.NewPadded(
+			container.NewBorder(nil, nil, grip, buttons, rowLabel),
+		)
+
+		row := newDraggableRow(content, idx)
+		row.rowLabel = rowLabel
+		row.upBtn = upBtn
+		row.downBtn = downBtn
+		row.onDrag = onColumnDrag
+		row.onDragEnd = onColumnDragEnd
+
+		upBtn.OnTapped = func() { swapColumns(row.index, row.index-1) }
+		downBtn.OnTapped = func() { swapColumns(row.index, row.index+1) }
+
+		columnRows = append(columnRows, row)
+		columnList.Objects = append(columnList.Objects, row)
+	}
+
+	syncColumnRows()
+	columnList.Refresh()
+
+	columnHint := newCopyableLabel(a.bundle, a.bundle.T("settings.columns.hint"))
 	columnHint.Wrapping = fyne.TextWrapWord
 
 	// Tab 1: General settings
@@ -437,6 +667,8 @@ func (a *App) showSettingsDialog() {
 		widget.NewForm(
 			widget.NewFormItem(a.bundle.T("settings.targetFolder"),
 				container.NewBorder(nil, nil, nil, browseFolderBtn, storageRootEntry)),
+			widget.NewFormItem("Scan-Eingang-Ordner",
+				container.NewBorder(nil, nil, nil, browseScanInboxBtn, scanInboxEntry)),
 		),
 		useMonthFoldersCheck,
 		widget.NewSeparator(),
@@ -447,6 +679,15 @@ func (a *App) showSettingsDialog() {
 		widget.NewForm(
 			widget.NewFormItem(a.bundle.T("settings.decimal"), decimalSelect),
 			widget.NewFormItem(a.bundle.T("settings.currencyDefault"), currencyEntry),
+		),
+		widget.NewSeparator(),
+
+		widget.NewLabel("Eigene VAT-IDs"),
+		ownVATIDEntry,
+		widget.NewLabelWithStyle(
+			"Komma-getrennt eintragen. Diese Nummern werden bei der automatischen Rechnungs-Extraktion NIE als Absender-VAT-ID übernommen (sie gehören dir).",
+			fyne.TextAlignLeading,
+			fyne.TextStyle{Italic: true},
 		),
 		widget.NewSeparator(),
 
@@ -470,17 +711,14 @@ func (a *App) showSettingsDialog() {
 
 	// Tab 3: Accounts settings
 	accountsTab := container.NewVScroll(container.NewVBox(
-		widget.NewLabel(a.bundle.T("settings.accounts")),
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("settings.defaultAccount"), defaultAccountEntry),
+		container.NewBorder(nil, nil,
+			widget.NewLabel(a.bundle.T("settings.accounts")), addAccountBtn),
+		container.NewGridWithColumns(3,
+			container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.defaultAccount")), nil, defaultAccountEntry),
 		),
 		widget.NewCard("", "", container.NewVBox(
 			widget.NewLabel("Konten verwalten (max. 10):"),
-			widget.NewForm(
-				widget.NewFormItem(a.bundle.T("settings.accountCode"), newAccountCodeEntry),
-				widget.NewFormItem(a.bundle.T("settings.accountLabel"), newAccountLabelEntry),
-			),
-			addAccountBtn,
+			addAccountFields,
 			widget.NewSeparator(),
 			accountsList,
 		)),
@@ -489,20 +727,13 @@ func (a *App) showSettingsDialog() {
 		autoSelectCheck,
 		widget.NewSeparator(),
 
-		widget.NewLabel("Bankkonten"),
-		widget.NewForm(
-			widget.NewFormItem("Standard-Bankkonto", defaultBankAccountEntry),
-		),
+		container.NewBorder(nil, nil,
+			widget.NewLabel("Zahlungskonten"), addBankAccountBtn),
 		widget.NewCard("", "", container.NewVBox(
-			widget.NewLabel("Bankkonten verwalten (max. 10):"),
-			widget.NewForm(
-				widget.NewFormItem("Bankkonto Name", newBankAccountEntry),
-			),
-			addBankAccountBtn,
+			addBankFields,
 			widget.NewSeparator(),
 			bankAccountsList,
 		)),
-		bankAccountsNote,
 	))
 
 	// Tab 4: Advanced settings
@@ -530,134 +761,149 @@ func (a *App) showSettingsDialog() {
 		container.NewTabItem("Erweitert", advancedTab),
 	)
 
-	// Dialog buttons
-	settingsDialog := dialog.NewCustomConfirm(
-		a.bundle.T("settings.title"),
-		a.bundle.T("btn.save"),
-		a.bundle.T("btn.cancel"),
-		tabs,
-		func(save bool) {
-			if !save {
-				return
-			}
+	// Save action: persists settings and returns to the main view.
+	saveAction := func() {
+		newSettings := a.settings
+		prevColumnOrder := append([]string{}, a.settings.ColumnOrder...)
 
-			// Save settings
-			newSettings := a.settings
-			prevColumnOrder := append([]string{}, a.settings.ColumnOrder...)
+		newSettings.StorageRoot = storageRootEntry.Text
+		newSettings.ScanInboxFolder = scanInboxEntry.Text
+		newSettings.UseMonthSubfolders = useMonthFoldersCheck.Checked
+		newSettings.NamingTemplate = templateEntry.Text
+		newSettings.DecimalSeparator = decimalSelect.Selected
+		newSettings.CurrencyDefault = currencyEntry.Text
+		newSettings.OwnVATID = strings.TrimSpace(ownVATIDEntry.Text)
 
-			newSettings.StorageRoot = storageRootEntry.Text
-			newSettings.UseMonthSubfolders = useMonthFoldersCheck.Checked
-			newSettings.NamingTemplate = templateEntry.Text
-			newSettings.DecimalSeparator = decimalSelect.Selected
-			newSettings.CurrencyDefault = currencyEntry.Text
+		if modeSelect.Selected == a.bundle.T("settings.mode.claude") {
+			newSettings.ProcessingMode = "claude"
+		} else {
+			newSettings.ProcessingMode = "local"
+		}
 
-			// CSV settings
-			if csvSeparatorSelect.Selected == "\\t" {
-				newSettings.CSVSeparator = "\t"
-			} else {
-				newSettings.CSVSeparator = csvSeparatorSelect.Selected
-			}
-			newSettings.CSVEncoding = csvEncodingSelect.Selected
+		newSettings.AnthropicModel = modelEntry.Text
 
-			if modeSelect.Selected == a.bundle.T("settings.mode.claude") {
-				newSettings.ProcessingMode = "claude"
-			} else {
-				newSettings.ProcessingMode = "local"
-			}
+		// CSV settings
+		if csvSeparatorSelect.Selected == "\\t" {
+			newSettings.CSVSeparator = "\t"
+		} else {
+			newSettings.CSVSeparator = csvSeparatorSelect.Selected
+		}
+		newSettings.CSVEncoding = csvEncodingSelect.Selected
 
-			newSettings.AnthropicModel = modelEntry.Text
-
-			// Save API key to keyring
-			if apiKeyEntry.Text != "" {
-				err := keyring.Set("BuchISY", a.settings.AnthropicAPIKeyRef, apiKeyEntry.Text)
-				if err != nil {
-					a.logger.Warn("Failed to save API key: %v", err)
-					a.showError(
-						a.bundle.T("error.processing.title"),
-						fmt.Sprintf("Failed to save API key: %v", err),
-					)
-				}
-			}
-
-			defaultAccount, _ := strconv.Atoi(defaultAccountEntry.Text)
-			newSettings.DefaultAccount = defaultAccount
-
-			// Save modified accounts
-			newSettings.Accounts = tempAccounts
-
-			// Save bank accounts
-			newSettings.DefaultBankAccount = defaultBankAccountEntry.Text
-			newSettings.BankAccounts = tempBankAccounts
-
-			newSettings.RememberCompanyAccount = rememberCompanyCheck.Checked
-			newSettings.AutoSelectAccount = autoSelectCheck.Checked
-
-			if languageSelect.Selected == a.bundle.T("settings.language.de") {
-				newSettings.Language = "de"
-			} else {
-				newSettings.Language = "en"
-			}
-
-			newSettings.DebugMode = debugModeCheck.Checked
-			newSettings.ColumnOrder = tempColumnOrder
-			columnOrderChanged := !equalStringSlices(prevColumnOrder, newSettings.ColumnOrder)
-
-			// Save to disk
-			if err := a.settingsMgr.Save(newSettings); err != nil {
+		// Save API key to keyring
+		if apiKeyEntry.Text != "" {
+			err := keyring.Set("BuchISY", a.keyringAccount(), apiKeyEntry.Text)
+			if err != nil {
+				a.logger.Warn("Failed to save API key: %v", err)
 				a.showError(
 					a.bundle.T("error.processing.title"),
-					fmt.Sprintf("Failed to save settings: %v", err),
+					fmt.Sprintf("Failed to save API key: %v", err),
 				)
-				return
 			}
+		}
 
-			// Update app settings
-			a.settings = newSettings
-			a.storageManager = core.NewStorageManager(&a.settings)
+		defaultAccount, _ := strconv.Atoi(defaultAccountEntry.Text)
+		newSettings.DefaultAccount = defaultAccount
 
-			// Update logger level if debug mode changed
-			if newSettings.DebugMode {
-				a.logger.SetLevel(logging.DEBUG)
-				a.logger.Debug("Debug mode enabled")
-			} else {
-				a.logger.SetLevel(logging.INFO)
-			}
+		// Save modified accounts
+		newSettings.Accounts = tempAccounts
 
-			// Update extractor debug flag
-			a.anthropicExtractor.SetDebug(newSettings.DebugMode)
+		// Save bank accounts (the Standard-Zahlungskonto fields are
+		// gone; we don't write them anymore so they fade out of new
+		// settings.json files).
+		newSettings.DefaultBankAccount = ""
+		newSettings.DefaultBankAccountIBAN = ""
+		newSettings.BankAccounts = tempBankAccounts
 
-			// Update CSV repository settings
-			a.csvRepo.SetColumnOrder(newSettings.ColumnOrder)
-			a.csvRepo.SetSeparator(newSettings.CSVSeparator)
-			a.csvRepo.SetEncoding(newSettings.CSVEncoding)
-			a.csvRepo.SetDecimalSeparator(newSettings.DecimalSeparator)
+		newSettings.RememberCompanyAccount = rememberCompanyCheck.Checked
+		newSettings.AutoSelectAccount = autoSelectCheck.Checked
 
-			if columnOrderChanged {
-				if err := a.rewriteAllCSVs(); err != nil {
-					a.logger.Warn("Failed to rewrite CSV files: %v", err)
-					a.showError(
-						a.bundle.T("error.processing.title"),
-						a.bundle.T("settings.columns.rewriteError", err.Error()),
-					)
-				}
-			}
+		// Update CSV repository settings
+		a.csvRepo.SetSeparator(newSettings.CSVSeparator)
+		a.csvRepo.SetEncoding(newSettings.CSVEncoding)
+		a.csvRepo.SetDecimalSeparator(newSettings.DecimalSeparator)
 
-			if a.invoiceTable != nil {
-				a.invoiceTable.SetColumnOrder(newSettings.ColumnOrder)
-				a.invoiceTable.SetDecimalSeparator(newSettings.DecimalSeparator)
-			}
-			a.loadInvoices()
+		if languageSelect.Selected == a.bundle.T("settings.language.de") {
+			newSettings.Language = "de"
+		} else {
+			newSettings.Language = "en"
+		}
 
-			a.showInfo(
-				a.bundle.T("settings.title"),
-				a.bundle.T("settings.saved"),
+		newSettings.DebugMode = debugModeCheck.Checked
+		newSettings.ColumnOrder = tempColumnOrder
+		columnOrderChanged := !equalStringSlices(prevColumnOrder, newSettings.ColumnOrder)
+
+		// Save to disk
+		if err := a.settingsMgr.Save(newSettings); err != nil {
+			a.showError(
+				a.bundle.T("error.processing.title"),
+				fmt.Sprintf("Failed to save settings: %v", err),
 			)
-		},
-		a.window,
-	)
+			return
+		}
 
-	settingsDialog.Resize(fyne.NewSize(750, 650))
-	settingsDialog.Show()
+		// Update app settings
+		a.settings = newSettings
+		a.storageManager = core.NewStorageManager(&a.settings)
+
+		// Update logger level if debug mode changed
+		if newSettings.DebugMode {
+			a.logger.SetLevel(logging.DEBUG)
+			a.logger.Debug("Debug mode enabled")
+		} else {
+			a.logger.SetLevel(logging.INFO)
+		}
+
+		// Update extractor debug flag
+		a.anthropicExtractor.SetDebug(newSettings.DebugMode)
+
+		// Update CSV column order
+		a.csvRepo.SetColumnOrder(newSettings.ColumnOrder)
+
+		if columnOrderChanged {
+			if err := a.rewriteAllCSVs(); err != nil {
+				a.logger.Warn("Failed to rewrite CSV files: %v", err)
+				a.showError(
+					a.bundle.T("error.processing.title"),
+					a.bundle.T("settings.columns.rewriteError", err.Error()),
+				)
+			}
+		}
+
+		if a.invoiceTable != nil {
+			a.invoiceTable.SetColumnOrder(newSettings.ColumnOrder)
+			a.invoiceTable.SetDecimalSeparator(newSettings.DecimalSeparator)
+		}
+		a.loadInvoices()
+
+		// Return to main view, then a quiet toast — no modal dialog
+		// breaks the flow.
+		a.showMainView()
+		a.showToast("✓ Einstellungen gespeichert")
+	}
+
+	// Header bar: light blue title strip + action buttons on the right.
+	titleLabel := widget.NewLabelWithStyle(
+		a.bundle.T("settings.title"),
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Bold: true},
+	)
+	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
+		a.showMainView()
+	})
+	saveBtn := widget.NewButton(a.bundle.T("btn.save"), saveAction)
+	saveBtn.Importance = widget.HighImportance
+
+	headerBar := container.NewBorder(
+		nil, nil,
+		container.NewPadded(titleLabel),
+		container.NewPadded(container.NewHBox(cancelBtn, saveBtn)),
+	)
+	headerBg := canvas.NewRectangle(headerBackgroundColor)
+	header := container.NewStack(headerBg, headerBar)
+
+	settingsView := container.NewBorder(header, nil, nil, nil, tabs)
+	a.window.SetContent(settingsView)
 }
 
 func equalStringSlices(a, b []string) bool {

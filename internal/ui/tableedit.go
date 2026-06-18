@@ -4,27 +4,80 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bergx2/buchisy/internal/core"
 )
 
-// showEditDialog shows a dialog to edit an existing invoice.
-func (a *App) showEditDialog(row core.CSVRow) {
-	// Convert CSVRow back to Meta
+// resolveInvoicePath locates the file behind a CSV row. The primary path
+// is derived from the currently viewed month + the row's Unterordner,
+// but that can be stale (Ganzes-Jahr view, externally moved file, stale
+// Unterordner). Tries fallbacks before giving up; returns the primary
+// path even on miss so callers/log messages still have something
+// concrete to reference.
+func (a *App) resolveInvoicePath(row core.CSVRow) string {
+	primary := core.InvoiceFilePath(
+		a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth), row)
+	if core.FileExists(primary) {
+		return primary
+	}
+
+	// Bare filename in the current month folder (handles stale Unterordner).
+	curFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
+	if alt := filepath.Join(curFolder, row.Dateiname); core.FileExists(alt) {
+		return alt
+	}
+
+	// Scan every month of the row's invoice year (or the current year as
+	// fallback) with and without category subfolders.
+	year := a.currentYear
+	if y, err := strconv.Atoi(row.Jahr); err == nil && y > 0 {
+		year = y
+	}
+	subdirs := []string{""}
+	if row.Unterordner != "" {
+		subdirs = append(subdirs, row.Unterordner)
+	}
+	subdirs = append(subdirs, "Ausgangsrechnungen", "Bar")
+
+	for m := time.January; m <= time.December; m++ {
+		folder := a.storageManager.GetMonthFolder(year, m)
+		for _, sub := range subdirs {
+			candidate := filepath.Join(folder, sub, row.Dateiname)
+			if core.FileExists(candidate) {
+				return candidate
+			}
+		}
+	}
+	return primary
+}
+
+// showEditDialog shows a resizable window to edit an existing invoice,
+// with a document preview on the right.
+func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	meta := row.ToMeta()
 
-	// Build the current file path
-	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
-	originalPath := filepath.Join(targetFolder, row.Dateiname)
+	originalPath := a.resolveInvoicePath(row)
+	if core.FileExists(originalPath) {
+		a.logger.Info("Edit dialog preview path: %s", originalPath)
+	} else {
+		a.logger.Warn("Edit dialog preview: file NOT found at %s "+
+			"(row.Dateiname=%q row.Unterordner=%q row.Jahr=%q currentMonth=%d-%02d)",
+			originalPath, row.Dateiname, row.Unterordner, row.Jahr,
+			a.currentYear, a.currentMonth)
+	}
 
-	// Create form entries (same as showConfirmationModal)
+	// Forward-declared so the calendar buttons can target this window.
+	var editWin fyne.Window
+
 	companyEntry := widget.NewEntry()
 	companyEntry.SetText(meta.Auftraggeber)
 	companyEntry.SetPlaceHolder(a.bundle.T("field.company"))
@@ -33,60 +86,49 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	shortDescEntry.SetText(meta.Verwendungszweck)
 	shortDescEntry.SetPlaceHolder(a.bundle.T("field.shortdesc"))
 	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Verwendungszweck)))
-	shortDescEntry.OnChanged = func(s string) {
-		if len(s) > 80 {
-			shortDescEntry.SetText(s[:80])
-		}
-		shortDescLabel.SetText(fmt.Sprintf("%d / 80", len(shortDescEntry.Text)))
-	}
 
 	invoiceNumEntry := widget.NewEntry()
 	invoiceNumEntry.SetText(meta.Rechnungsnummer)
 	invoiceNumEntry.SetPlaceHolder(a.bundle.T("field.invoicenumber"))
 
-	// USt-IdNr field
-	ustIdNrEntry := widget.NewEntry()
-	ustIdNrEntry.SetText(meta.UStIdNr)
-	ustIdNrEntry.SetPlaceHolder(a.bundle.T("field.ustidnr"))
+	vatIDEntry := widget.NewEntry()
+	vatIDEntry.SetText(meta.VATID)
+	vatIDEntry.SetPlaceHolder("z. B. DE123456789")
 
 	dateEntry := widget.NewEntry()
 	dateEntry.SetText(meta.Rechnungsdatum)
 	dateEntry.SetPlaceHolder(a.bundle.T("field.invoiceDate"))
 
-	// Add calendar button for invoice date
 	dateCalendarBtn := widget.NewButton("📅", func() {
-		a.showDatePicker(dateEntry.Text, func(selectedDate string) {
+		a.showDatePicker(editWin, dateEntry.Text, func(selectedDate string) {
 			dateEntry.SetText(selectedDate)
 		})
 	})
 	dateCalendarBtn.Importance = widget.LowImportance
 
 	netEntry := widget.NewEntry()
-	netEntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto))
+	netEntry.SetText(formatDecimal(meta.BetragNetto, a.settings.DecimalSeparator))
 	netEntry.SetPlaceHolder(a.bundle.T("field.net"))
 
 	vatPercentEntry := widget.NewEntry()
-	vatPercentEntry.SetText(fmt.Sprintf("%.2f", meta.SteuersatzProzent))
+	vatPercentEntry.SetText(formatDecimal(meta.SteuersatzProzent, a.settings.DecimalSeparator))
 	vatPercentEntry.SetPlaceHolder(a.bundle.T("field.vatPercent"))
 
 	vatAmountEntry := widget.NewEntry()
-	vatAmountEntry.SetText(fmt.Sprintf("%.2f", meta.SteuersatzBetrag))
+	vatAmountEntry.SetText(formatDecimal(meta.SteuersatzBetrag, a.settings.DecimalSeparator))
 	vatAmountEntry.SetPlaceHolder(a.bundle.T("field.vatAmount"))
 
 	grossEntry := widget.NewEntry()
-	grossEntry.SetText(fmt.Sprintf("%.2f", meta.Bruttobetrag))
+	grossEntry.SetText(formatDecimal(meta.Bruttobetrag, a.settings.DecimalSeparator))
 	grossEntry.SetPlaceHolder(a.bundle.T("field.gross"))
 
-	// Currency select
-	currencyOptions := []string{"EUR", "USD"}
-	currencySelect := widget.NewSelect(currencyOptions, nil)
+	currencySelect := widget.NewSelect([]string{"EUR", "USD"}, nil)
 	if meta.Waehrung != "" {
 		currencySelect.SetSelected(meta.Waehrung)
 	} else {
 		currencySelect.SetSelected(a.settings.CurrencyDefault)
 	}
 
-	// Account select
 	accountOptions := make([]string, 0, len(a.settings.Accounts))
 	accountMap := make(map[string]int)
 	for _, acc := range a.settings.Accounts {
@@ -95,7 +137,6 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		accountMap[label] = acc.Code
 	}
 	accountSelect := widget.NewSelect(accountOptions, nil)
-	// Pre-select the current account
 	for label, code := range accountMap {
 		if code == meta.Gegenkonto {
 			accountSelect.SetSelected(label)
@@ -103,34 +144,31 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		}
 	}
 
-	// Bank account select
-	bankAccountOptions := make([]string, 0, len(a.settings.BankAccounts))
-	for _, ba := range a.settings.BankAccounts {
-		bankAccountOptions = append(bankAccountOptions, ba.Name)
-	}
-	bankAccountSelect := widget.NewSelect(bankAccountOptions, nil)
-	if meta.Bankkonto != "" {
-		bankAccountSelect.SetSelected(meta.Bankkonto)
-	} else {
-		bankAccountSelect.SetSelected(a.settings.DefaultBankAccount)
-	}
+	bankAccountSelect := widget.NewSelect(a.bankAccountOptionList(), nil)
+	a.preselectBankAccount(bankAccountSelect, meta.Bankkonto)
+	addBankBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		a.addBankAccountInline(editWin, func(name string) {
+			a.refreshBankAccountSelect(bankAccountSelect, name)
+		})
+	})
+	addBankBtn.Importance = widget.LowImportance
 
-	// Payment date entry
 	paymentDateEntry := widget.NewEntry()
 	paymentDateEntry.SetText(meta.Bezahldatum)
 	paymentDateEntry.SetPlaceHolder(a.bundle.T("field.paymentDate"))
 
-	// Add calendar button for payment date
 	paymentDateCalendarBtn := widget.NewButton("📅", func() {
-		a.showDatePicker(paymentDateEntry.Text, func(selectedDate string) {
+		a.showDatePicker(editWin, paymentDateEntry.Text, func(selectedDate string) {
 			paymentDateEntry.SetText(selectedDate)
 		})
 	})
 	paymentDateCalendarBtn.Importance = widget.LowImportance
 
-	// Partial payment checkbox
 	partialPaymentCheck := widget.NewCheck(a.bundle.T("field.partialPayment"), nil)
 	partialPaymentCheck.SetChecked(meta.Teilzahlung)
+
+	ausgangsrechnungCheck := widget.NewCheck("Ausgangsrechnung", nil)
+	ausgangsrechnungCheck.SetChecked(row.Unterordner == "Ausgangsrechnungen")
 
 	// Comment field (multiline)
 	commentEntry := widget.NewMultiLineEntry()
@@ -138,7 +176,7 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	commentEntry.SetPlaceHolder(a.bundle.T("field.comment"))
 	commentEntry.SetMinRowsVisible(3)
 
-	// Currency conversion fields (shown only for non-default currency)
+	// Currency conversion fields (only relevant for non-default currency).
 	netEUREntry := widget.NewEntry()
 	if meta.BetragNetto_EUR > 0 {
 		netEUREntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto_EUR))
@@ -151,117 +189,76 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	}
 	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
 
-	// Container for currency conversion fields
+	// Currency conversion fields are only shown when a non-default
+	// currency is selected; this container is (re)populated on demand.
 	currencyConversionContainer := container.NewVBox()
-
-	// Original filename label
-	originalLabel := widget.NewLabel(row.Dateiname)
-
-	// Open original button
-	openOriginalBtn := widget.NewButton("Datei öffnen", func() {
-		a.openFile(originalPath)
-	})
-	openOriginalBtn.Importance = widget.LowImportance
-
-	// New filename preview label
-	newFilenameLabel := widget.NewLabel("")
-
-	// List to track newly selected attachment files
-	selectedAttachments := []string{}
-	attachmentsLabel := widget.NewLabel("Keine")
-
-	// Container for attachment list (will be populated when attachments are added)
-	attachmentListContainer := container.NewVBox()
-
-	// Create button with dummy callback (will be replaced after editWindow is created)
-	selectAttachmentsBtn := widget.NewButton("Anhänge hinzufügen", func() {
-		// Will be replaced
-	})
-	selectAttachmentsBtn.Importance = widget.LowImportance
-
-	// Update attachments label and list based on existing and new attachments
-	updateAttachmentsLabel := func() {
-		existingCount := 0
-		if a.storageManager.HasAttachments(originalPath) {
-			attachments, err := a.storageManager.ListAttachments(originalPath)
-			if err == nil {
-				existingCount = len(attachments)
+	updateCurrencyConversionVisibility := func() {
+		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+			defaultCurrency := a.settings.CurrencyDefault
+			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
+			currencyConversionContainer.Objects = []fyne.CanvasObject{
+				selectableForm(a.bundle,
+					fi(fmt.Sprintf("%s (%s)", a.bundle.T("field.net_eur"), defaultCurrency), netEUREntry),
+					fi(feeLabel, feeEntry),
+				),
 			}
-		}
-
-		newCount := len(selectedAttachments)
-
-		// Update label
-		if existingCount == 0 && newCount == 0 {
-			attachmentsLabel.SetText("Keine")
-			attachmentListContainer.Objects = []fyne.CanvasObject{}
-		} else if newCount == 0 {
-			// Only existing attachments
-			if existingCount == 1 {
-				attachmentsLabel.SetText("1 vorhandene Datei")
-			} else {
-				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene Dateien", existingCount))
-			}
-			attachmentListContainer.Objects = []fyne.CanvasObject{}
 		} else {
-			// Has new attachments to add
-			if newCount == 1 {
-				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue", existingCount, newCount))
-			} else {
-				attachmentsLabel.SetText(fmt.Sprintf("%d vorhandene, %d neue", existingCount, newCount))
-			}
-
-			// Update attachment list
-			attachmentItems := []fyne.CanvasObject{}
-			for _, path := range selectedAttachments {
-				attachmentItems = append(attachmentItems,
-					widget.NewLabel("  • "+filepath.Base(path)))
-			}
-			attachmentListContainer.Objects = attachmentItems
-			attachmentListContainer.Refresh()
+			currencyConversionContainer.Objects = []fyne.CanvasObject{}
 		}
+		currencyConversionContainer.Refresh()
 	}
 
-	updateAttachmentsLabel()
+	// Ablagemonat (filing month) — prefilled with the folder the invoice
+	// currently lives in.
+	yearSelect := widget.NewSelect(generateYearOptions(), nil)
+	yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+	monthSelect := widget.NewSelect(generateMonthOptions(a.bundle), nil)
+	monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth),
+		a.bundle.T(fmt.Sprintf("month.%02d", int(a.currentMonth)))))
 
-	// Update filename preview function
+	// Editable filename field.
+	filenameEntry := widget.NewEntry()
+	filenameEdited := false
+	suppressFilenameChange := false
 	updateFilenamePreview := func() {
-		// Build meta from current form values
+		if filenameEdited {
+			return
+		}
 		currentMeta := core.Meta{
 			Auftraggeber:      companyEntry.Text,
 			Verwendungszweck:  shortDescEntry.Text,
 			Rechnungsnummer:   invoiceNumEntry.Text,
 			Rechnungsdatum:    dateEntry.Text,
-			BetragNetto:       parseFloat(netEntry.Text),
-			SteuersatzProzent: parseFloat(vatPercentEntry.Text),
-			SteuersatzBetrag:  parseFloat(vatAmountEntry.Text),
-			Bruttobetrag:      parseFloat(grossEntry.Text),
+			BetragNetto:       parseFloat(netEntry.Text, a.settings.DecimalSeparator),
+			SteuersatzProzent: parseFloat(vatPercentEntry.Text, a.settings.DecimalSeparator),
+			SteuersatzBetrag:  parseFloat(vatAmountEntry.Text, a.settings.DecimalSeparator),
+			Bruttobetrag:      parseFloat(grossEntry.Text, a.settings.DecimalSeparator),
 			Waehrung:          currencySelect.Selected,
 		}
-		// Extract year and month from DD.MM.YYYY format
 		parts := strings.Split(dateEntry.Text, ".")
 		if len(parts) == 3 {
-			currentMeta.Jahr = parts[2]  // Year is the third part
-			currentMeta.Monat = parts[1] // Month is the second part
+			currentMeta.Jahr = parts[2]
+			currentMeta.Monat = parts[1]
 		}
-
-		// Apply template
 		filename, err := core.ApplyTemplate(
 			a.settings.NamingTemplate,
 			currentMeta,
 			core.TemplateOpts{DecimalSeparator: a.settings.DecimalSeparator},
 		)
+		suppressFilenameChange = true
 		if err != nil {
-			newFilenameLabel.SetText("Fehler: " + err.Error())
+			filenameEntry.SetText("Fehler: " + err.Error())
 		} else {
-			newFilenameLabel.SetText(filename)
+			filenameEntry.SetText(filename)
+		}
+		suppressFilenameChange = false
+	}
+	filenameEntry.OnChanged = func(string) {
+		if !suppressFilenameChange {
+			filenameEdited = true
 		}
 	}
 
-	// Update preview on any field change
-	onAnyChange := func(string) { updateFilenamePreview() }
-	companyEntry.OnChanged = onAnyChange
-	// Special handler for shortDescEntry to handle both character limit and preview
 	shortDescEntry.OnChanged = func(s string) {
 		if len(s) > 80 {
 			shortDescEntry.SetText(s[:80])
@@ -269,6 +266,8 @@ func (a *App) showEditDialog(row core.CSVRow) {
 		shortDescLabel.SetText(fmt.Sprintf("%d / 80", len(shortDescEntry.Text)))
 		updateFilenamePreview()
 	}
+	onAnyChange := func(string) { updateFilenamePreview() }
+	companyEntry.OnChanged = onAnyChange
 	invoiceNumEntry.OnChanged = onAnyChange
 	dateEntry.OnChanged = onAnyChange
 	netEntry.OnChanged = onAnyChange
@@ -276,230 +275,275 @@ func (a *App) showEditDialog(row core.CSVRow) {
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
 
-	// Initial preview update
+	// As soon as two of {Netto, MwSt %, MwSt-Betrag, Brutto} are
+	// entered, fill in the others automatically.
+	wireAmountAutoCompute(netEntry, vatPercentEntry, vatAmountEntry, grossEntry,
+		a.settings.DecimalSeparator)
+
 	updateFilenamePreview()
 
-	// Helper function to get currency-aware label
-	getCurrencyLabel := func(baseKey string) string {
-		currency := currencySelect.Selected
-		if currency == "" {
-			currency = a.settings.CurrencyDefault
-		}
-		return fmt.Sprintf("%s (%s)", a.bundle.T(baseKey), currency)
+	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
+		editWin.Close()
+	})
+	saveBtn := widget.NewButton(a.bundle.T("btn.save"), nil)
+	saveBtn.Importance = widget.HighImportance
+
+	openBelegBtn := widget.NewButton("Beleg öffnen", func() {
+		a.openFileInOS(originalPath)
+	})
+	openBelegBtn.Importance = widget.LowImportance
+
+	// Preview pane + currently shown strip. Built below; declared up
+	// here so the attachments switcher closure can capture them.
+	var preview *fyne.Container
+	var previewStrip *pdfPreviewStrip
+
+	// Attachments preview switcher: [Original] [Anhang 1] [Anhang 2] …
+	// Click swaps the preview content. The switcher is rebuildable so
+	// it picks up freshly added attachments without closing the dialog.
+	attPaths := a.invoiceAttachmentPaths(row)
+	currentPreviewPath := originalPath
+	previewSwitcher := container.NewHBox()
+	var rebuildSwitcher func()
+
+	swapPreview := func(path string) {
+		currentPreviewPath = path
+		content, strip := renderPreviewContent(path, meta)
+		preview.Objects = []fyne.CanvasObject{content}
+		preview.Refresh()
+		previewStrip = strip
+		rebuildSwitcher()
 	}
 
-	// Container for the main form - will be rebuilt when currency changes
-	mainFormContainer := container.NewVBox()
-
-	// Function to rebuild the form with current currency
-	rebuildForm := func() {
-		mainFormContainer.Objects = []fyne.CanvasObject{
-			widget.NewForm(
-				widget.NewFormItem(a.bundle.T("field.company"), companyEntry),
-				widget.NewFormItem(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
-				widget.NewFormItem(a.bundle.T("field.invoicenumber"), invoiceNumEntry),
-				widget.NewFormItem(a.bundle.T("field.ustidnr"), ustIdNrEntry),
-				widget.NewFormItem(a.bundle.T("field.invoiceDate"), container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry)),
-				widget.NewFormItem(a.bundle.T("field.paymentDate"), container.NewBorder(nil, nil, nil, paymentDateCalendarBtn, paymentDateEntry)),
-				widget.NewFormItem(getCurrencyLabel("field.net"), netEntry),
-				widget.NewFormItem(a.bundle.T("field.vatPercent"), vatPercentEntry),
-				widget.NewFormItem(getCurrencyLabel("field.vatAmount"), vatAmountEntry),
-				widget.NewFormItem(getCurrencyLabel("field.gross"), grossEntry),
-				widget.NewFormItem(a.bundle.T("field.currency"), currencySelect),
-				widget.NewFormItem(a.bundle.T("field.account"), accountSelect),
-				widget.NewFormItem(a.bundle.T("field.bankAccount"), bankAccountSelect),
-				widget.NewFormItem("", partialPaymentCheck),
-			),
-		}
-		mainFormContainer.Refresh()
-	}
-
-	// Currency conversion visibility logic
-	updateCurrencyConversionVisibility := func() {
-		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
-			// Show currency conversion fields (both in default currency EUR)
-			defaultCurrency := a.settings.CurrencyDefault
-			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
-
-			currencyConversionContainer.Objects = []fyne.CanvasObject{
-				widget.NewForm(
-					widget.NewFormItem(a.bundle.T("field.net_eur"), netEUREntry),
-					widget.NewFormItem(feeLabel, feeEntry),
-				),
-			}
+	makeSwitcherBtn := func(label, path string) *widget.Button {
+		btn := widget.NewButton(label, func() { swapPreview(path) })
+		if currentPreviewPath == path {
+			btn.Importance = widget.HighImportance
 		} else {
-			// Hide currency conversion fields
-			currencyConversionContainer.Objects = []fyne.CanvasObject{}
+			btn.Importance = widget.LowImportance
 		}
-		currencyConversionContainer.Refresh()
+		return btn
 	}
 
-	// Update currency select handler to rebuild form
-	currencySelect.OnChanged = func(s string) {
-		rebuildForm()
+	rebuildSwitcher = func() {
+		previewSwitcher.RemoveAll()
+		previewSwitcher.Add(makeSwitcherBtn("Original", originalPath))
+		for i, p := range attPaths {
+			previewSwitcher.Add(makeSwitcherBtn(fmt.Sprintf("Anhang %d", i+1), p))
+		}
+		previewSwitcher.Refresh()
+	}
+
+	addAttBtn := widget.NewButtonWithIcon("+ Anhang",
+		theme.ContentAddIcon(), func() {
+			a.showFilePicker(func(path string) {
+				idx, err := a.addAttachmentToInvoice(row, path)
+				if err != nil {
+					dialog.ShowError(err, editWin)
+					return
+				}
+				row.AnzahlAnhaenge = idx
+				row.HatAnhaenge = true
+				attPaths = a.invoiceAttachmentPaths(row)
+				rebuildSwitcher()
+				a.loadInvoices()
+				a.showToast(fmt.Sprintf("✓ Anhang %d hinzugefügt", idx))
+			})
+		})
+	addAttBtn.Importance = widget.LowImportance
+
+	rebuildSwitcher()
+
+	form := container.NewVBox(
+		container.NewBorder(nil, nil,
+			container.NewHBox(newCopyableLabel(a.bundle, "Datei: "+row.Dateiname),
+				openBelegBtn, addAttBtn),
+			container.NewHBox(cancelBtn, saveBtn)),
+		previewSwitcher,
+		section("Identifikation", selectableForm(a.bundle,
+			fi(a.bundle.T("field.company"), companyEntry),
+			fi(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
+			fi(a.bundle.T("field.invoicenumber"),
+				container.NewGridWithColumns(2,
+					invoiceNumEntry,
+					container.NewBorder(nil, nil,
+						widget.NewLabelWithStyle(a.bundle.T("field.vatid"),
+							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+						nil, vatIDEntry),
+				)),
+		)),
+		section("Beträge & Datum", selectableForm(a.bundle,
+			fi(a.bundle.T("field.invoiceDate"),
+				container.NewGridWithColumns(2,
+					container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry),
+					container.NewBorder(nil, nil,
+						widget.NewLabelWithStyle(a.bundle.T("field.paymentDate"),
+							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+						paymentDateCalendarBtn, paymentDateEntry),
+				)),
+			fi(a.bundle.T("field.net"),
+				container.NewGridWithColumns(3,
+					netEntry,
+					container.NewBorder(nil, nil,
+						widget.NewLabelWithStyle(a.bundle.T("field.vatPercent"),
+							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+						nil, vatPercentEntry),
+					container.NewBorder(nil, nil,
+						widget.NewLabelWithStyle(a.bundle.T("field.vatAmount"),
+							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+						nil, vatAmountEntry),
+				)),
+			fi(a.bundle.T("field.gross"),
+				container.NewGridWithColumns(2,
+					grossEntry,
+					container.NewBorder(nil, nil,
+						widget.NewLabelWithStyle(a.bundle.T("field.currency"),
+							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+						nil, currencySelect),
+				)),
+		)),
+		section("Ablage", selectableForm(a.bundle,
+			fi(a.bundle.T("field.account"),
+				container.NewGridWithColumns(2,
+					accountSelect,
+					container.NewBorder(nil, nil,
+						widget.NewLabelWithStyle(a.bundle.T("field.bankAccount"),
+							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+						addBankBtn, bankAccountSelect),
+				)),
+			fi("Ablage (Jahr/Monat)", container.NewGridWithColumns(2, yearSelect, monthSelect)),
+			fi("", partialPaymentCheck),
+			fi("", ausgangsrechnungCheck),
+		)),
+		// Währungsumrechnung (nur bei Fremdwährung sichtbar).
+		currencyConversionContainer,
+		section(a.bundle.T("field.comment"), commentEntry),
+		widget.NewSeparator(),
+		newCopyableLabel(a.bundle, a.bundle.T("modal.filenamePreview")),
+		filenameEntry,
+	)
+
+	// Show/hide the currency-conversion fields and refresh the preview
+	// whenever the currency changes.
+	currencySelect.OnChanged = func(string) {
 		updateCurrencyConversionVisibility()
 		updateFilenamePreview()
 	}
-
-	// Initial form build and currency conversion visibility
-	rebuildForm()
 	updateCurrencyConversionVisibility()
 
-	// Create header section (same as new invoice modal)
-	headerSection := container.NewVBox(
-		// Original file (left) + New filename (right) on same row
-		container.NewBorder(nil, nil,
-			// Left side: Original file
-			container.NewHBox(
-				widget.NewLabel("Originaldatei:"),
-				originalLabel,
-				openOriginalBtn,
-			),
-			// Right side: New filename
-			container.NewHBox(
-				widget.NewLabel("Neuer Dateiname:"),
-				newFilenameLabel,
-			),
-			nil, // Center is empty
-		),
-		// Attachments row
-		container.NewHBox(
-			widget.NewLabel("Anhänge:"),
-			attachmentsLabel,
-			selectAttachmentsBtn,
-		),
-		// Attachment list (only visible when attachments are added)
-		attachmentListContainer,
-		widget.NewSeparator(),
-	)
-
-	// Form layout
-	form := container.NewVBox(
-		headerSection,
-
-		mainFormContainer,
-
-		// Currency conversion fields (conditional)
-		currencyConversionContainer,
-
-		widget.NewSeparator(),
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("field.comment"), commentEntry),
-		),
-	)
-
-	// Scroll container for long forms
 	scrollForm := container.NewVScroll(form)
+	// Keep just a sliver minimum so the user can collapse the form pane
+	// nearly to zero — was 420 px which made the HSplit divider feel
+	// "stuck" well before the left edge.
+	scrollForm.SetMinSize(fyne.NewSize(60, 400))
 
-	// Create resizable window
-	editWindow := a.app.NewWindow("Rechnung bearbeiten") // Edit title
-
-	// Now replace the button callback to use editWindow as parent
-	selectAttachmentsBtn.OnTapped = func() {
-		fileDialog := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
-			if err != nil || reader == nil {
-				return
-			}
-			defer func() { _ = reader.Close() }()
-
-			filepath := reader.URI().Path()
-			selectedAttachments = append(selectedAttachments, filepath)
-			updateAttachmentsLabel()
-		}, editWindow)
-
-		fileDialog.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx", ".txt"}))
-		fileDialog.Resize(fyne.NewSize(1000, 700)) // Make it twice as big
-		fileDialog.Show()
+	preview, previewStrip = buildDocumentPreview(originalPath, meta)
+	split := container.NewHSplit(scrollForm, preview)
+	splitOffset := a.settings.PreviewSplitOffset
+	// Clamp away from the edges so a previously dragged-too-far divider
+	// (e.g. 0.97) doesn't make the preview a 1-px stripe on next open.
+	if splitOffset < 0.1 || splitOffset > 0.85 {
+		splitOffset = 0.33
 	}
+	split.SetOffset(splitOffset)
 
-	// Create buttons (now we can reference editWindow)
-	saveBtn := widget.NewButton(a.bundle.T("btn.save"), func() {
-		// Update the invoice
+	editWin = a.app.NewWindow("Rechnung bearbeiten")
+	a.setupModalCtrlScroll(editWin, preview, func() *pdfPreviewStrip { return previewStrip })
+	a.addDialogShortcuts(editWin,
+		func() {
+			if saveBtn.OnTapped != nil {
+				saveBtn.OnTapped()
+			}
+		},
+		func() { editWin.Close() },
+	)
+
+	saveBtn.OnTapped = func() {
+		targetYear := a.currentYear
+		fmt.Sscanf(yearSelect.Selected, "%d", &targetYear)
+		targetMonth := a.currentMonth
+		if len(monthSelect.Selected) >= 2 {
+			var m int
+			fmt.Sscanf(monthSelect.Selected[:2], "%d", &m)
+			if m >= 1 && m <= 12 {
+				targetMonth = time.Month(m)
+			}
+		}
 		err := a.updateInvoice(
-			row,          // Original row
-			originalPath, // Original file path
+			row,
+			originalPath,
 			companyEntry.Text,
 			shortDescEntry.Text,
 			invoiceNumEntry.Text,
-			ustIdNrEntry.Text,
+			vatIDEntry.Text,
 			dateEntry.Text,
 			paymentDateEntry.Text,
-			parseFloat(netEntry.Text),
-			parseFloat(vatPercentEntry.Text),
-			parseFloat(vatAmountEntry.Text),
-			parseFloat(grossEntry.Text),
+			parseFloat(netEntry.Text, a.settings.DecimalSeparator),
+			parseFloat(vatPercentEntry.Text, a.settings.DecimalSeparator),
+			parseFloat(vatAmountEntry.Text, a.settings.DecimalSeparator),
+			parseFloat(grossEntry.Text, a.settings.DecimalSeparator),
 			currencySelect.Selected,
 			accountMap[accountSelect.Selected],
 			bankAccountSelect.Selected,
 			partialPaymentCheck.Checked,
 			commentEntry.Text,
-			parseFloat(netEUREntry.Text),
-			parseFloat(feeEntry.Text),
-			selectedAttachments,
+			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
+			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
+			filenameEntry.Text,
+			targetYear,
+			targetMonth,
+			ausgangsrechnungCheck.Checked,
 		)
-
 		if err != nil {
-			a.showError(
-				a.bundle.T("error.processing.title"),
-				err.Error(),
-			)
-		} else {
-			// Save dialog size
-			a.saveDialogSize(editWindow)
-			// Close dialog
-			editWindow.Close()
-			// Reload table
-			a.loadInvoices()
+			dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), editWin)
+			return
+		}
+		a.loadInvoices()
+		editWin.Close()
+	}
+
+	deleteBtn := widget.NewButton("Löschen", func() {
+		dialog.ShowConfirm(
+			a.bundle.T("table.delete.confirm.title"),
+			a.bundle.T("table.delete.confirm.message", row.Dateiname, row.Auftraggeber, row.Bruttobetrag, row.Waehrung),
+			func(confirm bool) {
+				if confirm {
+					a.deleteInvoice(row)
+					editWin.Close()
+				}
+			},
+			editWin,
+		)
+	})
+	deleteBtn.Importance = widget.DangerImportance
+
+	buttonBar := container.NewBorder(nil, nil, deleteBtn, nil)
+
+	editWin.SetOnClosed(func() {
+		a.settings.PreviewSplitOffset = split.Offset
+		if err := a.settingsMgr.Save(a.settings); err != nil {
+			a.logger.Warn("Failed to save preview split offset: %v", err)
+		}
+		if onClose != nil {
+			onClose()
 		}
 	})
-	saveBtn.Importance = widget.HighImportance
 
-	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
-		a.saveDialogSize(editWindow)
-		editWindow.Close()
-	})
-
-	buttonBar := container.NewHBox(
-		saveBtn,
-		cancelBtn,
-	)
-
-	// Set size from settings or defaults
-	dialogWidth := float32(a.settings.DialogWidth)
-	dialogHeight := float32(a.settings.DialogHeight)
-	if dialogWidth < 500 {
-		dialogWidth = 850
-	}
-	if dialogHeight < 400 {
-		dialogHeight = 700
-	}
-	editWindow.Resize(fyne.NewSize(dialogWidth, dialogHeight))
-	editWindow.CenterOnScreen()
-
-	// Set content with buttons at bottom
-	editWindow.SetContent(container.NewBorder(
-		nil,
-		buttonBar,
-		nil, nil,
-		scrollForm,
-	))
-
-	// Set close handler to save size
-	editWindow.SetOnClosed(func() {
-		a.saveDialogSize(editWindow)
-	})
-
-	editWindow.Show()
+	editWin.SetContent(container.NewBorder(nil, buttonBar, nil, nil, split))
+	editWin.Resize(fyne.NewSize(1500, 850))
+	editWin.CenterOnScreen()
+	editWin.Show()
 }
 
-// updateInvoice updates an existing invoice in the CSV and renames the file if necessary.
+// updateInvoice updates an existing invoice: it renames/moves the main file
+// (possibly into another month's folder) and updates the CSV(s).
 func (a *App) updateInvoice(
 	originalRow core.CSVRow,
 	originalPath string,
 	company string,
 	shortDesc string,
 	invoiceNum string,
-	ustIdNr string,
+	vatID string,
 	invoiceDate string,
 	paymentDate string,
 	net float64,
@@ -513,17 +557,20 @@ func (a *App) updateInvoice(
 	comment string,
 	netEUR float64,
 	fee float64,
-	newAttachments []string,
+	filenameInput string,
+	targetYear int,
+	targetMonth time.Month,
+	ausgangsrechnung bool,
 ) error {
-	// Check if we will have attachments after this update
-	willHaveAttachments := originalRow.HatAnhaenge || len(newAttachments) > 0
+	// Attachments are managed live via the _AnhangN switcher in the edit
+	// dialog, so an updated invoice keeps whatever attachments it already had.
+	willHaveAttachments := originalRow.HatAnhaenge
 
-	// Build new meta
 	newMeta := core.Meta{
 		Auftraggeber:      company,
 		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,
-		UStIdNr:           ustIdNr,
+		VATID:             strings.TrimSpace(vatID),
 		Rechnungsdatum:    invoiceDate,
 		Bezahldatum:       paymentDate,
 		BetragNetto:       net,
@@ -539,117 +586,117 @@ func (a *App) updateInvoice(
 		Gebuehr:           fee,
 		HatAnhaenge:       willHaveAttachments,
 	}
-
-	// Extract year and month from invoice date (for filename template)
-	invoiceDateParts := strings.Split(invoiceDate, ".")
-	if len(invoiceDateParts) == 3 {
-		newMeta.Jahr = invoiceDateParts[2]  // Year is the third part (for template)
-		newMeta.Monat = invoiceDateParts[1] // Month is the second part (for template)
+	parts := strings.Split(invoiceDate, ".")
+	if len(parts) == 3 {
+		newMeta.Jahr = parts[2]
+		newMeta.Monat = parts[1]
 	}
 
-	// Generate new filename
-	newFilename, err := core.ApplyTemplate(
-		a.settings.NamingTemplate,
-		newMeta,
-		core.TemplateOpts{DecimalSeparator: a.settings.DecimalSeparator},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to generate filename: %w", err)
+	// Filename from the editable field.
+	newFilename := core.SanitizeFilename(strings.TrimSpace(filenameInput))
+	if newFilename == "" {
+		return fmt.Errorf("Bitte einen Dateinamen eingeben.")
+	}
+	if mainExt := strings.ToLower(filepath.Ext(originalPath)); mainExt != "" {
+		newFilename = core.ReplaceExtension(newFilename, mainExt)
 	}
 
-	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
-	newPath := filepath.Join(targetFolder, newFilename)
+	// Target folder (may differ from the source month).
+	targetFolder := a.storageManager.GetMonthFolder(targetYear, targetMonth)
+	unterordner := a.invoiceSubfolder(bankAccount, ausgangsrechnung)
+	if unterordner != "" {
+		targetFolder = filepath.Join(targetFolder, unterordner)
+	}
+	if err := os.MkdirAll(targetFolder, 0755); err != nil {
+		return fmt.Errorf("failed to create target folder: %w", err)
+	}
+	sameMonth := targetYear == a.currentYear && targetMonth == a.currentMonth
 
-	// Override Jahr/Monat with CURRENTLY SELECTED month for database storage
-	newMeta.Jahr = fmt.Sprintf("%04d", a.currentYear)
-	newMeta.Monat = fmt.Sprintf("%02d", a.currentMonth)
-
-	// Rename file if filename changed
-	if originalRow.Dateiname != newFilename {
-		a.logger.Info("Renaming file from %s to %s", originalRow.Dateiname, newFilename)
-
-		// Check if target file already exists (handle collisions)
-		finalName := newFilename
-		finalPath := newPath
-		counter := 2
-		for {
-			if _, err := os.Stat(finalPath); os.IsNotExist(err) {
-				break
-			}
-			// File exists, try with counter
-			ext := filepath.Ext(newFilename)
-			base := newFilename[:len(newFilename)-len(ext)]
-			finalName = fmt.Sprintf("%s_%d%s", base, counter, ext)
-			finalPath = filepath.Join(targetFolder, finalName)
-			counter++
-		}
-
-		newFilename = finalName
-		newPath = finalPath
-
-		// If attachments folder exists, rename it first
+	// Move the file FIRST — before any DB write — so a move failure
+	// leaves the CSVs and the invoice untouched and retryable. The move
+	// is robust (copy fallback) via MoveAndRename, which also resolves
+	// name collisions and returns the final name.
+	finalName := newFilename
+	intendedPath := filepath.Join(targetFolder, newFilename)
+	if intendedPath != originalPath {
+		// Move the folder-based attachments alongside the invoice first, so
+		// the "<base>-files" folder keeps tracking its invoice. Best-effort:
+		// a failure here is logged but does not abort the update.
 		if a.storageManager.HasAttachments(originalPath) {
 			oldAttachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
-			newAttachmentsFolder := a.storageManager.GetAttachmentsFolder(newPath)
-
+			newAttachmentsFolder := a.storageManager.GetAttachmentsFolder(intendedPath)
 			a.logger.Info("Renaming attachments folder from %s to %s",
 				filepath.Base(oldAttachmentsFolder), filepath.Base(newAttachmentsFolder))
-
-			if err := os.Rename(oldAttachmentsFolder, newAttachmentsFolder); err != nil {
+			if err := os.MkdirAll(filepath.Dir(newAttachmentsFolder), 0755); err != nil {
+				a.logger.Warn("Failed to prepare attachments folder: %v", err)
+			} else if err := os.Rename(oldAttachmentsFolder, newAttachmentsFolder); err != nil {
 				a.logger.Warn("Failed to rename attachments folder: %v", err)
 			}
 		}
 
-		// Rename the file
-		if err := os.Rename(originalPath, newPath); err != nil {
-			return fmt.Errorf("failed to rename file: %w", err)
-		}
-
-		// Update originalPath to the new path for attachment operations
-		originalPath = newPath
-	}
-
-	// Copy any new attachment files
-	if len(newAttachments) > 0 {
-		for _, attachmentPath := range newAttachments {
-			copiedName, err := a.storageManager.CopyFileToAttachments(attachmentPath, originalPath)
-			if err != nil {
-				a.logger.Warn("Failed to copy attachment %s: %v", filepath.Base(attachmentPath), err)
-				// Continue with other attachments even if one fails
-			} else {
-				a.logger.Debug("Copied attachment: %s", copiedName)
+		if _, statErr := os.Stat(originalPath); statErr == nil {
+			moved, mvErr := a.storageManager.MoveAndRename(originalPath, targetFolder, newFilename)
+			if mvErr != nil {
+				return fmt.Errorf("failed to move file: %w", mvErr)
 			}
+			finalName = moved
+		} else if _, tgtErr := os.Stat(intendedPath); tgtErr != nil {
+			// Source is gone and the file is not at the target either.
+			return fmt.Errorf("Quelldatei nicht gefunden: %s", originalPath)
 		}
-		a.logger.Info("Added %d new attachment(s)", len(newAttachments))
+		// else: source gone but the file is already at intendedPath — a
+		// prior attempt moved it; treat the move as already done.
 	}
 
-	// Update in SQLite database
-	jahr := fmt.Sprintf("%04d", a.currentYear)
-	monat := fmt.Sprintf("%02d", a.currentMonth)
+	// Jahr/Monat in der CSV = Ablage-Periode (wohin die Datei gelegt
+	// wird), nicht das Rechnungsdatum. Der Filename behält das
+	// Rechnungsdatum via Template.
+	newMeta.Jahr = fmt.Sprintf("%04d", targetYear)
+	newMeta.Monat = fmt.Sprintf("%02d", int(targetMonth))
 
 	newRow := newMeta.ToCSVRow()
-	newRow.Dateiname = newFilename
+	newRow.Dateiname = finalName
+	newRow.HatAnhaenge = originalRow.HatAnhaenge
+	newRow.AnzahlAnhaenge = originalRow.AnzahlAnhaenge
+	newRow.Unterordner = unterordner
 
-	err = a.dbRepo.Update(jahr, monat, originalRow.Dateiname, newRow)
-	if err != nil {
-		return fmt.Errorf("failed to update database: %w", err)
+	// SQLite is the source of truth. Jahr/Monat columns track the filing
+	// period (target folder), not the invoice date.
+	srcJahr := fmt.Sprintf("%04d", a.currentYear)
+	srcMonat := fmt.Sprintf("%02d", int(a.currentMonth))
+	tgtJahr := newMeta.Jahr
+	tgtMonat := newMeta.Monat
+
+	if sameMonth {
+		// In-place update within the same filing month.
+		if err := a.dbRepo.Update(srcJahr, srcMonat, originalRow.Dateiname, newRow); err != nil {
+			return fmt.Errorf("failed to update database: %w", err)
+		}
+	} else {
+		// Cross-month move: remove from the source month, insert into target.
+		if err := a.dbRepo.Delete(srcJahr, srcMonat, originalRow.Dateiname); err != nil {
+			return fmt.Errorf("failed to remove invoice from source month: %w", err)
+		}
+		if _, err := a.dbRepo.Insert(newRow); err != nil {
+			return fmt.Errorf("failed to insert invoice into target month: %w", err)
+		}
 	}
 
-	a.logger.Info("Updated invoice in database: %s", newFilename)
+	a.logger.Info("Updated invoice in database: %s", finalName)
 
-	// Export to CSV
-	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
-	err = a.dbRepo.ExportToCSV(jahr, monat, csvPath, a.csvRepo)
-	if err != nil {
-		a.logger.Warn("Failed to export to CSV after update: %v", err)
-		// Continue even if CSV export fails
+	// Export affected month(s) to CSV (database is source of truth).
+	srcCSV := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	if err := a.dbRepo.ExportToCSV(srcJahr, srcMonat, srcCSV, a.csvRepo); err != nil {
+		a.logger.Warn("Failed to export source month to CSV after update: %v", err)
+	}
+	if !sameMonth {
+		tgtCSV := a.storageManager.GetCSVPath(targetYear, targetMonth)
+		if err := a.dbRepo.ExportToCSV(tgtJahr, tgtMonat, tgtCSV, a.csvRepo); err != nil {
+			a.logger.Warn("Failed to export target month to CSV after update: %v", err)
+		}
 	}
 
-	// Show success message
-	a.showInfo(
-		"Gespeichert",
-		fmt.Sprintf("Rechnung wurde aktualisiert: %s", newFilename),
-	)
-
+	a.logger.Info("Updated invoice: %s", finalName)
+	a.showToast(fmt.Sprintf("✓ Rechnung aktualisiert: %s", finalName))
 	return nil
 }

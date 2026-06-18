@@ -37,6 +37,7 @@ func (sm *SettingsManager) Load() (Settings, error) {
 		return DefaultSettings(), fmt.Errorf("failed to parse settings: %w", err)
 	}
 
+	settings.BankAccounts = normalizeBankAccounts(settings.BankAccounts)
 	return settings, nil
 }
 
@@ -80,6 +81,40 @@ func GetConfigDir() (string, error) {
 	return configDir, nil
 }
 
+// GetProfileConfigDir returns the config directory for a named profile,
+// i.e. <AppData>/BuchISY/profiles/<profile>.
+func GetProfileConfigDir(profile string) (string, error) {
+	root, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "profiles", profile), nil
+}
+
+// ListProfiles returns the names of all existing profiles (the directory
+// names under <AppData>/BuchISY/profiles). A missing profiles directory
+// yields an empty list, not an error.
+func ListProfiles() ([]string, error) {
+	root, err := GetConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "profiles"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	names := []string{}
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names, nil
+}
+
 // GetDocumentsDir returns the user's Documents directory.
 func GetDocumentsDir() (string, error) {
 	home, err := os.UserHomeDir()
@@ -89,4 +124,24 @@ func GetDocumentsDir() (string, error) {
 
 	// On macOS and Windows, Documents is typically in the home directory
 	return filepath.Join(home, "Documents"), nil
+}
+
+// normalizeBankAccounts assigns a valid AccountType to every account,
+// migrating the legacy IsCreditCard flag. An empty or unknown type
+// becomes "creditcard" when the legacy flag is set, otherwise "bank".
+func normalizeBankAccounts(accounts []BankAccount) []BankAccount {
+	for i := range accounts {
+		switch accounts[i].AccountType {
+		case AccountTypeBank, AccountTypeCreditCard, AccountTypeCash:
+			// already a valid type
+		default:
+			if accounts[i].IsCreditCard {
+				accounts[i].AccountType = AccountTypeCreditCard
+			} else {
+				accounts[i].AccountType = AccountTypeBank
+			}
+		}
+		accounts[i].IsCreditCard = false
+	}
+	return accounts
 }
