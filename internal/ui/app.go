@@ -22,6 +22,7 @@ import (
 
 	"github.com/bergx2/buchisy/internal/anthropic"
 	"github.com/bergx2/buchisy/internal/core"
+	"github.com/bergx2/buchisy/internal/db"
 	"github.com/bergx2/buchisy/internal/i18n"
 	"github.com/bergx2/buchisy/internal/logging"
 	"github.com/zalando/go-keyring"
@@ -40,7 +41,8 @@ type App struct {
 	localExtractor     *core.LocalExtractor
 	anthropicExtractor *anthropic.Extractor
 	eInvoiceExtractor  *core.EInvoiceExtractor
-	csvRepo            *core.CSVRepository
+	dbRepo             *db.Repository
+	csvRepo            *core.CSVRepository // Kept for CSV export
 	storageManager     *core.StorageManager
 
 	// Current state
@@ -163,8 +165,22 @@ func (a *App) startProfile(profile string) {
 	localExtractor := core.NewLocalExtractor()
 	anthropicExtractor := anthropic.NewExtractor(logger, settings.DebugMode)
 	eInvoiceExtractor := core.NewEInvoiceExtractor()
+
+	// Initialize SQLite database (global database for all invoices)
+	dbPath := db.GetGlobalDBPath(configDir)
+	dbRepo, err := db.NewRepository(dbPath)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("failed to initialize database: %w", err), a.window)
+		return
+	}
+	logger.Info("Initialized SQLite database: %s", dbPath)
+
+	// CSV repository for export and migration
 	csvRepo := core.NewCSVRepository()
 	csvRepo.SetColumnOrder(settings.ColumnOrder)
+	csvRepo.SetSeparator(settings.CSVSeparator)
+	csvRepo.SetEncoding(settings.CSVEncoding)
+	csvRepo.SetDecimalSeparator(settings.DecimalSeparator)
 	storageManager := core.NewStorageManager(&settings)
 
 	// One-time, idempotent storage migrations.
@@ -193,6 +209,7 @@ func (a *App) startProfile(profile string) {
 	a.localExtractor = localExtractor
 	a.anthropicExtractor = anthropicExtractor
 	a.eInvoiceExtractor = eInvoiceExtractor
+	a.dbRepo = dbRepo
 	a.csvRepo = csvRepo
 	a.storageManager = storageManager
 	a.currentYear = now.Year()
@@ -455,8 +472,11 @@ func (a *App) Run() {
 	a.window.ShowAndRun()
 
 	// Cleanup
+	if a.dbRepo != nil {
+		_ = a.dbRepo.Close()
+	}
 	if a.logger != nil {
-		a.logger.Close()
+		_ = a.logger.Close()
 	}
 }
 
@@ -490,6 +510,7 @@ func (a *App) buildUI() fyne.CanvasObject {
 	// Create table first (before top bar, so callbacks don't crash)
 	a.invoiceTable = NewInvoiceTable(a.bundle, a)
 	a.invoiceTable.SetColumnOrder(a.settings.ColumnOrder)
+	a.invoiceTable.SetDecimalSeparator(a.settings.DecimalSeparator)
 	a.invoiceTable.SetWindow(a.window)
 
 	// Top bar (this may trigger callbacks when setting initial values).
@@ -615,7 +636,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	currentYearStr := fmt.Sprintf("%d", a.currentYear)
 	a.yearSelect = newHighlightedSelect(years, nowYearStr, func(selected string) {
 		var year int
-		fmt.Sscanf(selected, "%d", &year)
+		_, _ = fmt.Sscanf(selected, "%d", &year)
 		a.currentYear = year
 		a.onMonthChanged()
 	})
@@ -717,9 +738,10 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 }
 
 // pasteFromClipboard handles two clipboard contents:
-//   1. file paths (Explorer "Copy") → process the first supported file
-//   2. raw images (Snipping Tool, screenshots) → save as a temp PNG
-//      and process that
+//  1. file paths (Explorer "Copy") → process the first supported file
+//  2. raw images (Snipping Tool, screenshots) → save as a temp PNG
+//     and process that
+//
 // Falls back to a friendly info dialog when neither yields anything.
 func (a *App) pasteFromClipboard() {
 	for _, f := range clipboardFiles() {
@@ -822,33 +844,37 @@ func (a *App) onMonthChanged() {
 	a.loadInvoices()
 }
 
-// loadInvoices loads invoices for the current month, or for the entire
-// year if "Ganzes Jahr" is selected in the month dropdown.
+// loadInvoices loads invoices from the SQLite database for the current
+// month, or for the entire year if "Ganzes Jahr" is selected in the
+// month dropdown.
 func (a *App) loadInvoices() {
 	// Safety check in case table isn't initialized yet
 	if a.invoiceTable == nil {
 		return
 	}
 
+	jahr := fmt.Sprintf("%04d", a.currentYear)
+
 	if a.viewWholeYear {
 		var all []core.CSVRow
 		for m := time.January; m <= time.December; m++ {
-			csvPath := a.storageManager.GetCSVPath(a.currentYear, m)
-			rows, err := a.csvRepo.Load(csvPath)
+			monat := fmt.Sprintf("%02d", int(m))
+			monthRows, err := a.dbRepo.List(jahr, monat)
 			if err != nil {
-				a.logger.Error("Failed to load invoices for %d-%02d: %v", a.currentYear, m, err)
+				a.logger.Error("Failed to load invoices for %d-%02d: %v", a.currentYear, int(m), err)
 				continue
 			}
-			all = append(all, rows...)
+			all = append(all, monthRows...)
 		}
 		a.invoiceTable.SetData(all)
 		return
 	}
 
-	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
-	rows, err := a.csvRepo.Load(csvPath)
+	// Load from SQLite database
+	monat := fmt.Sprintf("%02d", a.currentMonth)
+	rows, err := a.dbRepo.List(jahr, monat)
 	if err != nil {
-		a.logger.Error("Failed to load invoices: %v", err)
+		a.logger.Error("Failed to load invoices from database: %v", err)
 		a.invoiceTable.SetData([]core.CSVRow{})
 		return
 	}
@@ -910,7 +936,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 			if a.settings.DebugMode {
 				a.logger.Debug("=== E-INVOICE METADATA ===")
 				a.logger.Debug("Format: %s", format)
-				a.logger.Debug("Company: %s", meta.Firmenname)
+				a.logger.Debug("Company: %s", meta.Auftraggeber)
 				a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
 				a.logger.Debug("Date: %s", meta.Rechnungsdatum)
 				a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
@@ -919,8 +945,8 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 			}
 
 			// Suggest account
-			if a.settings.AutoSelectAccount && meta.Firmenname != "" {
-				if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+			if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
+				if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 					meta.Gegenkonto = account
 				} else {
 					meta.Gegenkonto = a.settings.DefaultAccount
@@ -976,7 +1002,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 
 		meta, confidence, err = a.anthropicExtractor.Extract(ctx, apiKey, a.settings.AnthropicModel, text, a.ownVATIDList()...)
 		if err != nil {
-			return core.Meta{}, fmt.Errorf("Claude extraction failed: %w", err)
+			return core.Meta{}, fmt.Errorf("claude extraction failed: %w", err)
 		}
 	} else {
 		meta, confidence, err = a.localExtractor.Extract(text)
@@ -989,7 +1015,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 
 	if a.settings.DebugMode {
 		a.logger.Debug("=== EXTRACTED METADATA ===")
-		a.logger.Debug("Company: %s", meta.Firmenname)
+		a.logger.Debug("Company: %s", meta.Auftraggeber)
 		a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
 		a.logger.Debug("Date: %s", meta.Rechnungsdatum)
 		a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
@@ -998,8 +1024,8 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 	}
 
 	// Suggest account
-	if a.settings.AutoSelectAccount && meta.Firmenname != "" {
-		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+	if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
+		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 			meta.Gegenkonto = account
 		} else {
 			meta.Gegenkonto = a.settings.DefaultAccount
@@ -1041,22 +1067,22 @@ func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta,
 		a.ownVATIDList()...,
 	)
 	if err != nil {
-		return core.Meta{}, fmt.Errorf("Claude vision extraction failed: %w", err)
+		return core.Meta{}, fmt.Errorf("claude vision extraction failed: %w", err)
 	}
 
 	a.logger.Info("Vision extraction succeeded with confidence %.2f", confidence)
 
 	if a.settings.DebugMode {
 		a.logger.Debug("=== EXTRACTED METADATA (VISION) ===")
-		a.logger.Debug("Company: %s", meta.Firmenname)
+		a.logger.Debug("Company: %s", meta.Auftraggeber)
 		a.logger.Debug("Invoice #: %s", meta.Rechnungsnummer)
 		a.logger.Debug("Date: %s", meta.Rechnungsdatum)
 		a.logger.Debug("Gross: %.2f %s", meta.Bruttobetrag, meta.Waehrung)
 	}
 
 	// Suggest account
-	if a.settings.AutoSelectAccount && meta.Firmenname != "" {
-		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+	if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
+		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 			meta.Gegenkonto = account
 		} else {
 			meta.Gegenkonto = a.settings.DefaultAccount
@@ -1100,8 +1126,8 @@ func (a *App) extractImageData(ctx context.Context, path string) (core.Meta, err
 	a.logger.Info("Image vision extraction succeeded (confidence %.2f)", confidence)
 
 	// Mirror the PDF path's account suggestion.
-	if a.settings.AutoSelectAccount && meta.Firmenname != "" {
-		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Firmenname, a.settings.DefaultAccount); ok {
+	if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
+		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 			meta.Gegenkonto = account
 		} else {
 			meta.Gegenkonto = a.settings.DefaultAccount

@@ -28,7 +28,7 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 
 	// Extract company name (first substantial line, often at top)
 	if company := e.extractCompany(text); company != "" {
-		meta.Firmenname = company
+		meta.Auftraggeber = company
 		matched++
 	}
 	total++
@@ -69,7 +69,7 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 	}
 
 	// Generate short description
-	meta.Kurzbezeichnung = e.generateShortDesc(meta, text)
+	meta.Verwendungszweck = e.generateShortDesc(meta, text)
 
 	// Calculate confidence
 	if total > 0 {
@@ -82,12 +82,15 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 // extractCompany extracts the company name (vendor/issuer).
 // Looks for lines near the top that look like company names.
 func (e *LocalExtractor) extractCompany(text string) string {
+	// Compile regex once outside loop for performance
+	companyPattern := regexp.MustCompile(`(?i)(gmbh|ag|kg|ltd|inc|corp)`)
+
 	lines := strings.Split(text, "\n")
 	for i := 0; i < min(10, len(lines)); i++ {
 		line := strings.TrimSpace(lines[i])
 		if len(line) > 5 && len(line) < 100 {
 			// Check if it looks like a company name (has letters, possibly GmbH, etc.)
-			if matched, _ := regexp.MatchString(`(?i)(gmbh|ag|kg|ltd|inc|corp)`, line); matched {
+			if companyPattern.MatchString(line) {
 				return line
 			}
 		}
@@ -247,17 +250,19 @@ func (e *LocalExtractor) generateShortDesc(meta Meta, text string) string {
 	for _, kw := range keywords {
 		if strings.Contains(lowerText, kw) {
 			// Create description with keyword and month
+			// Capitalize first letter manually (strings.Title is deprecated)
+			capitalized := strings.ToUpper(kw[:1]) + kw[1:]
 			if meta.Monat != "" {
 				monthName := getMonthName(meta.Monat)
-				return strings.Title(kw) + " " + monthName + " " + meta.Jahr
+				return capitalized + " " + monthName + " " + meta.Jahr
 			}
-			return strings.Title(kw)
+			return capitalized
 		}
 	}
 
 	// Fallback: use company name or "Rechnung"
-	if meta.Firmenname != "" {
-		return "Rechnung " + meta.Firmenname
+	if meta.Auftraggeber != "" {
+		return "Rechnung " + meta.Auftraggeber
 	}
 
 	return "Rechnung"
@@ -286,7 +291,7 @@ func parseAmount(s string) float64 {
 
 	// Parse
 	var f float64
-	fmt.Sscanf(s, "%f", &f)
+	_, _ = fmt.Sscanf(s, "%f", &f)
 	return math.Round(f*100) / 100 // Round to 2 decimals
 }
 

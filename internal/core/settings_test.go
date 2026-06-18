@@ -8,10 +8,10 @@ import (
 
 func TestNormalizeBankAccounts(t *testing.T) {
 	in := []BankAccount{
-		{Name: "A", IsCreditCard: true},                                    // legacy card -> creditcard
-		{Name: "B"},                                                        // empty type -> bank
-		{Name: "C", AccountType: AccountTypeCash},                          // valid -> kept
-		{Name: "D", AccountType: "weird"},                                  // unknown -> bank
+		{Name: "A", IsCreditCard: true},           // legacy card -> creditcard
+		{Name: "B"},                               // empty type -> bank
+		{Name: "C", AccountType: AccountTypeCash}, // valid -> kept
+		{Name: "D", AccountType: "weird"},         // unknown -> bank
 		{Name: "E", AccountType: AccountTypeCreditCard, IsCreditCard: true}, // valid kept
 	}
 	want := []string{

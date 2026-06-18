@@ -28,12 +28,12 @@ var headerBackgroundColor = color.NRGBA{R: 214, G: 233, B: 248, A: 255}
 // edit dialog).
 type hoverLabel struct {
 	widget.Label
-	onHover       func(string, fyne.Position)
-	onExit        func()
-	tooltip       string
-	tooltipShown  bool
+	onHover        func(string, fyne.Position)
+	onExit         func()
+	tooltip        string
+	tooltipShown   bool
 	lastTooltipPos fyne.Position
-	onTap         func()
+	onTap          func()
 }
 
 func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLabel {
@@ -123,23 +123,24 @@ func (hl *hoverLabel) Cursor() desktop.Cursor {
 
 // InvoiceTable displays a table of invoices with filtering.
 type InvoiceTable struct {
-	bundle          *i18n.Bundle
-	data            []core.CSVRow
-	filtered        []core.CSVRow
-	table           *widget.Table
-	filterEntry     *widget.Entry
-	container       *fyne.Container
-	app             *App // Reference to main app for delete callback
-	lastSelectedRow int  // Track last selected row for context menu
-	lastSelectedCol int  // Track last selected data-column index (-1 = none)
-	window          fyne.Window
-	columnOrder     []string
-	tooltipPopup    *widget.PopUp // Shared tooltip popup
-	summaryLabel    *widget.Label // Sum bar under the table (Netto/MwSt/Brutto for filtered rows)
-	activeChip      string        // active quick-filter chip ("", "anhang", "teilzahlung", "ausgang")
-	chipRow         *fyne.Container
+	bundle           *i18n.Bundle
+	data             []core.CSVRow
+	filtered         []core.CSVRow
+	table            *widget.Table
+	filterEntry      *widget.Entry
+	container        *fyne.Container
+	app              *App // Reference to main app for delete callback
+	lastSelectedRow  int  // Track last selected row for context menu
+	lastSelectedCol  int  // Track last selected data-column index (-1 = none)
+	window           fyne.Window
+	columnOrder      []string
+	tooltipPopup     *widget.PopUp // Shared tooltip popup
+	decimalSeparator string        // Decimal separator for display
+	summaryLabel     *widget.Label // Sum bar under the table (Netto/MwSt/Brutto for filtered rows)
+	activeChip       string        // active quick-filter chip ("", "anhang", "teilzahlung", "ausgang")
+	chipRow          *fyne.Container
 
-	// Sort state. sortColumn is a CSV column ID like "Firmenname" or
+	// Sort state. sortColumn is a CSV column ID like "Auftraggeber" or
 	// the special sentinel "__typ__" for the file-type column.
 	sortColumn    string
 	sortAscending bool
@@ -154,6 +155,8 @@ var numericColumns = map[string]bool{
 	"Steuersatz_Prozent": true,
 	"Steuersatz_Betrag":  true,
 	"Bruttobetrag":       true,
+	"BetragNetto_EUR":    true,
+	"Gebuehr":            true,
 }
 
 var columnWidthMap = map[string]float32{
@@ -161,8 +164,8 @@ var columnWidthMap = map[string]float32{
 	"Rechnungsdatum":     120,
 	"Jahr":               80,
 	"Monat":              80,
-	"Firmenname":         200,
-	"Kurzbezeichnung":    220,
+	"Auftraggeber":       200,
+	"Verwendungszweck":   220,
 	"Rechnungsnummer":    160,
 	"BetragNetto":        120,
 	"Steuersatz_Prozent": 130,
@@ -170,18 +173,24 @@ var columnWidthMap = map[string]float32{
 	"Bruttobetrag":       120,
 	"Waehrung":           80,
 	"Gegenkonto":         110,
+	"Kommentar":          200,
+	"BetragNetto_EUR":    120,
+	"Gebuehr":            100,
+	"HatAnhaenge":        80,
+	"UStIdNr":            140,
 }
 
 // NewInvoiceTable creates a new invoice table.
 func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 	it := &InvoiceTable{
-		bundle:          bundle,
-		data:            []core.CSVRow{},
-		filtered:        []core.CSVRow{},
-		app:             app,
-		lastSelectedRow: -1,
-		lastSelectedCol: -1,
-		columnOrder:     sanitizeColumnOrder(nil),
+		bundle:           bundle,
+		data:             []core.CSVRow{},
+		filtered:         []core.CSVRow{},
+		app:              app,
+		lastSelectedRow:  -1,
+		lastSelectedCol:  -1,
+		columnOrder:      sanitizeColumnOrder(nil),
+		decimalSeparator: ",", // Default
 	}
 	// Restore last-used sort from app preferences so the user sees the
 	// same ordering as when they last closed the app.
@@ -629,6 +638,14 @@ func (it *InvoiceTable) SetColumnOrder(order []string) {
 	}
 }
 
+// SetDecimalSeparator sets the decimal separator for amount display.
+func (it *InvoiceTable) SetDecimalSeparator(sep string) {
+	it.decimalSeparator = sep
+	if it.table != nil {
+		it.table.Refresh()
+	}
+}
+
 // applyFilter filters the table data based on the query.
 func (it *InvoiceTable) applyFilter(query string) {
 	query = strings.ToLower(strings.TrimSpace(query))
@@ -807,6 +824,15 @@ func (it *InvoiceTable) getCellValue(row int, colID string) string {
 	return it.valueForColumn(it.filtered[row], colID)
 }
 
+// formatAmount formats a float with the configured decimal separator.
+func (it *InvoiceTable) formatAmount(amount float64) string {
+	formatted := fmt.Sprintf("%.2f", amount)
+	if it.decimalSeparator == "," {
+		formatted = strings.Replace(formatted, ".", ",", 1)
+	}
+	return formatted
+}
+
 func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	switch colID {
 	case "Dateiname":
@@ -817,22 +843,22 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		return row.Jahr
 	case "Monat":
 		return row.Monat
-	case "Firmenname":
-		return row.Firmenname
-	case "Kurzbezeichnung":
-		return row.Kurzbezeichnung
+	case "Auftraggeber":
+		return row.Auftraggeber
+	case "Verwendungszweck":
+		return row.Verwendungszweck
 	case "Rechnungsnummer":
 		return row.Rechnungsnummer
 	case "VATID":
 		return row.VATID
 	case "BetragNetto":
-		return formatDecimal(row.BetragNetto, it.app.settings.DecimalSeparator)
+		return it.formatAmount(row.BetragNetto)
 	case "Steuersatz_Prozent":
-		return formatDecimal(row.SteuersatzProzent, it.app.settings.DecimalSeparator)
+		return it.formatAmount(row.SteuersatzProzent)
 	case "Steuersatz_Betrag":
-		return formatDecimal(row.SteuersatzBetrag, it.app.settings.DecimalSeparator)
+		return it.formatAmount(row.SteuersatzBetrag)
 	case "Bruttobetrag":
-		return formatDecimal(row.Bruttobetrag, it.app.settings.DecimalSeparator)
+		return it.formatAmount(row.Bruttobetrag)
 	case "Waehrung":
 		return row.Waehrung
 	case "Gegenkonto":
@@ -849,11 +875,25 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 			return "✓"
 		}
 		return ""
-	case "HatAnhaenge":
-		if row.HatAnhaenge {
-			return "✓"
+	case "Kommentar":
+		return row.Kommentar
+	case "BetragNetto_EUR":
+		if row.BetragNetto_EUR > 0 {
+			return it.formatAmount(row.BetragNetto_EUR)
 		}
 		return ""
+	case "Gebuehr":
+		if row.Gebuehr > 0 {
+			return it.formatAmount(row.Gebuehr)
+		}
+		return ""
+	case "HatAnhaenge":
+		if row.HatAnhaenge {
+			return "📎"
+		}
+		return ""
+	case "UStIdNr":
+		return row.UStIdNr
 	case "AnzahlAnhaenge":
 		if row.AnzahlAnhaenge > 0 {
 			return fmt.Sprintf("%d", row.AnzahlAnhaenge)
@@ -861,24 +901,11 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		return ""
 	case "Unterordner":
 		return row.Unterordner
+	case "BuchungRef":
+		return row.BuchungRef
 	default:
 		return ""
 	}
-}
-
-// formatDateGerman converts ISO date (YYYY-MM-DD) to German format (DD.MM.YYYY).
-func formatDateGerman(isoDate string) string {
-	if isoDate == "" {
-		return ""
-	}
-	// Parse YYYY-MM-DD
-	if len(isoDate) >= 10 {
-		year := isoDate[0:4]
-		month := isoDate[5:7]
-		day := isoDate[8:10]
-		return day + "." + month + "." + year
-	}
-	return isoDate
 }
 
 func sanitizeColumnOrder(order []string) []string {

@@ -78,6 +78,18 @@ func (a *App) showSettingsView() {
 	decimalSelect := widget.NewSelect([]string{",", "."}, nil)
 	decimalSelect.SetSelected(a.settings.DecimalSeparator)
 
+	// CSV separator
+	csvSeparatorSelect := widget.NewSelect([]string{",", ";", "\\t"}, nil)
+	if a.settings.CSVSeparator == "\t" {
+		csvSeparatorSelect.SetSelected("\\t")
+	} else {
+		csvSeparatorSelect.SetSelected(a.settings.CSVSeparator)
+	}
+
+	// CSV encoding
+	csvEncodingSelect := widget.NewSelect([]string{"ISO-8859-1", "UTF-8"}, nil)
+	csvEncodingSelect.SetSelected(a.settings.CSVEncoding)
+
 	// Currency default
 	currencyEntry := widget.NewEntry()
 	currencyEntry.SetText(a.settings.CurrencyDefault)
@@ -478,6 +490,43 @@ func (a *App) showSettingsView() {
 	debugHint := newCopyableLabel(a.bundle, a.bundle.T("settings.debugMode.hint"))
 	debugHint.Wrapping = fyne.TextWrapWord
 
+	// Wipe database button
+	wipeDBBtn := widget.NewButton(a.bundle.T("settings.wipeDatabase"), func() {
+		// Show confirmation dialog
+		dialog.ShowConfirm(
+			a.bundle.T("settings.wipeDatabase.confirm.title"),
+			a.bundle.T("settings.wipeDatabase.confirm.message"),
+			func(confirmed bool) {
+				if !confirmed {
+					return
+				}
+
+				// Wipe the database
+				if a.dbRepo != nil {
+					if err := a.dbRepo.WipeDatabase(); err != nil {
+						a.showError(
+							a.bundle.T("error.processing.title"),
+							fmt.Sprintf("Failed to wipe database: %v", err),
+						)
+						return
+					}
+
+					a.logger.Info("Database wiped successfully")
+
+					// Reload invoices (will be empty)
+					a.loadInvoices()
+
+					a.showInfo(
+						a.bundle.T("settings.wipeDatabase"),
+						a.bundle.T("settings.wipeDatabase.success"),
+					)
+				}
+			},
+			a.window,
+		)
+	})
+	wipeDBBtn.Importance = widget.DangerImportance
+
 	// Column order
 	tempColumnOrder := make([]string, len(a.settings.ColumnOrder))
 	copy(tempColumnOrder, a.settings.ColumnOrder)
@@ -642,6 +691,13 @@ func (a *App) showSettingsView() {
 		),
 		widget.NewSeparator(),
 
+		widget.NewLabel(a.bundle.T("settings.csv")),
+		widget.NewForm(
+			widget.NewFormItem(a.bundle.T("settings.csvSeparator"), csvSeparatorSelect),
+			widget.NewFormItem(a.bundle.T("settings.csvEncoding"), csvEncodingSelect),
+		),
+		widget.NewSeparator(),
+
 		widget.NewLabel(a.bundle.T("settings.language")),
 		languageSelect,
 	))
@@ -690,6 +746,11 @@ func (a *App) showSettingsView() {
 		widget.NewLabel(a.bundle.T("settings.debug")),
 		debugModeCheck,
 		debugHint,
+		widget.NewSeparator(),
+
+		widget.NewLabel(a.bundle.T("settings.database")),
+		wipeDBBtn,
+		widget.NewLabel(a.bundle.T("settings.wipeDatabase.hint")),
 	))
 
 	// Build tabbed container
@@ -721,6 +782,14 @@ func (a *App) showSettingsView() {
 
 		newSettings.AnthropicModel = modelEntry.Text
 
+		// CSV settings
+		if csvSeparatorSelect.Selected == "\\t" {
+			newSettings.CSVSeparator = "\t"
+		} else {
+			newSettings.CSVSeparator = csvSeparatorSelect.Selected
+		}
+		newSettings.CSVEncoding = csvEncodingSelect.Selected
+
 		// Save API key to keyring
 		if apiKeyEntry.Text != "" {
 			err := keyring.Set("BuchISY", a.keyringAccount(), apiKeyEntry.Text)
@@ -748,6 +817,11 @@ func (a *App) showSettingsView() {
 
 		newSettings.RememberCompanyAccount = rememberCompanyCheck.Checked
 		newSettings.AutoSelectAccount = autoSelectCheck.Checked
+
+		// Update CSV repository settings
+		a.csvRepo.SetSeparator(newSettings.CSVSeparator)
+		a.csvRepo.SetEncoding(newSettings.CSVEncoding)
+		a.csvRepo.SetDecimalSeparator(newSettings.DecimalSeparator)
 
 		if languageSelect.Selected == a.bundle.T("settings.language.de") {
 			newSettings.Language = "de"
@@ -798,6 +872,7 @@ func (a *App) showSettingsView() {
 
 		if a.invoiceTable != nil {
 			a.invoiceTable.SetColumnOrder(newSettings.ColumnOrder)
+			a.invoiceTable.SetDecimalSeparator(newSettings.DecimalSeparator)
 		}
 		a.loadInvoices()
 

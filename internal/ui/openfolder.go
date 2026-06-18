@@ -35,7 +35,39 @@ func (a *App) openFolderInOS(path string) {
 	}
 }
 
+// openFile opens a file with the default system application.
+func (a *App) openFile(path string) {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin": // macOS
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", path)
+	case "linux":
+		cmd = exec.Command("xdg-open", path)
+	default:
+		a.showError(
+			a.bundle.T("error.processing.title"),
+			"Unsupported operating system",
+		)
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		a.logger.Error("Failed to open file: %v", err)
+		a.showError(
+			a.bundle.T("error.processing.title"),
+			a.bundle.T("error.openFile", err.Error()),
+		)
+	} else {
+		a.logger.Info("Opened file: %s", path)
+	}
+}
+
 // openFileInOS opens a file in the operating system's default application.
+// Used by the invoice modal, table actions, and edit dialog; reports failures
+// via the "error.openOriginal" i18n message.
 func (a *App) openFileInOS(path string) {
 	var cmd *exec.Cmd
 
@@ -43,7 +75,7 @@ func (a *App) openFileInOS(path string) {
 	case "darwin": // macOS
 		cmd = exec.Command("open", path)
 	case "windows":
-		cmd = exec.Command("explorer", path)
+		cmd = exec.Command("cmd", "/c", "start", "", path)
 	case "linux":
 		cmd = exec.Command("xdg-open", path)
 	default:
@@ -63,4 +95,10 @@ func (a *App) openFileInOS(path string) {
 	} else {
 		a.logger.Info("Opened file: %s", path)
 	}
+}
+
+// openFolder opens a folder in the system file manager.
+// Alias for openFolderInOS for consistency with openFile naming.
+func (a *App) openFolder(path string) {
+	a.openFolderInOS(path)
 }

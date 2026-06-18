@@ -16,7 +16,7 @@ func TestComputeYearOverview(t *testing.T) {
 	}
 	// February: no stored book, one cash invoice of 30.
 	months[1] = MonthInput{
-		Invoices: []CSVRow{{Firmenname: "X", Bruttobetrag: 30, Bezahldatum: "05.02.2026"}},
+		Invoices: []CSVRow{{Auftraggeber: "X", Bruttobetrag: 30, Bezahldatum: "05.02.2026"}},
 	}
 	// March..December: empty.
 

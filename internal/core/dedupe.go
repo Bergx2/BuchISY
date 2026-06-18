@@ -4,7 +4,7 @@ import "math"
 
 // IsDuplicate checks if a row is a duplicate of any existing row.
 // A row is considered a duplicate if ALL of the following fields match:
-// - Firmenname (normalized)
+// - Auftraggeber (normalized)
 // - Rechnungsnummer
 // - Rechnungsdatum
 // - Bruttobetrag (approximately equal)
@@ -12,7 +12,7 @@ import "math"
 func IsDuplicate(existingRows []CSVRow, newRow CSVRow) bool {
 	for _, existing := range existingRows {
 		// All fields must match for it to be a duplicate
-		if NormalizeCompanyName(existing.Firmenname) == NormalizeCompanyName(newRow.Firmenname) &&
+		if NormalizeCompanyName(existing.Auftraggeber) == NormalizeCompanyName(newRow.Auftraggeber) &&
 			existing.Rechnungsnummer == newRow.Rechnungsnummer &&
 			existing.Rechnungsdatum == newRow.Rechnungsdatum &&
 			floatEquals(existing.Bruttobetrag, newRow.Bruttobetrag) &&

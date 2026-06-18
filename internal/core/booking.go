@@ -27,12 +27,12 @@ func (r InvoiceRef) String() string {
 // statement page. The list is built by ParseStatementBookings and
 // cached inside the StatementMetadata.
 type StatementBooking struct {
-	Page       int         `json:"page"`                 // 0-based PDF page
-	LineIdx    int         `json:"line_idx"`             // 1-based, restarts per page
-	Date       string      `json:"date"`                 // "DD.MM.YYYY" or "DD.MM."
-	TopPt      float64     `json:"top_pt"`               // vertical position in PDF points
-	LeftPt     float64     `json:"left_pt"`              // leftmost x position
-	Text       string      `json:"text"`                 // full visible line text
+	Page       int         `json:"page"`                  // 0-based PDF page
+	LineIdx    int         `json:"line_idx"`              // 1-based, restarts per page
+	Date       string      `json:"date"`                  // "DD.MM.YYYY" or "DD.MM."
+	TopPt      float64     `json:"top_pt"`                // vertical position in PDF points
+	LeftPt     float64     `json:"left_pt"`               // leftmost x position
+	Text       string      `json:"text"`                  // full visible line text
 	InvoiceRef *InvoiceRef `json:"invoice_ref,omitempty"` // nil = unlinked
 }
 

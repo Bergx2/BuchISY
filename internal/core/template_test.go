@@ -13,7 +13,7 @@ func TestApplyTemplateKurzbez8(t *testing.T) {
 		{"", ""},
 	}
 	for _, c := range cases {
-		got, err := ApplyTemplate("${Kurzbez8}", Meta{Kurzbezeichnung: c.kurzbez}, opts)
+		got, err := ApplyTemplate("${Kurzbez8}", Meta{Verwendungszweck: c.kurzbez}, opts)
 		if err != nil {
 			t.Fatalf("ApplyTemplate(%q): %v", c.kurzbez, err)
 		}

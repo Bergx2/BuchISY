@@ -94,7 +94,7 @@ func ComputeCashReport(book CashBook, invoices []CSVRow) ([]CashEntry, float64) 
 		}
 		t, ok := parseGermanDate(dateStr)
 		items = append(items, dated{
-			entry: CashEntry{Datum: dateStr, Beschreibung: inv.Firmenname, Beleg: inv.Dateiname, Ausgabe: inv.Bruttobetrag},
+			entry: CashEntry{Datum: dateStr, Beschreibung: inv.Auftraggeber, Beleg: inv.Dateiname, Ausgabe: inv.Bruttobetrag},
 			t:     t, ok: ok,
 		})
 	}

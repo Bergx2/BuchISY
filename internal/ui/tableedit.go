@@ -79,13 +79,13 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	var editWin fyne.Window
 
 	companyEntry := widget.NewEntry()
-	companyEntry.SetText(meta.Firmenname)
+	companyEntry.SetText(meta.Auftraggeber)
 	companyEntry.SetPlaceHolder(a.bundle.T("field.company"))
 
 	shortDescEntry := widget.NewEntry()
-	shortDescEntry.SetText(meta.Kurzbezeichnung)
+	shortDescEntry.SetText(meta.Verwendungszweck)
 	shortDescEntry.SetPlaceHolder(a.bundle.T("field.shortdesc"))
-	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Kurzbezeichnung)))
+	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Verwendungszweck)))
 
 	invoiceNumEntry := widget.NewEntry()
 	invoiceNumEntry.SetText(meta.Rechnungsnummer)
@@ -170,6 +170,44 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	ausgangsrechnungCheck := widget.NewCheck("Ausgangsrechnung", nil)
 	ausgangsrechnungCheck.SetChecked(row.Unterordner == "Ausgangsrechnungen")
 
+	// Comment field (multiline)
+	commentEntry := widget.NewMultiLineEntry()
+	commentEntry.SetText(meta.Kommentar)
+	commentEntry.SetPlaceHolder(a.bundle.T("field.comment"))
+	commentEntry.SetMinRowsVisible(3)
+
+	// Currency conversion fields (only relevant for non-default currency).
+	netEUREntry := widget.NewEntry()
+	if meta.BetragNetto_EUR > 0 {
+		netEUREntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto_EUR))
+	}
+	netEUREntry.SetPlaceHolder(a.bundle.T("field.net_eur"))
+
+	feeEntry := widget.NewEntry()
+	if meta.Gebuehr > 0 {
+		feeEntry.SetText(fmt.Sprintf("%.2f", meta.Gebuehr))
+	}
+	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
+
+	// Currency conversion fields are only shown when a non-default
+	// currency is selected; this container is (re)populated on demand.
+	currencyConversionContainer := container.NewVBox()
+	updateCurrencyConversionVisibility := func() {
+		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+			defaultCurrency := a.settings.CurrencyDefault
+			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
+			currencyConversionContainer.Objects = []fyne.CanvasObject{
+				selectableForm(a.bundle,
+					fi(fmt.Sprintf("%s (%s)", a.bundle.T("field.net_eur"), defaultCurrency), netEUREntry),
+					fi(feeLabel, feeEntry),
+				),
+			}
+		} else {
+			currencyConversionContainer.Objects = []fyne.CanvasObject{}
+		}
+		currencyConversionContainer.Refresh()
+	}
+
 	// Ablagemonat (filing month) — prefilled with the folder the invoice
 	// currently lives in.
 	yearSelect := widget.NewSelect(generateYearOptions(), nil)
@@ -187,8 +225,8 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			return
 		}
 		currentMeta := core.Meta{
-			Firmenname:        companyEntry.Text,
-			Kurzbezeichnung:   shortDescEntry.Text,
+			Auftraggeber:      companyEntry.Text,
+			Verwendungszweck:  shortDescEntry.Text,
 			Rechnungsnummer:   invoiceNumEntry.Text,
 			Rechnungsdatum:    dateEntry.Text,
 			BetragNetto:       parseFloat(netEntry.Text, a.settings.DecimalSeparator),
@@ -236,7 +274,6 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	vatPercentEntry.OnChanged = onAnyChange
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
-	currencySelect.OnChanged = onAnyChange
 
 	// As soon as two of {Netto, MwSt %, MwSt-Betrag, Brutto} are
 	// entered, fill in the others automatically.
@@ -378,10 +415,21 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			fi("", partialPaymentCheck),
 			fi("", ausgangsrechnungCheck),
 		)),
+		// Währungsumrechnung (nur bei Fremdwährung sichtbar).
+		currencyConversionContainer,
+		section(a.bundle.T("field.comment"), commentEntry),
 		widget.NewSeparator(),
 		newCopyableLabel(a.bundle, a.bundle.T("modal.filenamePreview")),
 		filenameEntry,
 	)
+
+	// Show/hide the currency-conversion fields and refresh the preview
+	// whenever the currency changes.
+	currencySelect.OnChanged = func(string) {
+		updateCurrencyConversionVisibility()
+		updateFilenamePreview()
+	}
+	updateCurrencyConversionVisibility()
 
 	scrollForm := container.NewVScroll(form)
 	// Keep just a sliver minimum so the user can collapse the form pane
@@ -438,6 +486,9 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			accountMap[accountSelect.Selected],
 			bankAccountSelect.Selected,
 			partialPaymentCheck.Checked,
+			commentEntry.Text,
+			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
+			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
 			filenameEntry.Text,
 			targetYear,
 			targetMonth,
@@ -454,7 +505,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	deleteBtn := widget.NewButton("Löschen", func() {
 		dialog.ShowConfirm(
 			a.bundle.T("table.delete.confirm.title"),
-			a.bundle.T("table.delete.confirm.message", row.Dateiname, row.Firmenname, row.Bruttobetrag, row.Waehrung),
+			a.bundle.T("table.delete.confirm.message", row.Dateiname, row.Auftraggeber, row.Bruttobetrag, row.Waehrung),
 			func(confirm bool) {
 				if confirm {
 					a.deleteInvoice(row)
@@ -503,14 +554,21 @@ func (a *App) updateInvoice(
 	account int,
 	bankAccount string,
 	partialPayment bool,
+	comment string,
+	netEUR float64,
+	fee float64,
 	filenameInput string,
 	targetYear int,
 	targetMonth time.Month,
 	ausgangsrechnung bool,
 ) error {
+	// Attachments are managed live via the _AnhangN switcher in the edit
+	// dialog, so an updated invoice keeps whatever attachments it already had.
+	willHaveAttachments := originalRow.HatAnhaenge
+
 	newMeta := core.Meta{
-		Firmenname:        company,
-		Kurzbezeichnung:   shortDesc,
+		Auftraggeber:      company,
+		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,
 		VATID:             strings.TrimSpace(vatID),
 		Rechnungsdatum:    invoiceDate,
@@ -523,6 +581,10 @@ func (a *App) updateInvoice(
 		Gegenkonto:        account,
 		Bankkonto:         bankAccount,
 		Teilzahlung:       partialPayment,
+		Kommentar:         comment,
+		BetragNetto_EUR:   netEUR,
+		Gebuehr:           fee,
+		HatAnhaenge:       willHaveAttachments,
 	}
 	parts := strings.Split(invoiceDate, ".")
 	if len(parts) == 3 {
@@ -550,13 +612,28 @@ func (a *App) updateInvoice(
 	}
 	sameMonth := targetYear == a.currentYear && targetMonth == a.currentMonth
 
-	// Move the file FIRST — before any CSV write — so a move failure
+	// Move the file FIRST — before any DB write — so a move failure
 	// leaves the CSVs and the invoice untouched and retryable. The move
 	// is robust (copy fallback) via MoveAndRename, which also resolves
 	// name collisions and returns the final name.
 	finalName := newFilename
 	intendedPath := filepath.Join(targetFolder, newFilename)
 	if intendedPath != originalPath {
+		// Move the folder-based attachments alongside the invoice first, so
+		// the "<base>-files" folder keeps tracking its invoice. Best-effort:
+		// a failure here is logged but does not abort the update.
+		if a.storageManager.HasAttachments(originalPath) {
+			oldAttachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
+			newAttachmentsFolder := a.storageManager.GetAttachmentsFolder(intendedPath)
+			a.logger.Info("Renaming attachments folder from %s to %s",
+				filepath.Base(oldAttachmentsFolder), filepath.Base(newAttachmentsFolder))
+			if err := os.MkdirAll(filepath.Dir(newAttachmentsFolder), 0755); err != nil {
+				a.logger.Warn("Failed to prepare attachments folder: %v", err)
+			} else if err := os.Rename(oldAttachmentsFolder, newAttachmentsFolder); err != nil {
+				a.logger.Warn("Failed to rename attachments folder: %v", err)
+			}
+		}
+
 		if _, statErr := os.Stat(originalPath); statErr == nil {
 			moved, mvErr := a.storageManager.MoveAndRename(originalPath, targetFolder, newFilename)
 			if mvErr != nil {
@@ -583,57 +660,39 @@ func (a *App) updateInvoice(
 	newRow.AnzahlAnhaenge = originalRow.AnzahlAnhaenge
 	newRow.Unterordner = unterordner
 
-	sourceCSV := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	// SQLite is the source of truth. Jahr/Monat columns track the filing
+	// period (target folder), not the invoice date.
+	srcJahr := fmt.Sprintf("%04d", a.currentYear)
+	srcMonat := fmt.Sprintf("%02d", int(a.currentMonth))
+	tgtJahr := newMeta.Jahr
+	tgtMonat := newMeta.Monat
 
 	if sameMonth {
-		// Upsert in the single CSV: drop any row for the old or the new
-		// filename, then append the updated row.
-		rows, err := a.csvRepo.Load(sourceCSV)
-		if err != nil {
-			return fmt.Errorf("failed to load CSV: %w", err)
-		}
-		updated := make([]core.CSVRow, 0, len(rows)+1)
-		for _, r := range rows {
-			if r.Dateiname == originalRow.Dateiname || r.Dateiname == finalName {
-				continue
-			}
-			updated = append(updated, r)
-		}
-		updated = append(updated, newRow)
-		if err := a.rewriteCSV(sourceCSV, updated); err != nil {
-			return fmt.Errorf("failed to update CSV: %w", err)
+		// In-place update within the same filing month.
+		if err := a.dbRepo.Update(srcJahr, srcMonat, originalRow.Dateiname, newRow); err != nil {
+			return fmt.Errorf("failed to update database: %w", err)
 		}
 	} else {
-		// Remove the row from the source CSV.
-		srcRows, err := a.csvRepo.Load(sourceCSV)
-		if err != nil {
-			return fmt.Errorf("failed to load source CSV: %w", err)
+		// Cross-month move: remove from the source month, insert into target.
+		if err := a.dbRepo.Delete(srcJahr, srcMonat, originalRow.Dateiname); err != nil {
+			return fmt.Errorf("failed to remove invoice from source month: %w", err)
 		}
-		kept := make([]core.CSVRow, 0, len(srcRows))
-		for _, r := range srcRows {
-			if r.Dateiname != originalRow.Dateiname {
-				kept = append(kept, r)
-			}
+		if _, err := a.dbRepo.Insert(newRow); err != nil {
+			return fmt.Errorf("failed to insert invoice into target month: %w", err)
 		}
-		if err := a.rewriteCSV(sourceCSV, kept); err != nil {
-			return fmt.Errorf("failed to update source CSV: %w", err)
-		}
-		// Upsert into the target CSV: drop any existing row with the same
-		// filename first, so a repeated save cannot create a duplicate.
-		targetCSV := a.storageManager.GetCSVPath(targetYear, targetMonth)
-		tgtRows, err := a.csvRepo.Load(targetCSV)
-		if err != nil {
-			return fmt.Errorf("failed to load target CSV: %w", err)
-		}
-		merged := make([]core.CSVRow, 0, len(tgtRows)+1)
-		for _, r := range tgtRows {
-			if r.Dateiname != finalName {
-				merged = append(merged, r)
-			}
-		}
-		merged = append(merged, newRow)
-		if err := a.rewriteCSV(targetCSV, merged); err != nil {
-			return fmt.Errorf("failed to update target CSV: %w", err)
+	}
+
+	a.logger.Info("Updated invoice in database: %s", finalName)
+
+	// Export affected month(s) to CSV (database is source of truth).
+	srcCSV := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	if err := a.dbRepo.ExportToCSV(srcJahr, srcMonat, srcCSV, a.csvRepo); err != nil {
+		a.logger.Warn("Failed to export source month to CSV after update: %v", err)
+	}
+	if !sameMonth {
+		tgtCSV := a.storageManager.GetCSVPath(targetYear, targetMonth)
+		if err := a.dbRepo.ExportToCSV(tgtJahr, tgtMonat, tgtCSV, a.csvRepo); err != nil {
+			a.logger.Warn("Failed to export target month to CSV after update: %v", err)
 		}
 	}
 

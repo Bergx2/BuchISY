@@ -8,8 +8,8 @@ import (
 
 // Meta represents the invoice metadata extracted from a PDF.
 type Meta struct {
-	Firmenname        string  // Company name
-	Kurzbezeichnung   string  // Short description (max 80 chars)
+	Auftraggeber      string  // Company name (previously Firmenname)
+	Verwendungszweck  string  // Purpose/description (previously Kurzbezeichnung)
 	Rechnungsnummer   string  // Invoice number
 	VATID             string  // VAT-ID Nr. of the SENDER (e.g. DE123456789)
 	BetragNetto       float64 // Net amount
@@ -25,6 +25,11 @@ type Meta struct {
 	Bezahldatum       string  // Payment date DD.MM.YYYY
 	Teilzahlung       bool    // Partial payment flag
 	Dateiname         string  // Final filename
+	Kommentar         string  // Comment/note for this invoice
+	BetragNetto_EUR   float64 // Net amount in default currency (EUR) for foreign currency invoices
+	Gebuehr           float64 // Fee (e.g., currency exchange fee)
+	HatAnhaenge       bool    // Indicates if invoice has additional file attachments
+	UStIdNr           string  // VAT ID number of invoice issuer (2 letter country code + 8-12 digits)
 	// BuchungRef is "<statementFilename>|<page>|<lineIdx>" pointing to
 	// a booking on a bank statement; empty when this invoice is not
 	// linked to a statement. The statement is identified within the
@@ -77,14 +82,18 @@ type Settings struct {
 	LastUsedFolder         string        `json:"last_used_folder"`      // Last folder for Belege / attachments
 	LastStatementFolder    string        `json:"last_statement_folder"` // Last folder for Kontoauszüge
 	OwnVATID               string        `json:"own_vat_id"`            // The user's own company VAT-ID — excluded during auto-extract
-	DebugMode              bool          `json:"debug_mode"`       // Enable verbose debug logging
-	WindowWidth            int           `json:"window_width"`     // Window width in pixels
-	WindowHeight           int           `json:"window_height"`    // Window height in pixels
-	WindowX                int           `json:"window_x"`         // Window X position
-	WindowY                int           `json:"window_y"`         // Window Y position
-	ColumnOrder            []string      `json:"column_order"`     // Order of columns in table and CSV
-	UIScale                float32       `json:"ui_scale"`         // UI zoom factor (1.0 = 100%)
-	PreviewSplitOffset     float64       `json:"preview_split_offset"` // Divider position in the confirmation window (0..1)
+	DebugMode              bool          `json:"debug_mode"`            // Enable verbose debug logging
+	WindowWidth            int           `json:"window_width"`          // Window width in pixels
+	WindowHeight           int           `json:"window_height"`         // Window height in pixels
+	WindowX                int           `json:"window_x"`              // Window X position
+	WindowY                int           `json:"window_y"`              // Window Y position
+	DialogWidth            int           `json:"dialog_width"`          // Invoice dialog width in pixels
+	DialogHeight           int           `json:"dialog_height"`         // Invoice dialog height in pixels
+	CSVSeparator           string        `json:"csv_separator"`         // CSV field separator: "," (comma), ";" (semicolon), "\t" (tab)
+	CSVEncoding            string        `json:"csv_encoding"`          // CSV file encoding: "ISO-8859-1" or "UTF-8"
+	ColumnOrder            []string      `json:"column_order"`          // Order of columns in table and CSV
+	UIScale                float32       `json:"ui_scale"`              // UI zoom factor (1.0 = 100%)
+	PreviewSplitOffset     float64       `json:"preview_split_offset"`  // Divider position in the confirmation window (0..1)
 }
 
 // DefaultSettings returns the default application settings.
@@ -114,6 +123,10 @@ func DefaultSettings() Settings {
 		WindowHeight:           875,
 		WindowX:                -1, // -1 means center on screen
 		WindowY:                -1,
+		DialogWidth:            850,
+		DialogHeight:           700,
+		CSVSeparator:           ",",
+		CSVEncoding:            "ISO-8859-1",
 		ColumnOrder:            DefaultCSVColumns,
 		UIScale:                1.0,
 		PreviewSplitOffset:     0.33,
@@ -143,8 +156,8 @@ type CSVRow struct {
 	Rechnungsdatum    string
 	Jahr              string
 	Monat             string
-	Firmenname        string
-	Kurzbezeichnung   string
+	Auftraggeber      string
+	Verwendungszweck  string
 	Rechnungsnummer   string
 	VATID             string // VAT-ID Nr. of the sender
 	BetragNetto       float64
@@ -156,7 +169,11 @@ type CSVRow struct {
 	Bankkonto         string
 	Bezahldatum       string
 	Teilzahlung       bool
+	Kommentar         string
+	BetragNetto_EUR   float64
+	Gebuehr           float64
 	HatAnhaenge       bool
+	UStIdNr           string
 	AnzahlAnhaenge    int
 	Unterordner       string // "" | "Bar" | "Ausgangsrechnungen"
 	BuchungRef        string // statementFilename|page|lineIdx (within the Bankkonto's folder)
@@ -164,13 +181,19 @@ type CSVRow struct {
 
 // ToCSVRow converts Meta to CSVRow.
 func (m Meta) ToCSVRow() CSVRow {
+	// Set Verwendungszweck to "-" if empty
+	verwendungszweck := m.Verwendungszweck
+	if verwendungszweck == "" {
+		verwendungszweck = "-"
+	}
+
 	return CSVRow{
 		Dateiname:         m.Dateiname,
 		Rechnungsdatum:    m.Rechnungsdatum,
 		Jahr:              m.Jahr,
 		Monat:             m.Monat,
-		Firmenname:        m.Firmenname,
-		Kurzbezeichnung:   m.Kurzbezeichnung,
+		Auftraggeber:      m.Auftraggeber,
+		Verwendungszweck:  verwendungszweck,
 		Rechnungsnummer:   m.Rechnungsnummer,
 		VATID:             m.VATID,
 		BetragNetto:       m.BetragNetto,
@@ -182,6 +205,11 @@ func (m Meta) ToCSVRow() CSVRow {
 		Bankkonto:         m.Bankkonto,
 		Bezahldatum:       m.Bezahldatum,
 		Teilzahlung:       m.Teilzahlung,
+		Kommentar:         m.Kommentar,
+		BetragNetto_EUR:   m.BetragNetto_EUR,
+		Gebuehr:           m.Gebuehr,
+		HatAnhaenge:       m.HatAnhaenge,
+		UStIdNr:           m.UStIdNr,
 		BuchungRef:        m.BuchungRef,
 	}
 }
@@ -193,8 +221,8 @@ func (r CSVRow) ToMeta() Meta {
 		Rechnungsdatum:    r.Rechnungsdatum,
 		Jahr:              r.Jahr,
 		Monat:             r.Monat,
-		Firmenname:        r.Firmenname,
-		Kurzbezeichnung:   r.Kurzbezeichnung,
+		Auftraggeber:      r.Auftraggeber,
+		Verwendungszweck:  r.Verwendungszweck,
 		Rechnungsnummer:   r.Rechnungsnummer,
 		VATID:             r.VATID,
 		BetragNetto:       r.BetragNetto,
@@ -206,6 +234,11 @@ func (r CSVRow) ToMeta() Meta {
 		Bankkonto:         r.Bankkonto,
 		Bezahldatum:       r.Bezahldatum,
 		Teilzahlung:       r.Teilzahlung,
+		Kommentar:         r.Kommentar,
+		BetragNetto_EUR:   r.BetragNetto_EUR,
+		Gebuehr:           r.Gebuehr,
+		HatAnhaenge:       r.HatAnhaenge,
+		UStIdNr:           r.UStIdNr,
 		BuchungRef:        r.BuchungRef,
 	}
 }

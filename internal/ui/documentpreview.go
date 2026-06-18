@@ -13,6 +13,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -189,7 +190,7 @@ func previewPlaceholder(mainPath, message string) fyne.CanvasObject {
 
 // highlightValues collects the extracted values to look for in the document.
 func highlightValues(meta core.Meta) []string {
-	vals := []string{meta.Firmenname, meta.Rechnungsnummer, meta.Waehrung}
+	vals := []string{meta.Auftraggeber, meta.Rechnungsnummer, meta.Waehrung}
 	for _, amt := range []float64{meta.BetragNetto, meta.SteuersatzBetrag, meta.Bruttobetrag} {
 		dot := fmt.Sprintf("%.2f", amt)
 		vals = append(vals, dot, strings.ReplaceAll(dot, ".", ","))

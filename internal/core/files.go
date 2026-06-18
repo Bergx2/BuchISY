@@ -9,13 +9,13 @@ import (
 // supportedExtensions is the set of file extensions BuchISY accepts as an
 // invoice main file or as an attachment (lower-case, leading dot).
 var supportedExtensions = map[string]struct{}{
-	".pdf":  {},
-	".doc":  {}, ".docx": {},
-	".xls":  {}, ".xlsx": {},
-	".ppt":  {}, ".pptx": {},
-	".odt":  {}, ".ods": {}, ".odp": {},
-	".jpg":  {}, ".jpeg": {}, ".png": {}, ".gif": {},
-	".bmp":  {}, ".tif": {}, ".tiff": {}, ".webp": {}, ".heic": {}, ".svg": {},
+	".pdf": {},
+	".doc": {}, ".docx": {},
+	".xls": {}, ".xlsx": {},
+	".ppt": {}, ".pptx": {},
+	".odt": {}, ".ods": {}, ".odp": {},
+	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {},
+	".bmp": {}, ".tif": {}, ".tiff": {}, ".webp": {}, ".heic": {}, ".svg": {},
 }
 
 // IsSupportedFile reports whether the file name has an extension BuchISY

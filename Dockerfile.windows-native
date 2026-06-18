@@ -1,0 +1,20 @@
+# Use Windows Server Core with Go pre-installed
+# This creates a native Windows build environment
+FROM golang:1.25-windowsservercore-ltsc2022
+
+# Set working directory
+WORKDIR C:\\build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the entire project
+COPY . .
+
+# Build the Windows executable with embedded translations
+# Using native Windows toolchain avoids all cross-compilation issues
+RUN go build -ldflags="-H windowsgui" -o BuchISY.exe ./cmd/buchisy
+
+# The output executable will be at C:\build\BuchISY.exe
+CMD ["echo", "Build complete! Windows executable: BuchISY.exe"]

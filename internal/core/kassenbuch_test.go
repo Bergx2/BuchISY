@@ -52,8 +52,8 @@ func TestComputeCashReport(t *testing.T) {
 		},
 	}
 	invoices := []CSVRow{
-		{Firmenname: "Spät", Dateiname: "b.pdf", Bruttobetrag: 20, Bezahldatum: "05.05.2026"},
-		{Firmenname: "Früh", Dateiname: "a.pdf", Bruttobetrag: 30, Rechnungsdatum: "01.05.2026"}, // no Bezahldatum
+		{Auftraggeber: "Spät", Dateiname: "b.pdf", Bruttobetrag: 20, Bezahldatum: "05.05.2026"},
+		{Auftraggeber: "Früh", Dateiname: "a.pdf", Bruttobetrag: 30, Rechnungsdatum: "01.05.2026"}, // no Bezahldatum
 	}
 
 	entries, end := ComputeCashReport(book, invoices)
@@ -78,8 +78,8 @@ func TestComputeCashReport(t *testing.T) {
 func TestComputeCashReportUndatableSortsLast(t *testing.T) {
 	book := CashBook{Konto: "Barkasse", Anfangsbestand: 100}
 	invoices := []CSVRow{
-		{Firmenname: "Kaputt", Dateiname: "x.pdf", Bruttobetrag: 10, Bezahldatum: "ungültig"},
-		{Firmenname: "Gut", Dateiname: "y.pdf", Bruttobetrag: 5, Bezahldatum: "04.05.2026"},
+		{Auftraggeber: "Kaputt", Dateiname: "x.pdf", Bruttobetrag: 10, Bezahldatum: "ungültig"},
+		{Auftraggeber: "Gut", Dateiname: "y.pdf", Bruttobetrag: 5, Bezahldatum: "04.05.2026"},
 	}
 	entries, _ := ComputeCashReport(book, invoices)
 	if len(entries) != 2 {

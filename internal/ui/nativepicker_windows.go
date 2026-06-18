@@ -97,6 +97,7 @@ func pickFileNative(initialDir, title string) (string, bool) {
 // buffer with OFN_ALLOWMULTISELECT + OFN_EXPLORER is:
 //   - one full path (single selection), OR
 //   - "directory\0file1\0file2\0…\0\0" (multi).
+//
 // Returns the full paths.
 func pickFilesNative(initialDir, title string) ([]string, bool) {
 	buf := make([]uint16, 65536) // bigger buffer for multi-select

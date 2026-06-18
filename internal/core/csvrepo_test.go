@@ -14,7 +14,7 @@ func TestCSVRoundTripWithAttachments(t *testing.T) {
 
 	row := CSVRow{
 		Dateiname:      "2025-08-01_AWS_EUR.pdf",
-		Firmenname:     "AWS",
+		Auftraggeber:   "AWS",
 		Bruttobetrag:   37.64,
 		Waehrung:       "EUR",
 		HatAnhaenge:    true,
@@ -31,8 +31,8 @@ func TestCSVRoundTripWithAttachments(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
 	}
-	if rows[0].Firmenname != "AWS" {
-		t.Errorf("Firmenname = %q, want AWS", rows[0].Firmenname)
+	if rows[0].Auftraggeber != "AWS" {
+		t.Errorf("Auftraggeber = %q, want AWS", rows[0].Auftraggeber)
 	}
 	if !rows[0].HatAnhaenge {
 		t.Error("HatAnhaenge should be true")
@@ -80,8 +80,8 @@ func TestCSVWriteTo(t *testing.T) {
 	repo := NewCSVRepository()
 	var buf bytes.Buffer
 	rows := []CSVRow{
-		{Dateiname: "a.pdf", Firmenname: "Foo GmbH"},
-		{Dateiname: "b.pdf", Firmenname: "Bar AG"},
+		{Dateiname: "a.pdf", Auftraggeber: "Foo GmbH"},
+		{Dateiname: "b.pdf", Auftraggeber: "Bar AG"},
 	}
 	if err := repo.WriteTo(&buf, rows); err != nil {
 		t.Fatalf("WriteTo: %v", err)

@@ -9,8 +9,8 @@ import (
 
 // Neo accent palette — picked to read well in both light and dark mode.
 var (
-	accentBelege = color.NRGBA{R: 36, G: 99, B: 167, A: 255}  // calm blue
-	accentKonten = color.NRGBA{R: 38, G: 132, B: 84, A: 255}  // warm green
+	accentBelege = color.NRGBA{R: 36, G: 99, B: 167, A: 255}   // calm blue
+	accentKonten = color.NRGBA{R: 38, G: 132, B: 84, A: 255}   // warm green
 	stripeLight  = color.NRGBA{R: 248, G: 250, B: 252, A: 255} // very pale blue
 	stripeDark   = color.NRGBA{R: 30, G: 34, B: 38, A: 80}     // semi-transparent dark
 	cardLight    = color.NRGBA{R: 252, G: 252, B: 253, A: 255}

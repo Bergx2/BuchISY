@@ -23,7 +23,7 @@ func (a *App) showCustomFilePicker() {
 
 	// Persistent selection across folder navigation.
 	selected := []string{} // absolute paths, in selection order
-	mainPath := ""          // which selected path is the invoice main file
+	mainPath := ""         // which selected path is the invoice main file
 
 	isSelected := func(path string) bool {
 		for _, s := range selected {
@@ -313,6 +313,28 @@ func (a *App) showCustomFilePicker() {
 		fileList.UnselectAll()
 	}
 
+	// Desktop button
+	desktopBtn := widget.NewButton("🖥️ Desktop", func() {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			desktopPath := filepath.Join(home, "Desktop")
+			if _, err := os.Stat(desktopPath); err == nil {
+				loadFiles(desktopPath)
+			}
+		}
+	})
+
+	// Downloads button
+	downloadsBtn := widget.NewButton("📥 Downloads", func() {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			downloadsPath := filepath.Join(home, "Downloads")
+			if _, err := os.Stat(downloadsPath); err == nil {
+				loadFiles(downloadsPath)
+			}
+		}
+	})
+
 	loadFiles(startFolder)
 	refreshSelection()
 
@@ -326,7 +348,7 @@ func (a *App) showCustomFilePicker() {
 
 	content := container.NewBorder(
 		container.NewVBox(
-			container.NewHBox(upBtn, homeBtn),
+			container.NewHBox(upBtn, homeBtn, desktopBtn, downloadsBtn),
 			compactBreadcrumb,
 			searchEntry,
 			widget.NewSeparator(),

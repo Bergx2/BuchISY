@@ -21,7 +21,7 @@ func (e *PDFTextExtractor) ExtractText(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open PDF: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var sb strings.Builder
 	totalPages := r.NumPage()

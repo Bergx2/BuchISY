@@ -5,6 +5,11 @@
 *.so
 *.dylib
 *.app
+BuchISY.exe
+buchisy
+
+# Release artifacts
+*.zip
 
 # Test binary, built with `go test -c`
 *.test
@@ -82,6 +87,12 @@ data/
 storage/
 *.log
 *.pid
+
+# Landing page (local development/drafts)
+landingpage/
+
+# Local Claude settings
+.claude/settings.local.json
 
 # API keys and secrets
 .env

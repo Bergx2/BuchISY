@@ -7,6 +7,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 // DefaultCSVColumns defines the default column order for the CSV file.
@@ -15,8 +18,8 @@ var DefaultCSVColumns = []string{
 	"Rechnungsdatum",
 	"Jahr",
 	"Monat",
-	"Firmenname",
-	"Kurzbezeichnung",
+	"Auftraggeber",
+	"Verwendungszweck",
 	"Rechnungsnummer",
 	"VATID",
 	"BetragNetto",
@@ -28,6 +31,11 @@ var DefaultCSVColumns = []string{
 	"Bankkonto",
 	"Bezahldatum",
 	"Teilzahlung",
+	"Kommentar",
+	"BetragNetto_EUR",
+	"Gebuehr",
+	"HatAnhaenge",
+	"UStIdNr",
 	"AnzahlAnhaenge",
 	"Unterordner",
 	"BuchungRef",
@@ -39,8 +47,8 @@ var ColumnDisplayNames = map[string]string{
 	"Rechnungsdatum":     "Rechnungsdatum",
 	"Jahr":               "Jahr",
 	"Monat":              "Monat",
-	"Firmenname":         "Firmenname",
-	"Kurzbezeichnung":    "Kurzbezeichnung",
+	"Auftraggeber":       "Auftraggeber",
+	"Verwendungszweck":   "Verwendungszweck",
 	"Rechnungsnummer":    "Rechnungsnummer",
 	"VATID":              "VAT-ID Nr.",
 	"BetragNetto":        "Betrag Netto",
@@ -52,6 +60,11 @@ var ColumnDisplayNames = map[string]string{
 	"Bankkonto":          "Zahlungskonto",
 	"Bezahldatum":        "Bezahldatum",
 	"Teilzahlung":        "Teilzahlung",
+	"Kommentar":          "Kommentar",
+	"BetragNetto_EUR":    "Betrag Netto (EUR)",
+	"Gebuehr":            "Gebühr",
+	"HatAnhaenge":        "Anhänge",
+	"UStIdNr":            "USt-IdNr",
 	"AnzahlAnhaenge":     "Anzahl Anhänge",
 	"Unterordner":        "Unterordner",
 	"BuchungRef":         "Buchungs-Ref",
@@ -63,8 +76,8 @@ var ColumnTranslationKeys = map[string]string{
 	"Rechnungsdatum":     "table.col.date",
 	"Jahr":               "table.col.year",
 	"Monat":              "table.col.month",
-	"Firmenname":         "table.col.company",
-	"Kurzbezeichnung":    "table.col.shortdesc",
+	"Auftraggeber":       "table.col.auftraggeber",
+	"Verwendungszweck":   "table.col.verwendungszweck",
 	"Rechnungsnummer":    "table.col.invoicenumber",
 	"VATID":              "table.col.vatid",
 	"BetragNetto":        "table.col.net",
@@ -76,28 +89,42 @@ var ColumnTranslationKeys = map[string]string{
 	"Bankkonto":          "table.col.bankaccount",
 	"Bezahldatum":        "table.col.paymentdate",
 	"Teilzahlung":        "table.col.partialpayment",
+	"Kommentar":          "table.col.comment",
+	"BetragNetto_EUR":    "table.col.net_eur",
+	"Gebuehr":            "table.col.fee",
+	"HatAnhaenge":        "table.col.hasattachments",
+	"UStIdNr":            "table.col.ustidnr",
 	"AnzahlAnhaenge":     "table.col.attachmentcount",
 	"Unterordner":        "table.col.unterordner",
 	"BuchungRef":         "table.col.buchungref",
 }
 
 var validColumns = func() map[string]struct{} {
-	m := make(map[string]struct{}, len(DefaultCSVColumns))
+	m := make(map[string]struct{}, len(DefaultCSVColumns)+2)
 	for _, col := range DefaultCSVColumns {
 		m[col] = struct{}{}
 	}
+	// Add old column names for backward compatibility
+	m["Firmenname"] = struct{}{}
+	m["Kurzbezeichnung"] = struct{}{}
 	return m
 }()
 
 // CSVRepository manages reading and writing invoice CSV files.
 type CSVRepository struct {
-	columnOrder []string // Custom column order
+	columnOrder      []string // Custom column order
+	separator        rune     // CSV separator
+	encoding         string   // CSV encoding
+	decimalSeparator string   // Decimal separator for amounts
 }
 
 // NewCSVRepository creates a new CSV repository.
 func NewCSVRepository() *CSVRepository {
 	return &CSVRepository{
-		columnOrder: DefaultCSVColumns,
+		columnOrder:      DefaultCSVColumns,
+		separator:        ',',
+		encoding:         "ISO-8859-1",
+		decimalSeparator: ",",
 	}
 }
 
@@ -122,6 +149,28 @@ func (r *CSVRepository) SetColumnOrder(order []string) {
 	r.columnOrder = result
 }
 
+// SetSeparator sets the CSV field separator.
+func (r *CSVRepository) SetSeparator(sep string) {
+	switch sep {
+	case ";":
+		r.separator = ';'
+	case "\t", "\\t":
+		r.separator = '\t'
+	default:
+		r.separator = ','
+	}
+}
+
+// SetEncoding sets the CSV file encoding.
+func (r *CSVRepository) SetEncoding(enc string) {
+	r.encoding = enc
+}
+
+// SetDecimalSeparator sets the decimal separator for amounts.
+func (r *CSVRepository) SetDecimalSeparator(sep string) {
+	r.decimalSeparator = sep
+}
+
 // GetHeader returns the header based on current column order.
 func (r *CSVRepository) GetHeader() []string {
 	if len(r.columnOrder) > 0 {
@@ -141,9 +190,23 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open CSV: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
-	reader := csv.NewReader(file)
+	// Create reader with encoding transformation
+	var reader *csv.Reader
+	if r.encoding == "ISO-8859-1" {
+		// Decode from ISO-8859-1 to UTF-8
+		decoder := charmap.ISO8859_1.NewDecoder()
+		transformedReader := transform.NewReader(file, decoder)
+		reader = csv.NewReader(transformedReader)
+	} else {
+		// UTF-8 (default)
+		reader = csv.NewReader(file)
+	}
+
+	// Set separator
+	reader.Comma = r.separator
+	reader.LazyQuotes = true // Be lenient with quotes
 	records, err := reader.ReadAll()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read CSV: %w", err)
@@ -162,13 +225,26 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			continue
 		}
 
+		// Read with backward compatibility for old column names
+		auftraggeber := valueForColumn(record, headerMap, "Auftraggeber")
+		if auftraggeber == "" {
+			// Fallback to old column name
+			auftraggeber = valueForColumn(record, headerMap, "Firmenname")
+		}
+
+		verwendungszweck := valueForColumn(record, headerMap, "Verwendungszweck")
+		if verwendungszweck == "" {
+			// Fallback to old column name
+			verwendungszweck = valueForColumn(record, headerMap, "Kurzbezeichnung")
+		}
+
 		row := CSVRow{
 			Dateiname:         valueForColumn(record, headerMap, "Dateiname"),
 			Rechnungsdatum:    valueForColumn(record, headerMap, "Rechnungsdatum"),
 			Jahr:              valueForColumn(record, headerMap, "Jahr"),
 			Monat:             valueForColumn(record, headerMap, "Monat"),
-			Firmenname:        valueForColumn(record, headerMap, "Firmenname"),
-			Kurzbezeichnung:   valueForColumn(record, headerMap, "Kurzbezeichnung"),
+			Auftraggeber:      auftraggeber,
+			Verwendungszweck:  verwendungszweck,
 			Rechnungsnummer:   valueForColumn(record, headerMap, "Rechnungsnummer"),
 			VATID:             valueForColumn(record, headerMap, "VATID"),
 			BetragNetto:       parseFloat(valueForColumn(record, headerMap, "BetragNetto")),
@@ -180,13 +256,20 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			Bankkonto:         valueForColumn(record, headerMap, "Bankkonto"),
 			Bezahldatum:       valueForColumn(record, headerMap, "Bezahldatum"),
 			Teilzahlung:       parseBool(valueForColumn(record, headerMap, "Teilzahlung")),
+			Kommentar:         valueForColumn(record, headerMap, "Kommentar"),
+			BetragNetto_EUR:   parseFloat(valueForColumn(record, headerMap, "BetragNetto_EUR")),
+			Gebuehr:           parseFloat(valueForColumn(record, headerMap, "Gebuehr")),
+			HatAnhaenge:       parseBool(valueForColumn(record, headerMap, "HatAnhaenge")),
+			UStIdNr:           valueForColumn(record, headerMap, "UStIdNr"),
 			AnzahlAnhaenge:    parseInt(valueForColumn(record, headerMap, "AnzahlAnhaenge")),
 			Unterordner:       valueForColumn(record, headerMap, "Unterordner"),
 			BuchungRef:        valueForColumn(record, headerMap, "BuchungRef"),
 		}
-		// HatAnhaenge is derived from AnzahlAnhaenge (single source of truth);
-		// it is not persisted as its own CSV column.
-		row.HatAnhaenge = row.AnzahlAnhaenge > 0
+		// Backfill HatAnhaenge from AnzahlAnhaenge for rows written before the
+		// HatAnhaenge column existed (legacy CSVs where only the count was stored).
+		if !row.HatAnhaenge && row.AnzahlAnhaenge > 0 {
+			row.HatAnhaenge = true
+		}
 		rows = append(rows, row)
 	}
 
@@ -215,20 +298,30 @@ func (r *CSVRepository) Append(path string, row CSVRow) error {
 		}
 	}
 
-	// Open file for appending
+	// Open file for appending with encoding
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open CSV: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
+	// Create write target with encoding transformation
+	var writeTarget io.Writer = file
+	if r.encoding == "ISO-8859-1" {
+		encoder := charmap.ISO8859_1.NewEncoder()
+		writeTarget = transform.NewWriter(file, encoder)
+	}
 
-	// Write header if new file
+	// Write header if new file (with quotes)
 	if !fileExists {
 		header := r.GetHeader()
-		if err := writer.Write(header); err != nil {
+		quotedHeader := make([]string, len(header))
+		for i, field := range header {
+			escaped := strings.ReplaceAll(field, "\"", "\"\"")
+			quotedHeader[i] = "\"" + escaped + "\""
+		}
+		headerLine := strings.Join(quotedHeader, string(r.separator)) + "\n"
+		if _, err := writeTarget.Write([]byte(headerLine)); err != nil {
 			return fmt.Errorf("failed to write CSV header: %w", err)
 		}
 	}
@@ -236,7 +329,18 @@ func (r *CSVRepository) Append(path string, row CSVRow) error {
 	// Build row in the configured column order
 	record := r.rowToRecord(row)
 
-	if err := writer.Write(record); err != nil {
+	// Wrap all fields in quotes (force quoting)
+	quotedRecord := make([]string, len(record))
+	for i, field := range record {
+		// Escape existing quotes by doubling them (CSV standard)
+		escaped := strings.ReplaceAll(field, "\"", "\"\"")
+		// Wrap in quotes
+		quotedRecord[i] = "\"" + escaped + "\""
+	}
+
+	// Join with separator and write
+	line := strings.Join(quotedRecord, string(r.separator)) + "\n"
+	if _, err := writeTarget.Write([]byte(line)); err != nil {
 		return fmt.Errorf("failed to write CSV row: %w", err)
 	}
 
@@ -244,20 +348,40 @@ func (r *CSVRepository) Append(path string, row CSVRow) error {
 }
 
 // WriteTo writes the header and all rows as CSV to w, using the current
-// column order.
+// column order. Honors the configured encoding (ISO-8859-1 by default) and
+// quotes every field, matching the on-disk invoices.csv format.
 func (r *CSVRepository) WriteTo(w io.Writer, rows []CSVRow) error {
-	writer := csv.NewWriter(w)
-	if err := writer.Write(r.GetHeader()); err != nil {
+	// Determine write target based on encoding
+	var writeTarget io.Writer = w
+	if r.encoding == "ISO-8859-1" {
+		encoder := charmap.ISO8859_1.NewEncoder()
+		writeTarget = transform.NewWriter(w, encoder)
+	}
+
+	// Write header with quotes
+	header := r.GetHeader()
+	quotedHeader := make([]string, len(header))
+	for i, field := range header {
+		escaped := strings.ReplaceAll(field, "\"", "\"\"")
+		quotedHeader[i] = "\"" + escaped + "\""
+	}
+	headerLine := strings.Join(quotedHeader, string(r.separator)) + "\n"
+	if _, err := writeTarget.Write([]byte(headerLine)); err != nil {
 		return fmt.Errorf("failed to write CSV header: %w", err)
 	}
+
+	// Write rows with quotes
 	for _, row := range rows {
-		if err := writer.Write(r.rowToRecord(row)); err != nil {
+		record := r.rowToRecord(row)
+		quotedRecord := make([]string, len(record))
+		for i, field := range record {
+			escaped := strings.ReplaceAll(field, "\"", "\"\"")
+			quotedRecord[i] = "\"" + escaped + "\""
+		}
+		line := strings.Join(quotedRecord, string(r.separator)) + "\n"
+		if _, err := writeTarget.Write([]byte(line)); err != nil {
 			return fmt.Errorf("failed to write CSV row: %w", err)
 		}
-	}
-	writer.Flush()
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("failed to flush CSV writer: %w", err)
 	}
 	return nil
 }
@@ -268,12 +392,16 @@ func (r *CSVRepository) Rewrite(path string, rows []CSVRow) error {
 	if err != nil {
 		return fmt.Errorf("failed to recreate CSV: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	return r.WriteTo(file, rows)
 }
 
 // parseFloat parses a float from a string, returning 0 on error.
+// Accepts both comma and dot as decimal separator.
 func parseFloat(s string) float64 {
+	s = strings.TrimSpace(s)
+	// Replace comma with dot for parsing
+	s = strings.Replace(s, ",", ".", 1)
 	f, _ := strconv.ParseFloat(s, 64)
 	return f
 }
@@ -290,10 +418,14 @@ func parseBool(s string) bool {
 	return b
 }
 
-// formatFloat formats a float64 as a string with 2 decimal places.
-// Always uses dot as decimal separator for CSV.
-func formatFloat(f float64) string {
-	return fmt.Sprintf("%.2f", f)
+// formatFloat formats a float64 as a string with 2 decimal places using the configured decimal separator.
+func (r *CSVRepository) formatFloat(f float64) string {
+	formatted := fmt.Sprintf("%.2f", f)
+	// Replace dot with configured decimal separator
+	if r.decimalSeparator == "," {
+		formatted = strings.Replace(formatted, ".", ",", 1)
+	}
+	return formatted
 }
 
 // rowToRecord converts a CSVRow to a string slice based on column order.
@@ -304,19 +436,24 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"Rechnungsdatum":     row.Rechnungsdatum,
 		"Jahr":               row.Jahr,
 		"Monat":              row.Monat,
-		"Firmenname":         row.Firmenname,
-		"Kurzbezeichnung":    row.Kurzbezeichnung,
+		"Auftraggeber":       row.Auftraggeber,
+		"Verwendungszweck":   row.Verwendungszweck,
 		"Rechnungsnummer":    row.Rechnungsnummer,
 		"VATID":              row.VATID,
-		"BetragNetto":        formatFloat(row.BetragNetto),
-		"Steuersatz_Prozent": formatFloat(row.SteuersatzProzent),
-		"Steuersatz_Betrag":  formatFloat(row.SteuersatzBetrag),
-		"Bruttobetrag":       formatFloat(row.Bruttobetrag),
+		"BetragNetto":        r.formatFloat(row.BetragNetto),
+		"Steuersatz_Prozent": r.formatFloat(row.SteuersatzProzent),
+		"Steuersatz_Betrag":  r.formatFloat(row.SteuersatzBetrag),
+		"Bruttobetrag":       r.formatFloat(row.Bruttobetrag),
 		"Waehrung":           row.Waehrung,
 		"Gegenkonto":         strconv.Itoa(row.Gegenkonto),
 		"Bankkonto":          row.Bankkonto,
 		"Bezahldatum":        row.Bezahldatum,
 		"Teilzahlung":        formatBool(row.Teilzahlung),
+		"Kommentar":          row.Kommentar,
+		"BetragNetto_EUR":    r.formatFloat(row.BetragNetto_EUR),
+		"Gebuehr":            r.formatFloat(row.Gebuehr),
+		"HatAnhaenge":        formatBool(row.HatAnhaenge),
+		"UStIdNr":            row.UStIdNr,
 		"AnzahlAnhaenge":     strconv.Itoa(row.AnzahlAnhaenge),
 		"Unterordner":        row.Unterordner,
 		"BuchungRef":         row.BuchungRef,

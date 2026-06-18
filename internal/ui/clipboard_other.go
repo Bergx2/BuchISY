@@ -9,6 +9,6 @@ import "image"
 // lack of a portable file-clipboard format mean we just disable the
 // feature gracefully. Picking files via the "…" button keeps working
 // on every platform.
-func clipboardFiles() []string                { return nil }
-func clipboardImage() image.Image             { return nil }
-func clipboardFormatsDiagnostic() string      { return "(not supported)" }
+func clipboardFiles() []string           { return nil }
+func clipboardImage() image.Image        { return nil }
+func clipboardFormatsDiagnostic() string { return "(not supported)" }

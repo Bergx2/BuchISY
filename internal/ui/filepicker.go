@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
-
+	"fyne.io/fyne/v2/widget"
 	"github.com/bergx2/buchisy/internal/core"
 )
 
@@ -198,9 +199,15 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 		return
 	}
 
-	progress := dialog.NewProgressInfinite(
+	// Show loading indicator
+	progressBar := widget.NewProgressBarInfinite()
+	progressContent := container.NewVBox(
+		widget.NewLabel(a.bundle.T("processing.message")),
+		progressBar,
+	)
+	progress := dialog.NewCustomWithoutButtons(
 		a.bundle.T("processing.title"),
-		a.bundle.T("processing.message"),
+		progressContent,
 		a.window,
 	)
 	progress.Show()

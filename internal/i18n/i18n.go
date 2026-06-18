@@ -20,16 +20,22 @@ type Bundle struct {
 
 // Load loads translations from the assets directory for the given language.
 // It always loads "de" as fallback and then the requested language if different.
+// If files are not found on the filesystem, it falls back to embedded translations.
 func Load(assetsDir, lang string) (*Bundle, error) {
 	b := &Bundle{
 		translations: make(map[string]string),
 		fallback:     make(map[string]string),
 	}
 
-	// Always load German as fallback
+	// Try to load from filesystem first (for development)
 	fallbackPath := filepath.Join(assetsDir, "i18n", "de.json")
 	if err := b.loadFile(fallbackPath, b.fallback); err != nil {
-		return nil, fmt.Errorf("failed to load fallback (de): %w", err)
+		// Fallback to embedded translations
+		embedded, embErr := LoadEmbedded(lang)
+		if embErr != nil {
+			return nil, fmt.Errorf("failed to load fallback (de) from file or embedded: file error: %v, embed error: %w", err, embErr)
+		}
+		return embedded, nil
 	}
 
 	// If requested language is not German, load it too
@@ -123,7 +129,7 @@ func AvailableLanguages(assetsDir string) []string {
 	}
 
 	if len(langs) == 0 {
-		return []string{"de"}
+		return AvailableLanguagesEmbedded()
 	}
 
 	return langs

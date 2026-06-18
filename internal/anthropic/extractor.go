@@ -15,8 +15,8 @@ const systemPromptBase = `Du bist ein sorgfältiger Daten-Extractor für deutsch
 Ziel: Liefere ausschließlich ein strenges JSON-Objekt mit genau diesen Schlüsseln (deutsche Bezeichner, snake-case):
 
 {
-  "firmenname": "string oder null",
-  "kurzbezeichnung": "string oder null",
+  "auftraggeber": "string oder null",
+  "verwendungszweck": "string oder null",
   "rechnungsnummer": "string oder null",
   "vat_id": "USt-IdNr. des Rechnungsstellers oder null",
   "betragnetto": 0.0,
@@ -26,14 +26,15 @@ Ziel: Liefere ausschließlich ein strenges JSON-Objekt mit genau diesen Schlüss
   "waehrung": "EUR|USD|andere ISO4217 oder null",
   "rechnungsdatum": "dd.MM.yyyy oder null",
   "jahr": "YYYY oder null",
-  "monat": "MM oder null"
+  "monat": "MM oder null",
+  "ustidnr": "string oder null"
 }
 
 Regeln:
 
 - Antworte nur mit JSON, ohne Prosa.
 - Wenn unsicher: Feld auf null setzen, nicht raten.
-- firmenname: Verwende den Aussteller (Vendor), nicht den Rechnungsempfänger.
+- auftraggeber: Verwende den Aussteller (Vendor), nicht den Rechnungsempfänger.
 - rechnungsdatum: Bevorzuge das Feld nahe "Rechnung/Rechnungsdatum/Datum". Normalisiere nach dd.MM.yyyy (deutsches Format).
 - betragnetto / steuersatz_prozent / steuersatz_betrag / bruttobetrag:
   - bruttobetrag = Gesamtbetrag / Total / Rechnungsbetrag.
@@ -41,7 +42,8 @@ Regeln:
   - Wenn möglich, konsistenzprüfen: netto + steuer ≈ brutto (kleine Abweichung zulässig).
 - waehrung: Verwende ISO-Code (z. B. EUR, USD). "€" ⇒ EUR.
 - jahr / monat: aus rechnungsdatum ableiten (YYYY, MM).
-- kurzbezeichnung: kurze menschliche Zusammenfassung (max. ~80 Zeichen), z. B. "Cloud-Abo Oktober 2025".
+- verwendungszweck: kurze menschliche Zusammenfassung (max. ~80 Zeichen), z. B. "Cloud-Abo Oktober 2025".
+- ustidnr: Die Umsatzsteuer-Identifikationsnummer des Rechnungsausstellers (Format: 2 Buchstaben Ländercode + 8-12 Ziffern, z.B. "DE123456789"). Falls nicht vorhanden: null.
 
 vat_id (Umsatzsteuer-Identifikationsnummer des Rechnungsstellers):
 - Beispiele für gültige Formate: "DE123456789", "ATU12345678", "FR12345678901", "GB123456789", "VAT-Nr.", "USt-IdNr.", "VAT-ID", "TAX-ID", "Tax Number".
@@ -268,7 +270,7 @@ func (e *Extractor) ExtractFromImage(ctx context.Context, apiKey, model, imageBa
 			e.logger.Debug("=== CLAUDE VISION API ERROR ===")
 			e.logger.Debug("Error: %v", err)
 		}
-		return core.Meta{}, 0, fmt.Errorf("Vision API request failed: %w", err)
+		return core.Meta{}, 0, fmt.Errorf("vision API request failed: %w", err)
 	}
 
 	// Debug logging: log response
@@ -354,8 +356,8 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 
 	// Parse JSON response
 	var result struct {
-		Firmenname        *string  `json:"firmenname"`
-		Kurzbezeichnung   *string  `json:"kurzbezeichnung"`
+		Auftraggeber      *string  `json:"auftraggeber"`
+		Verwendungszweck  *string  `json:"verwendungszweck"`
 		Rechnungsnummer   *string  `json:"rechnungsnummer"`
 		VATID             *string  `json:"vat_id"`
 		BetragNetto       *float64 `json:"betragnetto"`
@@ -366,6 +368,7 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 		Rechnungsdatum    *string  `json:"rechnungsdatum"`
 		Jahr              *string  `json:"jahr"`
 		Monat             *string  `json:"monat"`
+		UStIdNr           *string  `json:"ustidnr"`
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
@@ -375,11 +378,11 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 	// Convert to Meta
 	meta := core.Meta{}
 
-	if result.Firmenname != nil {
-		meta.Firmenname = *result.Firmenname
+	if result.Auftraggeber != nil {
+		meta.Auftraggeber = *result.Auftraggeber
 	}
-	if result.Kurzbezeichnung != nil {
-		meta.Kurzbezeichnung = *result.Kurzbezeichnung
+	if result.Verwendungszweck != nil {
+		meta.Verwendungszweck = *result.Verwendungszweck
 	}
 	if result.Rechnungsnummer != nil {
 		meta.Rechnungsnummer = *result.Rechnungsnummer
@@ -417,6 +420,9 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 	}
 	if result.Monat != nil {
 		meta.Monat = *result.Monat
+	}
+	if result.UStIdNr != nil {
+		meta.UStIdNr = *result.UStIdNr
 	}
 
 	return meta, nil

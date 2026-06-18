@@ -138,13 +138,14 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 
 	// Create form entries
 	companyEntry := widget.NewEntry()
-	companyEntry.SetText(meta.Firmenname)
+	companyEntry.SetText(meta.Auftraggeber)
 	companyEntry.SetPlaceHolder(a.bundle.T("field.company"))
 
 	shortDescEntry := widget.NewEntry()
-	shortDescEntry.SetText(meta.Kurzbezeichnung)
+	shortDescEntry.SetText(meta.Verwendungszweck)
 	shortDescEntry.SetPlaceHolder(a.bundle.T("field.shortdesc"))
-	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Kurzbezeichnung)))
+	// Show character count
+	shortDescLabel := widget.NewLabel(fmt.Sprintf("%d / 80", len(meta.Verwendungszweck)))
 
 	invoiceNumEntry := widget.NewEntry()
 	invoiceNumEntry.SetText(meta.Rechnungsnummer)
@@ -244,6 +245,28 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Ausgangsrechnung checkbox
 	ausgangsrechnungCheck := widget.NewCheck("Ausgangsrechnung", nil)
 
+	// Comment field (multiline)
+	commentEntry := widget.NewMultiLineEntry()
+	commentEntry.SetText(meta.Kommentar)
+	commentEntry.SetPlaceHolder(a.bundle.T("field.comment"))
+	commentEntry.SetMinRowsVisible(3)
+
+	// Currency conversion fields (shown only for non-default currency)
+	netEUREntry := widget.NewEntry()
+	if meta.BetragNetto_EUR > 0 {
+		netEUREntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto_EUR))
+	}
+	netEUREntry.SetPlaceHolder(a.bundle.T("field.net_eur"))
+
+	feeEntry := widget.NewEntry()
+	if meta.Gebuehr > 0 {
+		feeEntry.SetText(fmt.Sprintf("%.2f", meta.Gebuehr))
+	}
+	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
+
+	// Container for currency conversion fields (initially hidden)
+	currencyConversionContainer := container.NewVBox()
+
 	// Remember mapping checkbox
 	rememberCheck := widget.NewCheck(a.bundle.T("checkbox.rememberMap"), nil)
 	rememberCheck.SetChecked(a.settings.RememberCompanyAccount)
@@ -278,8 +301,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		}
 		// Build meta from current form values
 		currentMeta := core.Meta{
-			Firmenname:        companyEntry.Text,
-			Kurzbezeichnung:   shortDescEntry.Text,
+			Auftraggeber:      companyEntry.Text,
+			Verwendungszweck:  shortDescEntry.Text,
 			Rechnungsnummer:   invoiceNumEntry.Text,
 			Rechnungsdatum:    dateEntry.Text,
 			BetragNetto:       parseFloat(netEntry.Text, a.settings.DecimalSeparator),
@@ -319,6 +342,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Update preview on any field change
 	onAnyChange := func(string) { updateFilenamePreview() }
 	companyEntry.OnChanged = onAnyChange
+	// Special handler for shortDescEntry to handle both character limit and preview
 	shortDescEntry.OnChanged = func(s string) {
 		if len(s) > 80 {
 			shortDescEntry.SetText(s[:80])
@@ -332,7 +356,6 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	vatPercentEntry.OnChanged = onAnyChange
 	vatAmountEntry.OnChanged = onAnyChange
 	grossEntry.OnChanged = onAnyChange
-	currencySelect.OnChanged = onAnyChange
 
 	// As soon as two of {Netto, MwSt %, MwSt-Betrag, Brutto} are
 	// entered, fill in the others automatically.
@@ -460,11 +483,41 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			fi("", partialPaymentCheck),
 			fi("", ausgangsrechnungCheck),
 		)),
+		// Currency conversion fields (shown only for non-default currency).
+		currencyConversionContainer,
+		section(a.bundle.T("field.comment"), commentEntry),
 		rememberCheck,
 		widget.NewSeparator(),
 		newCopyableLabel(a.bundle, a.bundle.T("modal.filenamePreview")),
 		filenameEntry,
 	)
+
+	// Currency conversion visibility logic: show net (EUR) + fee fields
+	// only when the chosen currency differs from the default currency.
+	updateCurrencyConversionVisibility := func() {
+		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+			defaultCurrency := a.settings.CurrencyDefault
+			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
+			netEURLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.net_eur"), defaultCurrency)
+			currencyConversionContainer.Objects = []fyne.CanvasObject{
+				widget.NewForm(
+					widget.NewFormItem(netEURLabel, netEUREntry),
+					widget.NewFormItem(feeLabel, feeEntry),
+				),
+			}
+		} else {
+			currencyConversionContainer.Objects = []fyne.CanvasObject{}
+		}
+		currencyConversionContainer.Refresh()
+	}
+
+	// Rebuild the conversion fields and refresh the filename preview when
+	// the currency changes.
+	currencySelect.OnChanged = func(string) {
+		updateCurrencyConversionVisibility()
+		updateFilenamePreview()
+	}
+	updateCurrencyConversionVisibility()
 
 	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
 		confirmWin.Close()
@@ -518,6 +571,9 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			accountMap[accountSelect.Selected],
 			bankAccountSelect.Selected,
 			partialPaymentCheck.Checked,
+			commentEntry.Text,
+			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
+			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
 			rememberCheck.Checked,
 			filenameEntry.Text,
 			ausgangsrechnungCheck.Checked,
@@ -569,6 +625,20 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	confirmWin.Show()
 }
 
+// saveDialogSize saves the current dialog window size to settings.
+func (a *App) saveDialogSize(win fyne.Window) {
+	size := win.Canvas().Size()
+
+	a.settings.DialogWidth = int(size.Width)
+	a.settings.DialogHeight = int(size.Height)
+
+	if err := a.settingsMgr.Save(a.settings); err != nil {
+		a.logger.Warn("Failed to save dialog size: %v", err)
+	} else {
+		a.logger.Debug("Saved dialog size: %dx%d", a.settings.DialogWidth, a.settings.DialogHeight)
+	}
+}
+
 // saveInvoice saves an invoice to the file system and CSV.
 func (a *App) saveInvoice(
 	originalPath string,
@@ -587,6 +657,9 @@ func (a *App) saveInvoice(
 	account int,
 	bankAccount string,
 	partialPayment bool,
+	comment string,
+	netEUR float64,
+	fee float64,
 	rememberMapping bool,
 	filenameInput string,
 	ausgangsrechnung bool,
@@ -595,8 +668,8 @@ func (a *App) saveInvoice(
 ) error {
 	// Build meta
 	meta := core.Meta{
-		Firmenname:        company,
-		Kurzbezeichnung:   shortDesc,
+		Auftraggeber:      company,
+		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,
 		VATID:             strings.TrimSpace(vatID),
 		Rechnungsdatum:    invoiceDate,
@@ -609,14 +682,18 @@ func (a *App) saveInvoice(
 		Gegenkonto:        account,
 		Bankkonto:         bankAccount,
 		Teilzahlung:       partialPayment,
+		Kommentar:         comment,
+		BetragNetto_EUR:   netEUR,
+		Gebuehr:           fee,
+		HatAnhaenge:       len(attachments) > 0,
 	}
 
-	// Extract year and month from invoice date (for filename and CSV fields)
+	// Extract year and month from invoice date (for filename template only)
 	// Date is in DD.MM.YYYY format
-	parts := strings.Split(invoiceDate, ".")
-	if len(parts) == 3 {
-		meta.Jahr = parts[2]  // Year is the third part
-		meta.Monat = parts[1] // Month is the second part
+	invoiceDateParts := strings.Split(invoiceDate, ".")
+	if len(invoiceDateParts) == 3 {
+		meta.Jahr = invoiceDateParts[2]  // Year is the third part (for template)
+		meta.Monat = invoiceDateParts[1] // Month is the second part (for template)
 	}
 
 	// Use the filename supplied by the editable field.
@@ -649,11 +726,16 @@ func (a *App) saveInvoice(
 	meta.Jahr = fmt.Sprintf("%04d", targetYear)
 	meta.Monat = fmt.Sprintf("%02d", int(targetMonth))
 
-	// Check for duplicates
-	existingRows, _ := a.csvRepo.Load(csvPath)
 	newRow := meta.ToCSVRow()
 	newRow.Dateiname = filename
 	newRow.Unterordner = unterordner
+
+	// Check for duplicates in database
+	isDuplicate, err := a.dbRepo.IsDuplicate(meta.Jahr, meta.Monat, newRow)
+	if err != nil {
+		a.logger.Warn("Failed to check duplicate in database: %v", err)
+		isDuplicate = false // Continue anyway
+	}
 
 	// Helper function to complete the save
 	completeSave := func() error {
@@ -678,15 +760,27 @@ func (a *App) saveInvoice(
 			seq++
 		}
 
-		// Update filename + attachment info
+		// Update filename + attachment info. Attachments use the
+		// "<invoice>_AnhangN" naming model (see invoiceAttachmentPaths /
+		// addAttachmentToInvoice), consistent with the rest of the UI; the
+		// folder-based attachment model from origin/main is intentionally
+		// not used here to avoid double-filing each attachment.
 		meta.Dateiname = finalFilename
 		newRow.Dateiname = finalFilename
 		newRow.HatAnhaenge = seq > 0
 		newRow.AnzahlAnhaenge = seq
 
-		// Append to CSV
-		if err := a.csvRepo.Append(csvPath, newRow); err != nil {
-			return fmt.Errorf("failed to append to CSV: %w", err)
+		// Insert into SQLite database
+		_, err = a.dbRepo.Insert(newRow)
+		if err != nil {
+			return fmt.Errorf("failed to insert into database: %w", err)
+		}
+
+		// Export to CSV (database is source of truth)
+		err = a.dbRepo.ExportToCSV(meta.Jahr, meta.Monat, csvPath, a.csvRepo)
+		if err != nil {
+			a.logger.Warn("Failed to export to CSV: %v", err)
+			// Don't fail the whole operation if CSV export fails
 		}
 
 		// Remember company mapping if requested
@@ -709,7 +803,7 @@ func (a *App) saveInvoice(
 		return nil
 	}
 
-	if core.IsDuplicate(existingRows, newRow) {
+	if isDuplicate {
 		// Show confirmation dialog (async)
 		dialog.ShowConfirm(
 			a.bundle.T("error.duplicate"),
@@ -747,7 +841,7 @@ func parseFloat(s string, decimalSep string) float64 {
 		s = strings.ReplaceAll(s, ".", "")  // strip thousands separators
 		s = strings.ReplaceAll(s, ",", ".") // decimal comma -> dot
 	} else {
-		s = strings.ReplaceAll(s, ",", "")  // strip thousands separators
+		s = strings.ReplaceAll(s, ",", "") // strip thousands separators
 	}
 	var f float64
 	fmt.Sscanf(s, "%f", &f)
