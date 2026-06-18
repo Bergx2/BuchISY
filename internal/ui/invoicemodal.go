@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -898,45 +897,24 @@ func uriToNativePath(u fyne.URI) string {
 }
 
 // invoiceAttachmentPaths returns the file paths of the row's existing
-// attachments by scanning the invoice folder for files that match the
-// "<basename>_AnhangN.*" naming pattern. Indexed sequentially so the
-// returned slice's order matches Anhang1, Anhang2, …. Empty for
-// invoices without attachments or when the main file can't be located.
+// attachments by scanning the invoice folder for the
+// "<basename>_Anhang<N>.<ext>" sibling files, ordered Anhang1, Anhang2, ….
+// The filesystem is the source of truth, so this works regardless of any
+// stale count stored in the database/CSV. Empty when the main file can't
+// be located or there are no attachments.
 func (a *App) invoiceAttachmentPaths(row core.CSVRow) []string {
-	if row.AnzahlAnhaenge <= 0 {
-		return nil
-	}
 	invoicePath := a.resolveInvoicePath(row)
 	if !core.FileExists(invoicePath) {
 		return nil
 	}
-	folder := filepath.Dir(invoicePath)
-	base := strings.TrimSuffix(row.Dateiname, filepath.Ext(row.Dateiname))
-
-	entries, err := os.ReadDir(folder)
-	if err != nil {
-		return nil
-	}
-	paths := make([]string, 0, row.AnzahlAnhaenge)
-	for i := 1; i <= row.AnzahlAnhaenge; i++ {
-		prefix := fmt.Sprintf("%s_Anhang%d.", base, i)
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			if strings.HasPrefix(e.Name(), prefix) {
-				paths = append(paths, filepath.Join(folder, e.Name()))
-				break
-			}
-		}
-	}
-	return paths
+	return core.AttachmentPathsIn(filepath.Dir(invoicePath), row.Dateiname)
 }
 
-// addAttachmentToInvoice files a new attachment next to the invoice's
-// main file (using AttachmentName for a consistent, contiguous suffix)
-// and bumps HatAnhaenge / AnzahlAnhaenge in the CSV. Returns the new
-// attachment's 1-based index so callers can update their UI.
+// addAttachmentToInvoice files a new attachment next to the invoice's main
+// file as "<base>_Anhang<N>.<ext>" (next contiguous index, derived from the
+// existing sibling files) and marks the invoice as having attachments in the
+// database. Returns the new attachment's 1-based index so callers can update
+// their UI.
 func (a *App) addAttachmentToInvoice(row core.CSVRow, sourcePath string) (int, error) {
 	invoicePath := a.resolveInvoicePath(row)
 	if !core.FileExists(invoicePath) {
@@ -947,33 +925,23 @@ func (a *App) addAttachmentToInvoice(row core.CSVRow, sourcePath string) (int, e
 	if row.Unterordner != "" {
 		monthFolder = filepath.Dir(attachmentFolder)
 	}
-	csvPath := filepath.Join(monthFolder, "invoices.csv")
 
-	nextSeq := row.AnzahlAnhaenge + 1
+	nextSeq := core.CountAttachmentsIn(attachmentFolder, row.Dateiname) + 1
 	attExt := strings.ToLower(filepath.Ext(sourcePath))
 	attName := core.AttachmentName(row.Dateiname, nextSeq, attExt)
 	if _, err := a.placeFile(sourcePath, attachmentFolder, attName); err != nil {
 		return 0, fmt.Errorf("Anhang konnte nicht abgelegt werden: %w", err)
 	}
 
-	rows, err := a.csvRepo.Load(csvPath)
-	if err != nil {
-		return 0, fmt.Errorf("CSV-Lesen fehlgeschlagen: %w", err)
+	// The exact count is derived from the filesystem at load time; here we
+	// only need the database flag to reflect that attachments now exist.
+	row.HatAnhaenge = true
+	if err := a.dbRepo.Update(row.Jahr, row.Monat, row.Dateiname, row); err != nil {
+		return 0, fmt.Errorf("Datenbank-Aktualisierung fehlgeschlagen: %w", err)
 	}
-	found := false
-	for i := range rows {
-		if rows[i].Dateiname == row.Dateiname {
-			rows[i].AnzahlAnhaenge = nextSeq
-			rows[i].HatAnhaenge = true
-			found = true
-			break
-		}
-	}
-	if !found {
-		return 0, fmt.Errorf("Rechnungszeile nicht in CSV gefunden")
-	}
-	if err := a.csvRepo.Rewrite(csvPath, rows); err != nil {
-		return 0, fmt.Errorf("CSV-Schreiben fehlgeschlagen: %w", err)
+	csvPath := filepath.Join(monthFolder, "invoices.csv")
+	if err := a.dbRepo.ExportToCSV(row.Jahr, row.Monat, csvPath, a.csvRepo); err != nil {
+		a.logger.Warn("CSV-Export nach Anhang fehlgeschlagen: %v", err)
 	}
 	return nextSeq, nil
 }

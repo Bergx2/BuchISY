@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -60,4 +61,23 @@ func ReplaceExtension(name, newExt string) string {
 // attachment's own extension, including the leading dot.
 func AttachmentName(mainName string, index int, attachmentExt string) string {
 	return fmt.Sprintf("%s_Anhang%d%s", ReplaceExtension(mainName, ""), index, attachmentExt)
+}
+
+// ParseAttachmentName reports whether name is a numbered attachment of the
+// invoice whose main file is mainName — i.e. "<base>_Anhang<N>.<ext>" — and
+// returns the 1-based index N. Returns (0, false) for anything else.
+func ParseAttachmentName(name, mainName string) (int, bool) {
+	prefix := ReplaceExtension(mainName, "") + "_Anhang"
+	if !strings.HasPrefix(name, prefix) {
+		return 0, false
+	}
+	rest := name[len(prefix):] // "<N>.<ext>" or "<N>"
+	if dot := strings.IndexByte(rest, '.'); dot >= 0 {
+		rest = rest[:dot]
+	}
+	n, err := strconv.Atoi(rest)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }

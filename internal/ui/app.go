@@ -866,6 +866,7 @@ func (a *App) loadInvoices() {
 			}
 			all = append(all, monthRows...)
 		}
+		a.annotateAttachments(all)
 		a.invoiceTable.SetData(all)
 		return
 	}
@@ -879,7 +880,26 @@ func (a *App) loadInvoices() {
 		return
 	}
 
+	a.annotateAttachments(rows)
 	a.invoiceTable.SetData(rows)
+}
+
+// annotateAttachments fills each row's AnzahlAnhaenge/HatAnhaenge from the
+// filesystem — the "<base>_Anhang<N>" sibling files are the source of truth
+// for attachments, so the table reflects reality regardless of any stale
+// value stored in the database or CSV.
+func (a *App) annotateAttachments(rows []core.CSVRow) {
+	for i := range rows {
+		p := a.resolveInvoicePath(rows[i])
+		if !core.FileExists(p) {
+			rows[i].AnzahlAnhaenge = 0
+			rows[i].HatAnhaenge = false
+			continue
+		}
+		n := core.CountAttachmentsIn(filepath.Dir(p), rows[i].Dateiname)
+		rows[i].AnzahlAnhaenge = n
+		rows[i].HatAnhaenge = n > 0
+	}
 }
 
 func (a *App) rewriteAllCSVs() error {

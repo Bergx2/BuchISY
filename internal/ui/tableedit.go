@@ -619,21 +619,7 @@ func (a *App) updateInvoice(
 	finalName := newFilename
 	intendedPath := filepath.Join(targetFolder, newFilename)
 	if intendedPath != originalPath {
-		// Move the folder-based attachments alongside the invoice first, so
-		// the "<base>-files" folder keeps tracking its invoice. Best-effort:
-		// a failure here is logged but does not abort the update.
-		if a.storageManager.HasAttachments(originalPath) {
-			oldAttachmentsFolder := a.storageManager.GetAttachmentsFolder(originalPath)
-			newAttachmentsFolder := a.storageManager.GetAttachmentsFolder(intendedPath)
-			a.logger.Info("Renaming attachments folder from %s to %s",
-				filepath.Base(oldAttachmentsFolder), filepath.Base(newAttachmentsFolder))
-			if err := os.MkdirAll(filepath.Dir(newAttachmentsFolder), 0755); err != nil {
-				a.logger.Warn("Failed to prepare attachments folder: %v", err)
-			} else if err := os.Rename(oldAttachmentsFolder, newAttachmentsFolder); err != nil {
-				a.logger.Warn("Failed to rename attachments folder: %v", err)
-			}
-		}
-
+		oldFolder := filepath.Dir(originalPath)
 		if _, statErr := os.Stat(originalPath); statErr == nil {
 			moved, mvErr := a.storageManager.MoveAndRename(originalPath, targetFolder, newFilename)
 			if mvErr != nil {
@@ -646,6 +632,13 @@ func (a *App) updateInvoice(
 		}
 		// else: source gone but the file is already at intendedPath — a
 		// prior attempt moved it; treat the move as already done.
+
+		// Move the numbered "_Anhang<N>" attachment siblings alongside the
+		// invoice: they adopt the invoice's final base name and target
+		// folder so invoiceAttachmentPaths keeps finding them. Best-effort.
+		if err := a.storageManager.MoveInvoiceAttachments(oldFolder, originalRow.Dateiname, targetFolder, finalName); err != nil {
+			a.logger.Warn("Failed to move attachments: %v", err)
+		}
 	}
 
 	// Jahr/Monat in der CSV = Ablage-Periode (wohin die Datei gelegt
