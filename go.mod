@@ -1,6 +1,6 @@
 module github.com/bergx2/buchisy
 
-go 1.25
+go 1.25.0
 
 require (
 	fyne.io/fyne/v2 v2.6.3
@@ -9,9 +9,9 @@ require (
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/pdfcpu/pdfcpu v0.11.0
 	github.com/zalando/go-keyring v0.2.6
-	golang.org/x/image v0.32.0
-	golang.org/x/sys v0.37.0
-	golang.org/x/text v0.30.0
+	golang.org/x/image v0.38.0
+	golang.org/x/sys v0.38.0
+	golang.org/x/text v0.35.0
 	modernc.org/sqlite v1.39.1
 )
 
@@ -58,9 +58,9 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
-	golang.org/x/net v0.46.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.66.10 // indirect
