@@ -69,7 +69,7 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 	}
 
 	// Generate short description
-	meta.Verwendungszweck = e.generateShortDesc(meta, text)
+	meta.Verwendungszweck = NormalizeVerwendungszweck(e.generateShortDesc(meta, text))
 
 	// Calculate confidence
 	if total > 0 {
