@@ -379,7 +379,7 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 		meta.Auftraggeber = *result.Auftraggeber
 	}
 	if result.Verwendungszweck != nil {
-		meta.Verwendungszweck = *result.Verwendungszweck
+		meta.Verwendungszweck = core.NormalizeVerwendungszweck(*result.Verwendungszweck)
 	}
 	if result.Rechnungsnummer != nil {
 		meta.Rechnungsnummer = *result.Rechnungsnummer

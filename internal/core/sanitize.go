@@ -5,6 +5,18 @@ import (
 	"strings"
 )
 
+// ampersandPattern matches an "&" together with any surrounding whitespace.
+var ampersandPattern = regexp.MustCompile(`\s*&\s*`)
+
+// NormalizeVerwendungszweck replaces "&" with "und" in a Verwendungszweck
+// (purpose) text, normalizing the surrounding spacing, e.g.
+// "Einstellgebühr & Top-Anzeige" -> "Einstellgebühr und Top-Anzeige" and
+// "A&B" -> "A und B". Applied to extracted purposes only — company names
+// (Auftraggeber) keep their "&".
+func NormalizeVerwendungszweck(s string) string {
+	return strings.TrimSpace(ampersandPattern.ReplaceAllString(s, " und "))
+}
+
 // SanitizeFilename removes or replaces characters that are unsafe for filenames.
 // It preserves umlauts but removes/replaces other problematic characters.
 func SanitizeFilename(name string) string {
