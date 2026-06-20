@@ -283,7 +283,8 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 		row.TaxLines = ParseTaxLines(valueForColumn(record, headerMap, "Steuerzeilen"))
 		if len(row.TaxLines) == 0 {
 			// Legacy row without detail: reconstruct one line from aggregates.
-			row.TaxLines = ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag)
+			// Pass brutto as the 4th arg so gross-only rows still get a usable line.
+			row.TaxLines = ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag)
 		}
 		rows = append(rows, row)
 	}

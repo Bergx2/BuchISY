@@ -256,7 +256,8 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 
 		row.TaxLines = core.ParseTaxLines(steuerzeilen)
 		if len(row.TaxLines) == 0 {
-			row.TaxLines = core.ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag)
+			// Pass brutto as the 4th arg so gross-only rows still get a usable line.
+			row.TaxLines = core.ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag)
 		}
 
 		results = append(results, row)

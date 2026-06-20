@@ -72,9 +72,14 @@ func ParseTaxLines(s string) []TaxLine {
 
 // ReconstructTaxLines builds a single TaxLine from the legacy aggregate
 // fields, used when a row has no Steuerzeilen detail. Returns nil if the
-// aggregates are all zero.
-func ReconstructTaxLines(netto, satzProzent, mwst float64) []TaxLine {
+// aggregates are all zero. brutto is used as a gross-only fallback: when
+// netto/satzProzent/mwst are all zero but brutto > 0, a single line with
+// Netto == brutto is returned so the total is preserved.
+func ReconstructTaxLines(netto, satzProzent, mwst, brutto float64) []TaxLine {
 	if netto == 0 && satzProzent == 0 && mwst == 0 {
+		if brutto > 0 {
+			return []TaxLine{{Netto: brutto}}
+		}
 		return nil
 	}
 	return []TaxLine{{Netto: netto, SatzProzent: satzProzent, MwStBetrag: mwst}}

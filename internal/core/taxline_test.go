@@ -39,11 +39,16 @@ func TestTaxLineJSONAndReconstruct(t *testing.T) {
 	if ParseTaxLines("") != nil || ParseTaxLines("not json") != nil {
 		t.Errorf("invalid JSON should parse to nil")
 	}
-	rc := ReconstructTaxLines(14.20, 19, 2.70)
+	rc := ReconstructTaxLines(14.20, 19, 2.70, 0)
 	if len(rc) != 1 || rc[0].SatzProzent != 19 {
 		t.Errorf("reconstruct = %+v", rc)
 	}
-	if ReconstructTaxLines(0, 0, 0) != nil {
+	if ReconstructTaxLines(0, 0, 0, 0) != nil {
 		t.Errorf("all-zero reconstruct should be nil")
+	}
+	// Gross-only legacy row: brutto preserved as Netto fallback.
+	grossOnly := ReconstructTaxLines(0, 0, 0, 38.90)
+	if len(grossOnly) != 1 || !almost(grossOnly[0].Netto, 38.90) {
+		t.Errorf("gross-only reconstruct = %+v, want one line with Netto==38.90", grossOnly)
 	}
 }
