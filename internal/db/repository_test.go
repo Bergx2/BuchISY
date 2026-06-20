@@ -93,6 +93,29 @@ func TestVATIDPersistsThroughDB(t *testing.T) {
 	}
 }
 
+// TestDBTaxLinesRoundTrip verifies TaxLines and Trinkgeld persist through Insert/List.
+func TestDBTaxLinesRoundTrip(t *testing.T) {
+	repo := newTestRepo(t)
+	row := core.CSVRow{
+		Dateiname: "a.pdf", Jahr: "2026", Monat: "06",
+		TaxLines: []core.TaxLine{
+			{Netto: 14.20, SatzProzent: 19, MwStBetrag: 2.70},
+			{Netto: 18.69, SatzProzent: 7, MwStBetrag: 1.31},
+		},
+		Trinkgeld: 2.00,
+	}
+	if _, err := repo.Insert(row); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := repo.List("2026", "06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || len(rows[0].TaxLines) != 2 || rows[0].Trinkgeld != 2.00 {
+		t.Fatalf("DB did not round-trip tax lines: %+v", rows)
+	}
+}
+
 // TestMigrateCSVToDatabaseBackfillsEmptyDB verifies the CSV→DB import that was
 // previously never wired up: an empty database is back-filled from invoices.csv
 // files under the storage root, and a second run is a no-op (idempotent).

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite" // SQLite driver
 
@@ -62,8 +63,21 @@ func (r *Repository) Close() error {
 
 // initSchema initializes the database schema.
 func (r *Repository) initSchema() error {
-	_, err := r.db.Exec(schemaSQL)
-	return err
+	if _, err := r.db.Exec(schemaSQL); err != nil {
+		return err
+	}
+
+	// Add columns introduced after the initial schema (idempotent).
+	for _, col := range []string{
+		"ALTER TABLE invoices ADD COLUMN trinkgeld REAL",
+		"ALTER TABLE invoices ADD COLUMN steuerzeilen TEXT",
+	} {
+		if _, err := r.db.Exec(col); err != nil &&
+			!strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("failed to add column: %w", err)
+		}
+	}
+	return nil
 }
 
 // Insert adds a new invoice to the database.
@@ -74,13 +88,15 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			auftraggeber, verwendungszweck, rechnungsnummer,
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
-			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr
+			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
+			trinkgeld, steuerzeilen
 		) VALUES (
 			?, ?, ?, ?,
 			?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?
+			?, ?, ?, ?, ?,
+			?, ?
 		)
 	`
 
@@ -90,6 +106,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag,
 		row.Waehrung, row.Gegenkonto, row.Bankkonto, row.Bezahldatum, row.Teilzahlung,
 		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.VATID,
+		row.Trinkgeld, core.MarshalTaxLines(row.TaxLines),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert invoice: %w", err)
@@ -129,6 +146,8 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			gebuehr = ?,
 			hat_anhaenge = ?,
 			ustidnr = ?, -- stores the issuer VAT-ID (core.CSVRow.VATID)
+			trinkgeld = ?,
+			steuerzeilen = ?,
 			jahr = ?,
 			monat = ?
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
@@ -154,6 +173,8 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.Gebuehr,
 		row.HatAnhaenge,
 		row.VATID,
+		row.Trinkgeld,
+		core.MarshalTaxLines(row.TaxLines),
 		row.Jahr, row.Monat,
 		jahr, monat, oldDateiname,
 	)
@@ -203,7 +224,8 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			auftraggeber, verwendungszweck, rechnungsnummer,
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
-			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr
+			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
+			trinkgeld, steuerzeilen
 		FROM invoices
 		WHERE jahr = ? AND monat = ?
 		ORDER BY rechnungsdatum DESC, dateiname ASC
@@ -219,15 +241,22 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 
 	for rows.Next() {
 		var row core.CSVRow
+		var steuerzeilen string
 		err := rows.Scan(
 			&row.Dateiname, &row.Rechnungsdatum, &row.Jahr, &row.Monat,
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
 			&row.BetragNetto, &row.SteuersatzProzent, &row.SteuersatzBetrag, &row.Bruttobetrag,
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
 			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.VATID,
+			&row.Trinkgeld, &steuerzeilen,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		row.TaxLines = core.ParseTaxLines(steuerzeilen)
+		if len(row.TaxLines) == 0 {
+			row.TaxLines = core.ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag)
 		}
 
 		results = append(results, row)

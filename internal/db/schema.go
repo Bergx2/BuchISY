@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS invoices (
 	gebuehr REAL,
 	hat_anhaenge BOOLEAN DEFAULT 0,
 	ustidnr TEXT,
+	trinkgeld REAL,
+	steuerzeilen TEXT,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
