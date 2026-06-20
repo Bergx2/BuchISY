@@ -167,26 +167,12 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	})
 	dateCalendarBtn.Importance = widget.LowImportance
 
-	// Format amounts with the user-configured decimal + thousands separators.
-	formatAmount := func(v float64) string {
-		return core.FormatAmount(v, a.settings.DecimalSeparator)
-	}
+	// VAT-lines editor (replaces the four individual net/vat%/vat-amount/gross entries).
+	// Seeded with the extracted TaxLines + Trinkgeld; onChange is wired after
+	// updateFilenamePreview is defined below.
 
-	netEntry := widget.NewEntry()
-	netEntry.SetText(formatAmount(meta.BetragNetto))
-	netEntry.SetPlaceHolder(a.bundle.T("field.net"))
-
-	vatPercentEntry := widget.NewEntry()
-	vatPercentEntry.SetText(formatAmount(meta.SteuersatzProzent))
-	vatPercentEntry.SetPlaceHolder(a.bundle.T("field.vatPercent"))
-
-	vatAmountEntry := widget.NewEntry()
-	vatAmountEntry.SetText(formatAmount(meta.SteuersatzBetrag))
-	vatAmountEntry.SetPlaceHolder(a.bundle.T("field.vatAmount"))
-
-	grossEntry := widget.NewEntry()
-	grossEntry.SetText(formatAmount(meta.Bruttobetrag))
-	grossEntry.SetPlaceHolder(a.bundle.T("field.gross"))
+	// Placeholder for the editor — created after updateFilenamePreview is defined.
+	var ed *taxLinesEditor
 
 	// Currency select
 	currencyOptions := []string{"EUR", "USD"}
@@ -298,16 +284,24 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		if filenameEdited {
 			return
 		}
-		// Build meta from current form values
+		// Build meta from current form values.
+		// ed may still be nil during initial setup; treat Brutto as 0 in that case.
+		var brutto, netto, mwstBetrag, mwstProzent float64
+		if ed != nil {
+			brutto = ed.Brutto()
+			netto = core.SumNetto(ed.Lines())
+			mwstBetrag = core.SumMwSt(ed.Lines())
+			mwstProzent = core.PrimarySatz(ed.Lines())
+		}
 		currentMeta := core.Meta{
 			Auftraggeber:      companyEntry.Text,
 			Verwendungszweck:  shortDescEntry.Text,
 			Rechnungsnummer:   invoiceNumEntry.Text,
 			Rechnungsdatum:    dateEntry.Text,
-			BetragNetto:       parseFloat(netEntry.Text, a.settings.DecimalSeparator),
-			SteuersatzProzent: parseFloat(vatPercentEntry.Text, a.settings.DecimalSeparator),
-			SteuersatzBetrag:  parseFloat(vatAmountEntry.Text, a.settings.DecimalSeparator),
-			Bruttobetrag:      parseFloat(grossEntry.Text, a.settings.DecimalSeparator),
+			BetragNetto:       netto,
+			SteuersatzProzent: mwstProzent,
+			SteuersatzBetrag:  mwstBetrag,
+			Bruttobetrag:      brutto,
 			Waehrung:          currencySelect.Selected,
 		}
 		// Extract year and month from DD.MM.YYYY format
@@ -351,15 +345,11 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	}
 	invoiceNumEntry.OnChanged = onAnyChange
 	dateEntry.OnChanged = onAnyChange
-	netEntry.OnChanged = onAnyChange
-	vatPercentEntry.OnChanged = onAnyChange
-	vatAmountEntry.OnChanged = onAnyChange
-	grossEntry.OnChanged = onAnyChange
 
-	// As soon as two of {Netto, MwSt %, MwSt-Betrag, Brutto} are
-	// entered, fill in the others automatically.
-	wireAmountAutoCompute(netEntry, vatPercentEntry, vatAmountEntry, grossEntry,
-		a.settings.DecimalSeparator)
+	// Create the VAT-lines editor now that updateFilenamePreview is defined.
+	// onChange is updateFilenamePreview so the filename preview updates live
+	// whenever any amount entry changes.
+	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, updateFilenamePreview)
 
 	// Initial preview - call after all widgets are set up
 	updateFilenamePreview()
@@ -448,26 +438,9 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 						paymentDateCalendarBtn, paymentDateEntry),
 				)),
-			fi(a.bundle.T("field.net"),
-				container.NewGridWithColumns(3,
-					netEntry,
-					container.NewBorder(nil, nil,
-						widget.NewLabelWithStyle(a.bundle.T("field.vatPercent"),
-							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-						nil, vatPercentEntry),
-					container.NewBorder(nil, nil,
-						widget.NewLabelWithStyle(a.bundle.T("field.vatAmount"),
-							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-						nil, vatAmountEntry),
-				)),
-			fi(a.bundle.T("field.gross"),
-				container.NewGridWithColumns(2,
-					grossEntry,
-					container.NewBorder(nil, nil,
-						widget.NewLabelWithStyle(a.bundle.T("field.currency"),
-							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-						nil, currencySelect),
-				)),
+			fi("MwSt.-Zeilen", ed.Container()),
+			fi(a.bundle.T("field.currency"),
+				container.NewBorder(nil, nil, nil, nil, currencySelect)),
 		)),
 		section("Ablage", selectableForm(a.bundle,
 			fi(a.bundle.T("field.account"),
@@ -562,10 +535,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			vatIDEntry.Text,
 			dateEntry.Text,
 			paymentDateEntry.Text,
-			parseFloat(netEntry.Text, a.settings.DecimalSeparator),
-			parseFloat(vatPercentEntry.Text, a.settings.DecimalSeparator),
-			parseFloat(vatAmountEntry.Text, a.settings.DecimalSeparator),
-			parseFloat(grossEntry.Text, a.settings.DecimalSeparator),
+			ed.Lines(),
+			ed.Trinkgeld(),
 			currencySelect.Selected,
 			accountMap[accountSelect.Selected],
 			bankAccountSelect.Selected,
@@ -648,10 +619,8 @@ func (a *App) saveInvoice(
 	vatID string,
 	invoiceDate string,
 	paymentDate string,
-	net float64,
-	vatPercent float64,
-	vatAmount float64,
-	gross float64,
+	taxLines []core.TaxLine,
+	trinkgeld float64,
 	currency string,
 	account int,
 	bankAccount string,
@@ -673,10 +642,12 @@ func (a *App) saveInvoice(
 		VATID:             strings.TrimSpace(vatID),
 		Rechnungsdatum:    invoiceDate,
 		Bezahldatum:       paymentDate,
-		BetragNetto:       net,
-		SteuersatzProzent: vatPercent,
-		SteuersatzBetrag:  vatAmount,
-		Bruttobetrag:      gross,
+		TaxLines:          taxLines,
+		Trinkgeld:         trinkgeld,
+		BetragNetto:       core.SumNetto(taxLines),
+		SteuersatzProzent: core.PrimarySatz(taxLines),
+		SteuersatzBetrag:  core.SumMwSt(taxLines),
+		Bruttobetrag:      core.ComputeBrutto(taxLines, trinkgeld),
 		Waehrung:          currency,
 		Gegenkonto:        account,
 		Bankkonto:         bankAccount,
