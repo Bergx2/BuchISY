@@ -57,7 +57,12 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 	if trinkgeld != 0 {
 		e.trinkEntry.SetText(formatDecimal(trinkgeld, a.settings.DecimalSeparator))
 	}
-	e.trinkEntry.OnChanged = func(string) { e.refresh() }
+	e.trinkEntry.OnChanged = func(string) {
+		if e.seeding {
+			return
+		}
+		e.refresh()
+	}
 
 	// Brutto label (read-only)
 	e.bruttoLabel = widget.NewLabelWithStyle(
