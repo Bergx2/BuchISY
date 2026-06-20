@@ -35,6 +35,8 @@
   "table.col.attachmentcount": "Attachment Count",
   "table.col.unterordner": "Subfolder",
   "table.col.buchungref": "Booking",
+  "table.col.trinkgeld": "Tip",
+  "table.col.taxlines": "VAT lines",
   "table.delete": "Delete File",
   "menu.copy": "Copy",
   "table.copyCell": "Copy cell",

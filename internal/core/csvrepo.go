@@ -38,6 +38,8 @@ var DefaultCSVColumns = []string{
 	"AnzahlAnhaenge",
 	"Unterordner",
 	"BuchungRef",
+	"Trinkgeld",
+	"Steuerzeilen",
 }
 
 // ColumnDisplayNames maps column IDs to German display names.
@@ -66,6 +68,8 @@ var ColumnDisplayNames = map[string]string{
 	"AnzahlAnhaenge":     "Anzahl Anhänge",
 	"Unterordner":        "Unterordner",
 	"BuchungRef":         "Buchungs-Ref",
+	"Trinkgeld":          "Trinkgeld",
+	"Steuerzeilen":       "Steuerzeilen (Detail)",
 }
 
 // ColumnTranslationKeys maps column IDs to translation keys.
@@ -94,6 +98,8 @@ var ColumnTranslationKeys = map[string]string{
 	"AnzahlAnhaenge":     "table.col.attachmentcount",
 	"Unterordner":        "table.col.unterordner",
 	"BuchungRef":         "table.col.buchungref",
+	"Trinkgeld":          "table.col.trinkgeld",
+	"Steuerzeilen":       "table.col.taxlines",
 }
 
 var validColumns = func() map[string]struct{} {
@@ -272,6 +278,12 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 		// HatAnhaenge column existed (legacy CSVs where only the count was stored).
 		if !row.HatAnhaenge && row.AnzahlAnhaenge > 0 {
 			row.HatAnhaenge = true
+		}
+		row.Trinkgeld = parseFloat(valueForColumn(record, headerMap, "Trinkgeld"))
+		row.TaxLines = ParseTaxLines(valueForColumn(record, headerMap, "Steuerzeilen"))
+		if len(row.TaxLines) == 0 {
+			// Legacy row without detail: reconstruct one line from aggregates.
+			row.TaxLines = ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag)
 		}
 		rows = append(rows, row)
 	}
@@ -459,6 +471,8 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"AnzahlAnhaenge":     strconv.Itoa(row.AnzahlAnhaenge),
 		"Unterordner":        row.Unterordner,
 		"BuchungRef":         row.BuchungRef,
+		"Trinkgeld":          r.formatFloat(row.Trinkgeld),
+		"Steuerzeilen":       MarshalTaxLines(row.TaxLines),
 	}
 
 	// Build record in configured order

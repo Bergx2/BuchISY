@@ -105,6 +105,45 @@ func TestCSVWriteTo(t *testing.T) {
 	}
 }
 
+func TestCSVTaxLinesRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invoices.csv")
+	repo := NewCSVRepository()
+	row := CSVRow{
+		Dateiname: "a.pdf", Jahr: "2026", Monat: "06",
+		BetragNetto: 32.89, SteuersatzBetrag: 4.01, Bruttobetrag: 38.90,
+		TaxLines: []TaxLine{
+			{Netto: 14.20, SatzProzent: 19, MwStBetrag: 2.70},
+			{Netto: 18.69, SatzProzent: 7, MwStBetrag: 1.31},
+		},
+		Trinkgeld: 2.00,
+	}
+	if err := repo.Append(path, row); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := repo.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || len(rows[0].TaxLines) != 2 || rows[0].Trinkgeld != 2.00 {
+		t.Fatalf("tax lines not round-tripped: %+v", rows)
+	}
+}
+
+func TestCSVLegacyReconstructsTaxLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invoices.csv")
+	legacy := "Dateiname,BetragNetto,Steuersatz_Prozent,Steuersatz_Betrag\nalt.pdf,10.00,19,1.90\n"
+	if err := os.WriteFile(path, []byte(legacy), 0644); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := NewCSVRepository().Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || len(rows[0].TaxLines) != 1 || rows[0].TaxLines[0].SatzProzent != 19 {
+		t.Fatalf("legacy row should reconstruct one TaxLine: %+v", rows)
+	}
+}
+
 func TestSetColumnOrderKeepsNewColumns(t *testing.T) {
 	repo := NewCSVRepository()
 	repo.SetColumnOrder([]string{"Dateiname", "Firmenname"})

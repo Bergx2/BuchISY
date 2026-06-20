@@ -35,6 +35,8 @@
   "table.col.attachmentcount": "Anzahl Anhänge",
   "table.col.unterordner": "Unterordner",
   "table.col.buchungref": "Buchung",
+  "table.col.trinkgeld": "Trinkgeld",
+  "table.col.taxlines": "Steuerzeilen",
   "table.delete": "Datei löschen",
   "menu.copy": "Kopieren",
   "table.copyCell": "Zelle kopieren",
