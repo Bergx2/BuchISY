@@ -106,21 +106,8 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	})
 	dateCalendarBtn.Importance = widget.LowImportance
 
-	netEntry := widget.NewEntry()
-	netEntry.SetText(formatDecimal(meta.BetragNetto, a.settings.DecimalSeparator))
-	netEntry.SetPlaceHolder(a.bundle.T("field.net"))
-
-	vatPercentEntry := widget.NewEntry()
-	vatPercentEntry.SetText(formatDecimal(meta.SteuersatzProzent, a.settings.DecimalSeparator))
-	vatPercentEntry.SetPlaceHolder(a.bundle.T("field.vatPercent"))
-
-	vatAmountEntry := widget.NewEntry()
-	vatAmountEntry.SetText(formatDecimal(meta.SteuersatzBetrag, a.settings.DecimalSeparator))
-	vatAmountEntry.SetPlaceHolder(a.bundle.T("field.vatAmount"))
-
-	grossEntry := widget.NewEntry()
-	grossEntry.SetText(formatDecimal(meta.Bruttobetrag, a.settings.DecimalSeparator))
-	grossEntry.SetPlaceHolder(a.bundle.T("field.gross"))
+	// VAT-lines editor — declared here so updateFilenamePreview can reference it.
+	var ed *taxLinesEditor
 
 	currencySelect := widget.NewSelect([]string{"EUR", "USD"}, nil)
 	if meta.Waehrung != "" {
@@ -224,15 +211,23 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		if filenameEdited {
 			return
 		}
+		// ed may still be nil during initial setup; treat amounts as 0 in that case.
+		var brutto, netto, mwstBetrag, mwstProzent float64
+		if ed != nil {
+			brutto = ed.Brutto()
+			netto = core.SumNetto(ed.Lines())
+			mwstBetrag = core.SumMwSt(ed.Lines())
+			mwstProzent = core.PrimarySatz(ed.Lines())
+		}
 		currentMeta := core.Meta{
 			Auftraggeber:      companyEntry.Text,
 			Verwendungszweck:  shortDescEntry.Text,
 			Rechnungsnummer:   invoiceNumEntry.Text,
 			Rechnungsdatum:    dateEntry.Text,
-			BetragNetto:       parseFloat(netEntry.Text, a.settings.DecimalSeparator),
-			SteuersatzProzent: parseFloat(vatPercentEntry.Text, a.settings.DecimalSeparator),
-			SteuersatzBetrag:  parseFloat(vatAmountEntry.Text, a.settings.DecimalSeparator),
-			Bruttobetrag:      parseFloat(grossEntry.Text, a.settings.DecimalSeparator),
+			BetragNetto:       netto,
+			SteuersatzProzent: mwstProzent,
+			SteuersatzBetrag:  mwstBetrag,
+			Bruttobetrag:      brutto,
 			Waehrung:          currencySelect.Selected,
 		}
 		parts := strings.Split(dateEntry.Text, ".")
@@ -270,15 +265,9 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	companyEntry.OnChanged = onAnyChange
 	invoiceNumEntry.OnChanged = onAnyChange
 	dateEntry.OnChanged = onAnyChange
-	netEntry.OnChanged = onAnyChange
-	vatPercentEntry.OnChanged = onAnyChange
-	vatAmountEntry.OnChanged = onAnyChange
-	grossEntry.OnChanged = onAnyChange
 
-	// As soon as two of {Netto, MwSt %, MwSt-Betrag, Brutto} are
-	// entered, fill in the others automatically.
-	wireAmountAutoCompute(netEntry, vatPercentEntry, vatAmountEntry, grossEntry,
-		a.settings.DecimalSeparator)
+	// Create the VAT-lines editor now that updateFilenamePreview is defined.
+	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, updateFilenamePreview)
 
 	updateFilenamePreview()
 
@@ -381,26 +370,9 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 						paymentDateCalendarBtn, paymentDateEntry),
 				)),
-			fi(a.bundle.T("field.net"),
-				container.NewGridWithColumns(3,
-					netEntry,
-					container.NewBorder(nil, nil,
-						widget.NewLabelWithStyle(a.bundle.T("field.vatPercent"),
-							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-						nil, vatPercentEntry),
-					container.NewBorder(nil, nil,
-						widget.NewLabelWithStyle(a.bundle.T("field.vatAmount"),
-							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-						nil, vatAmountEntry),
-				)),
-			fi(a.bundle.T("field.gross"),
-				container.NewGridWithColumns(2,
-					grossEntry,
-					container.NewBorder(nil, nil,
-						widget.NewLabelWithStyle(a.bundle.T("field.currency"),
-							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-						nil, currencySelect),
-				)),
+			fi("MwSt.-Zeilen", ed.Container()),
+			fi(a.bundle.T("field.currency"),
+				container.NewBorder(nil, nil, nil, nil, currencySelect)),
 		)),
 		section("Ablage", selectableForm(a.bundle,
 			fi(a.bundle.T("field.account"),
@@ -478,10 +450,8 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			vatIDEntry.Text,
 			dateEntry.Text,
 			paymentDateEntry.Text,
-			parseFloat(netEntry.Text, a.settings.DecimalSeparator),
-			parseFloat(vatPercentEntry.Text, a.settings.DecimalSeparator),
-			parseFloat(vatAmountEntry.Text, a.settings.DecimalSeparator),
-			parseFloat(grossEntry.Text, a.settings.DecimalSeparator),
+			ed.Lines(),
+			ed.Trinkgeld(),
 			currencySelect.Selected,
 			accountMap[accountSelect.Selected],
 			bankAccountSelect.Selected,
@@ -546,10 +516,8 @@ func (a *App) updateInvoice(
 	vatID string,
 	invoiceDate string,
 	paymentDate string,
-	net float64,
-	vatPercent float64,
-	vatAmount float64,
-	gross float64,
+	taxLines []core.TaxLine,
+	trinkgeld float64,
 	currency string,
 	account int,
 	bankAccount string,
@@ -573,10 +541,12 @@ func (a *App) updateInvoice(
 		VATID:             strings.TrimSpace(vatID),
 		Rechnungsdatum:    invoiceDate,
 		Bezahldatum:       paymentDate,
-		BetragNetto:       net,
-		SteuersatzProzent: vatPercent,
-		SteuersatzBetrag:  vatAmount,
-		Bruttobetrag:      gross,
+		TaxLines:          taxLines,
+		Trinkgeld:         trinkgeld,
+		BetragNetto:       core.SumNetto(taxLines),
+		SteuersatzProzent: core.PrimarySatz(taxLines),
+		SteuersatzBetrag:  core.SumMwSt(taxLines),
+		Bruttobetrag:      core.ComputeBrutto(taxLines, trinkgeld),
 		Waehrung:          currency,
 		Gegenkonto:        account,
 		Bankkonto:         bankAccount,
