@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -23,11 +24,16 @@ type taxLineRow struct {
 // VAT lines (Netto / Satz % / MwSt-Betrag) plus a Trinkgeld field. It
 // exposes the computed Brutto as a read-only label that updates live.
 type taxLinesEditor struct {
-	app       *App
-	onChange  func()
+	app      *App
+	onChange func()
 
-	rows       []taxLineRow
-	trinkEntry *widget.Entry
+	// seeding is true while rows are being populated programmatically during
+	// construction. Auto-fill and onChange callbacks skip their work while
+	// seeding is true so that stored/typed MwSt values are not overwritten.
+	seeding bool
+
+	rows        []taxLineRow
+	trinkEntry  *widget.Entry
 	bruttoLabel *widget.Label
 
 	rowsBox   *fyne.Container // VBox holding the line rows
@@ -65,7 +71,10 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 	})
 	addBtn.Importance = widget.LowImportance
 
-	// Seed with provided lines (or one empty row)
+	// Seed with provided lines (or one empty row).
+	// seeding=true prevents auto-fill from clobbering stored MwSt values
+	// while SetText is called on each entry during construction.
+	e.seeding = true
 	if len(lines) == 0 {
 		e.appendRow(core.TaxLine{})
 	} else {
@@ -73,6 +82,7 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 			e.appendRow(l)
 		}
 	}
+	e.seeding = false
 
 	// Trinkgeld row
 	trinkRow := container.NewBorder(nil, nil,
@@ -123,19 +133,40 @@ func (e *taxLinesEditor) appendRow(l core.TaxLine) {
 
 	row := taxLineRow{netto: netE, satz: satzE, mwst: mwstE}
 
-	// Auto-compute MwSt when Netto and Satz are set but MwSt is empty.
+	// Auto-compute MwSt when Netto and Satz are set but the MwSt field is
+	// textually empty. Gating on the raw text (not the parsed float) means a
+	// stored or user-typed "0,00" is never silently overwritten.
 	autoFill := func() {
+		if e.seeding {
+			return
+		}
 		n := parseFloat(netE.Text, sep)
 		s := parseFloat(satzE.Text, sep)
-		m := parseFloat(mwstE.Text, sep)
-		if n > 0 && s > 0 && m == 0 {
+		if n > 0 && s > 0 && strings.TrimSpace(mwstE.Text) == "" {
 			mwstE.SetText(formatDecimal(round2(n*s/100), sep))
 		}
 	}
 
-	netE.OnChanged = func(string) { autoFill(); e.refresh() }
-	satzE.OnChanged = func(string) { autoFill(); e.refresh() }
-	mwstE.OnChanged = func(string) { e.refresh() }
+	netE.OnChanged = func(string) {
+		if e.seeding {
+			return
+		}
+		autoFill()
+		e.refresh()
+	}
+	satzE.OnChanged = func(string) {
+		if e.seeding {
+			return
+		}
+		autoFill()
+		e.refresh()
+	}
+	mwstE.OnChanged = func(string) {
+		if e.seeding {
+			return
+		}
+		e.refresh()
+	}
 
 	// Remove button — finds the row by identity (pointer equality on netto entry).
 	removeBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
