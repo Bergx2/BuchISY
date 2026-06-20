@@ -127,6 +127,10 @@ func TestCSVTaxLinesRoundTrip(t *testing.T) {
 	if len(rows) != 1 || len(rows[0].TaxLines) != 2 || rows[0].Trinkgeld != 2.00 {
 		t.Fatalf("tax lines not round-tripped: %+v", rows)
 	}
+	// Verify MwStBetrag survived the round-trip (first line: 2.70).
+	if got := rows[0].TaxLines[0].MwStBetrag; got < 2.695 || got > 2.705 {
+		t.Errorf("TaxLines[0].MwStBetrag = %v, want ~2.70", got)
+	}
 }
 
 func TestCSVLegacyReconstructsTaxLine(t *testing.T) {
