@@ -19,9 +19,8 @@ Ziel: Liefere ausschließlich ein strenges JSON-Objekt mit genau diesen Schlüss
   "verwendungszweck": "string oder null",
   "rechnungsnummer": "string oder null",
   "vat_id": "USt-IdNr. des Rechnungsstellers oder null",
-  "betragnetto": 0.0,
-  "steuersatz_prozent": 0.0,
-  "steuersatz_betrag": 0.0,
+  "steuerzeilen": [{"satz": 0.0, "netto": 0.0, "mwst": 0.0}],
+  "trinkgeld": 0.0,
   "bruttobetrag": 0.0,
   "waehrung": "EUR|USD|andere ISO4217 oder null",
   "rechnungsdatum": "dd.MM.yyyy oder null",
@@ -35,10 +34,10 @@ Regeln:
 - Wenn unsicher: Feld auf null setzen, nicht raten.
 - auftraggeber: Verwende den Aussteller (Vendor), nicht den Rechnungsempfänger.
 - rechnungsdatum: Bevorzuge das Feld nahe "Rechnung/Rechnungsdatum/Datum". Normalisiere nach dd.MM.yyyy (deutsches Format).
-- betragnetto / steuersatz_prozent / steuersatz_betrag / bruttobetrag:
-  - bruttobetrag = Gesamtbetrag / Total / Rechnungsbetrag.
+- steuerzeilen: je MwSt.-Satz eine Zeile (satz %, netto, mwst). Bei nur einem Satz genau eine Zeile. trinkgeld: separat ohne MwSt., 0 wenn keins.
+- bruttobetrag = Gesamtbetrag / Total / Rechnungsbetrag.
   - Nutze Punkt als Dezimaltrennzeichen in JSON (56.23) und entferne Tausendertrennzeichen.
-  - Wenn möglich, konsistenzprüfen: netto + steuer ≈ brutto (kleine Abweichung zulässig).
+  - Wenn möglich, konsistenzprüfen: summe(netto) + summe(mwst) + trinkgeld ≈ brutto (kleine Abweichung zulässig).
 - waehrung: Verwende ISO-Code (z. B. EUR, USD). "€" ⇒ EUR.
 - jahr / monat: aus rechnungsdatum ableiten (YYYY, MM).
 - verwendungszweck: kurze menschliche Zusammenfassung (max. ~80 Zeichen), z. B. "Cloud-Abo Oktober 2025".
@@ -344,28 +343,32 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string, own
 	return meta, confidence, nil
 }
 
-// parseExtractionResponse parses the JSON response from Claude API.
+// parseExtractionJSON parses the JSON response from Claude API into a Meta.
 // ownVATIDs is the list of the user's own VAT-IDs; if Claude returned
 // one of them as vat_id, we drop it (defense-in-depth, since the LLM
 // can ignore prompt instructions).
-func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, error) {
+// This is exported for unit-testability.
+func parseExtractionJSON(response string, ownVATIDs []string) (core.Meta, error) {
 	// Clean response (remove any markdown code blocks if present)
 	response = cleanJSONResponse(response)
 
 	// Parse JSON response
 	var result struct {
-		Auftraggeber      *string  `json:"auftraggeber"`
-		Verwendungszweck  *string  `json:"verwendungszweck"`
-		Rechnungsnummer   *string  `json:"rechnungsnummer"`
-		VATID             *string  `json:"vat_id"`
-		BetragNetto       *float64 `json:"betragnetto"`
-		SteuersatzProzent *float64 `json:"steuersatz_prozent"`
-		SteuersatzBetrag  *float64 `json:"steuersatz_betrag"`
-		Bruttobetrag      *float64 `json:"bruttobetrag"`
-		Waehrung          *string  `json:"waehrung"`
-		Rechnungsdatum    *string  `json:"rechnungsdatum"`
-		Jahr              *string  `json:"jahr"`
-		Monat             *string  `json:"monat"`
+		Auftraggeber     *string `json:"auftraggeber"`
+		Verwendungszweck *string `json:"verwendungszweck"`
+		Rechnungsnummer  *string `json:"rechnungsnummer"`
+		VATID            *string `json:"vat_id"`
+		Steuerzeilen     []struct {
+			Satz  float64 `json:"satz"`
+			Netto float64 `json:"netto"`
+			MwSt  float64 `json:"mwst"`
+		} `json:"steuerzeilen"`
+		Trinkgeld      *float64 `json:"trinkgeld"`
+		Bruttobetrag   *float64 `json:"bruttobetrag"`
+		Waehrung       *string  `json:"waehrung"`
+		Rechnungsdatum *string  `json:"rechnungsdatum"`
+		Jahr           *string  `json:"jahr"`
+		Monat          *string  `json:"monat"`
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
@@ -394,17 +397,19 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 		}
 		meta.VATID = val
 	}
-	if result.BetragNetto != nil {
-		meta.BetragNetto = *result.BetragNetto
+	for _, z := range result.Steuerzeilen {
+		meta.TaxLines = append(meta.TaxLines, core.TaxLine{Netto: z.Netto, SatzProzent: z.Satz, MwStBetrag: z.MwSt})
 	}
-	if result.SteuersatzProzent != nil {
-		meta.SteuersatzProzent = *result.SteuersatzProzent
+	if result.Trinkgeld != nil {
+		meta.Trinkgeld = *result.Trinkgeld
 	}
-	if result.SteuersatzBetrag != nil {
-		meta.SteuersatzBetrag = *result.SteuersatzBetrag
-	}
-	if result.Bruttobetrag != nil {
+	meta.BetragNetto = core.SumNetto(meta.TaxLines)
+	meta.SteuersatzBetrag = core.SumMwSt(meta.TaxLines)
+	meta.SteuersatzProzent = core.PrimarySatz(meta.TaxLines)
+	if result.Bruttobetrag != nil && *result.Bruttobetrag > 0 {
 		meta.Bruttobetrag = *result.Bruttobetrag
+	} else {
+		meta.Bruttobetrag = core.ComputeBrutto(meta.TaxLines, meta.Trinkgeld)
 	}
 	if result.Waehrung != nil {
 		meta.Waehrung = *result.Waehrung
@@ -420,6 +425,12 @@ func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, er
 	}
 
 	return meta, nil
+}
+
+// parseExtractionResponse is an alias for parseExtractionJSON kept for
+// backward compatibility with existing tests that call it directly.
+func parseExtractionResponse(response string, ownVATIDs []string) (core.Meta, error) {
+	return parseExtractionJSON(response, ownVATIDs)
 }
 
 // preprocessText limits and prioritizes invoice-relevant content.

@@ -1,6 +1,13 @@
 package anthropic
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
+
+func almostA(a, b float64) bool {
+	return math.Abs(a-b) < 0.005
+}
 
 func TestNormalizeVATID(t *testing.T) {
 	cases := map[string]string{
@@ -31,6 +38,20 @@ func TestIsOwnVATID(t *testing.T) {
 	}
 	if isOwnVATID("", own) {
 		t.Error("empty must not match own")
+	}
+}
+
+func TestParseMultipleTaxLines(t *testing.T) {
+	js := `{"auftraggeber":"R","steuerzeilen":[{"satz":19,"netto":14.20,"mwst":2.70},{"satz":7,"netto":18.69,"mwst":1.31}],"trinkgeld":2.00}`
+	meta, err := parseExtractionJSON(js, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meta.TaxLines) != 2 || meta.Trinkgeld != 2.00 {
+		t.Fatalf("lines = %+v trinkgeld=%v", meta.TaxLines, meta.Trinkgeld)
+	}
+	if !almostA(meta.BetragNetto, 32.89) || !almostA(meta.Bruttobetrag, 38.90) {
+		t.Errorf("aggregates wrong: netto=%v brutto=%v", meta.BetragNetto, meta.Bruttobetrag)
 	}
 }
 

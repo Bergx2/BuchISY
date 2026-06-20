@@ -59,6 +59,10 @@ func (e *LocalExtractor) Extract(text string) (Meta, float64, error) {
 		meta.BetragNetto = net
 		meta.SteuersatzBetrag = vat
 		meta.SteuersatzProzent = vatPercent
+		meta.TaxLines = ReconstructTaxLines(net, vatPercent, vat)
+		if meta.Bruttobetrag == 0 {
+			meta.Bruttobetrag = ComputeBrutto(meta.TaxLines, meta.Trinkgeld)
+		}
 		matched++
 	}
 	total++
