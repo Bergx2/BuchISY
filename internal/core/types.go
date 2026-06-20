@@ -8,27 +8,29 @@ import (
 
 // Meta represents the invoice metadata extracted from a PDF.
 type Meta struct {
-	Auftraggeber      string  // Company name (previously Firmenname)
-	Verwendungszweck  string  // Purpose/description (previously Kurzbezeichnung)
-	Rechnungsnummer   string  // Invoice number
-	VATID             string  // VAT-ID Nr. of the SENDER (e.g. DE123456789)
-	BetragNetto       float64 // Net amount
-	SteuersatzProzent float64 // Tax rate in percent
-	SteuersatzBetrag  float64 // Tax amount
-	Bruttobetrag      float64 // Gross amount
-	Waehrung          string  // Currency (EUR, USD, etc.)
-	Rechnungsdatum    string  // Invoice date DD.MM.YYYY
-	Jahr              string  // Year YYYY
-	Monat             string  // Month MM
-	Gegenkonto        int     // Account code
-	Bankkonto         string  // Bank account
-	Bezahldatum       string  // Payment date DD.MM.YYYY
-	Teilzahlung       bool    // Partial payment flag
-	Dateiname         string  // Final filename
-	Kommentar         string  // Comment/note for this invoice
-	BetragNetto_EUR   float64 // Net amount in default currency (EUR) for foreign currency invoices
-	Gebuehr           float64 // Fee (e.g., currency exchange fee)
-	HatAnhaenge       bool    // Indicates if invoice has additional file attachments
+	Auftraggeber      string     // Company name (previously Firmenname)
+	Verwendungszweck  string     // Purpose/description (previously Kurzbezeichnung)
+	Rechnungsnummer   string     // Invoice number
+	VATID             string     // VAT-ID Nr. of the SENDER (e.g. DE123456789)
+	BetragNetto       float64    // Net amount
+	SteuersatzProzent float64    // Tax rate in percent
+	SteuersatzBetrag  float64    // Tax amount
+	Bruttobetrag      float64    // Gross amount
+	TaxLines          []TaxLine  // VAT lines; aggregates above are their sums
+	Trinkgeld         float64    // tip, no VAT, only part of Bruttobetrag
+	Waehrung          string     // Currency (EUR, USD, etc.)
+	Rechnungsdatum    string     // Invoice date DD.MM.YYYY
+	Jahr              string     // Year YYYY
+	Monat             string     // Month MM
+	Gegenkonto        int        // Account code
+	Bankkonto         string     // Bank account
+	Bezahldatum       string     // Payment date DD.MM.YYYY
+	Teilzahlung       bool       // Partial payment flag
+	Dateiname         string     // Final filename
+	Kommentar         string     // Comment/note for this invoice
+	BetragNetto_EUR   float64    // Net amount in default currency (EUR) for foreign currency invoices
+	Gebuehr           float64    // Fee (e.g., currency exchange fee)
+	HatAnhaenge       bool       // Indicates if invoice has additional file attachments
 	// BuchungRef is "<statementFilename>|<page>|<lineIdx>" pointing to
 	// a booking on a bank statement; empty when this invoice is not
 	// linked to a statement. The statement is identified within the
@@ -163,6 +165,8 @@ type CSVRow struct {
 	SteuersatzProzent float64
 	SteuersatzBetrag  float64
 	Bruttobetrag      float64
+	TaxLines          []TaxLine
+	Trinkgeld         float64
 	Waehrung          string
 	Gegenkonto        int
 	Bankkonto         string
@@ -198,6 +202,8 @@ func (m Meta) ToCSVRow() CSVRow {
 		SteuersatzProzent: m.SteuersatzProzent,
 		SteuersatzBetrag:  m.SteuersatzBetrag,
 		Bruttobetrag:      m.Bruttobetrag,
+		TaxLines:          m.TaxLines,
+		Trinkgeld:         m.Trinkgeld,
 		Waehrung:          m.Waehrung,
 		Gegenkonto:        m.Gegenkonto,
 		Bankkonto:         m.Bankkonto,
@@ -226,6 +232,8 @@ func (r CSVRow) ToMeta() Meta {
 		SteuersatzProzent: r.SteuersatzProzent,
 		SteuersatzBetrag:  r.SteuersatzBetrag,
 		Bruttobetrag:      r.Bruttobetrag,
+		TaxLines:          r.TaxLines,
+		Trinkgeld:         r.Trinkgeld,
 		Waehrung:          r.Waehrung,
 		Gegenkonto:        r.Gegenkonto,
 		Bankkonto:         r.Bankkonto,
