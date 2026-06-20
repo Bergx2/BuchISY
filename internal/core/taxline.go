@@ -1,5 +1,10 @@
 package core
 
+import (
+	"encoding/json"
+	"strings"
+)
+
 // TaxLine is one VAT line of a receipt: a net amount taxed at SatzProzent
 // percent, yielding MwStBetrag of tax. A receipt may have several.
 type TaxLine struct {
@@ -38,4 +43,39 @@ func PrimarySatz(lines []TaxLine) float64 {
 		return 0
 	}
 	return lines[0].SatzProzent
+}
+
+// MarshalTaxLines encodes lines as compact JSON; empty input yields "".
+func MarshalTaxLines(lines []TaxLine) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(lines)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// ParseTaxLines decodes lines from JSON; "" or invalid input yields nil.
+func ParseTaxLines(s string) []TaxLine {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var lines []TaxLine
+	if err := json.Unmarshal([]byte(s), &lines); err != nil {
+		return nil
+	}
+	return lines
+}
+
+// ReconstructTaxLines builds a single TaxLine from the legacy aggregate
+// fields, used when a row has no Steuerzeilen detail. Returns nil if the
+// aggregates are all zero.
+func ReconstructTaxLines(netto, satzProzent, mwst float64) []TaxLine {
+	if netto == 0 && satzProzent == 0 && mwst == 0 {
+		return nil
+	}
+	return []TaxLine{{Netto: netto, SatzProzent: satzProzent, MwStBetrag: mwst}}
 }

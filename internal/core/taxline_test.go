@@ -25,3 +25,25 @@ func TestTaxLineSums(t *testing.T) {
 		t.Errorf("PrimarySatz(nil) = %v, want 0", PrimarySatz(nil))
 	}
 }
+
+func TestTaxLineJSONAndReconstruct(t *testing.T) {
+	lines := []TaxLine{{Netto: 14.20, SatzProzent: 19, MwStBetrag: 2.70}}
+	js := MarshalTaxLines(lines)
+	got := ParseTaxLines(js)
+	if len(got) != 1 || !almost(got[0].Netto, 14.20) || got[0].SatzProzent != 19 {
+		t.Fatalf("round-trip failed: %q -> %+v", js, got)
+	}
+	if MarshalTaxLines(nil) != "" {
+		t.Errorf("empty should marshal to empty string")
+	}
+	if ParseTaxLines("") != nil || ParseTaxLines("not json") != nil {
+		t.Errorf("invalid JSON should parse to nil")
+	}
+	rc := ReconstructTaxLines(14.20, 19, 2.70)
+	if len(rc) != 1 || rc[0].SatzProzent != 19 {
+		t.Errorf("reconstruct = %+v", rc)
+	}
+	if ReconstructTaxLines(0, 0, 0) != nil {
+		t.Errorf("all-zero reconstruct should be nil")
+	}
+}
