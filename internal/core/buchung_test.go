@@ -121,3 +121,18 @@ func TestBookingPaymentSplit(t *testing.T) {
 		t.Error("two Haben entries should yield ok=false")
 	}
 }
+
+func TestBookingManuellRoundTrip(t *testing.T) {
+	b := Booking{Manuell: true, Entries: []BookingEntry{{Konto: 6640, Betrag: 10, Soll: true}, {Konto: 1800, Betrag: 10, Soll: false}}}
+	got := ParseBooking(MarshalBooking(b))
+	if !got.Manuell {
+		t.Error("Manuell flag did not round-trip")
+	}
+	if len(got.Entries) != 2 {
+		t.Errorf("entries lost: %+v", got)
+	}
+	// an auto booking (Manuell=false) stays false
+	if ParseBooking(MarshalBooking(Booking{Entries: b.Entries})).Manuell {
+		t.Error("non-manual booking should stay false")
+	}
+}

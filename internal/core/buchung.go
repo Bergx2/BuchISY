@@ -21,6 +21,7 @@ type BookingEntry struct {
 type Booking struct {
 	Entries []BookingEntry `json:"entries,omitempty"`
 	Info    string         `json:"info,omitempty"`
+	Manuell bool           `json:"manuell,omitempty"` // true = hand-edited, not auto-generated
 }
 
 // SollSum returns the total of the debit entries.
