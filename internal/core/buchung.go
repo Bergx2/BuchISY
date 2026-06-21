@@ -107,8 +107,12 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 			BookingEntry{Konto: rule.KontoAbziehbar, Betrag: abz, Soll: true},
 			BookingEntry{Konto: rule.KontoNichtAbziehbar, Betrag: nicht, Soll: true},
 		)
-	default: // "standard"
+	case "standard":
 		entries = append(entries, BookingEntry{Konto: expenseAccount, Betrag: netTotal, Soll: true})
+	default:
+		// A category present in the rules base but without booking logic must
+		// fail loudly rather than silently book as a standard expense.
+		return Booking{}, fmt.Errorf("Buchungskategorie ohne Buchungslogik: %s", kategorie)
 	}
 
 	// Vorsteuer per rate (Soll).
