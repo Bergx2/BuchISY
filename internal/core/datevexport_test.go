@@ -3,6 +3,7 @@ package core
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestBuildDATEVStapel(t *testing.T) {
@@ -32,5 +33,21 @@ func TestBuildDATEVStapel(t *testing.T) {
 	// The payment account 1800 is never its own data row (only a Gegenkonto).
 	if strings.Contains(s, `;"S";"EUR";;;;1800;`) {
 		t.Error("payment account must not be a debit row")
+	}
+}
+
+func TestDatevCleanRuneSafe(t *testing.T) {
+	// 40 'ü' runes (80 bytes); truncating to 36 runes must stay valid UTF-8.
+	in := strings.Repeat("ü", 40)
+	got := datevClean(in, 36)
+	if utf8.RuneCountInString(got) != 36 {
+		t.Errorf("want 36 runes, got %d", utf8.RuneCountInString(got))
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("result is not valid UTF-8: %q", got)
+	}
+	// quotes stripped, short strings untouched
+	if datevClean(`a"b`, 60) != "ab" {
+		t.Errorf("quote strip failed: %q", datevClean(`a"b`, 60))
 	}
 }

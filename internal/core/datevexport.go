@@ -33,8 +33,8 @@ func datevClean(s string, max int) string {
 	s = strings.ReplaceAll(s, `"`, "")
 	s = strings.ReplaceAll(s, "\r", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
-	if len(s) > max {
-		s = s[:max]
+	if runes := []rune(s); len(runes) > max {
+		return string(runes[:max])
 	}
 	return s
 }
