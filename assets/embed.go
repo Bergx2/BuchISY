@@ -20,6 +20,12 @@ var EmbeddedFiles embed.FS
 //go:embed skr04.json
 var SKR04JSON []byte
 
+// BuchungsregelnJSON is the bundled booking rules base (Vorsteuer accounts +
+// category rules like the Bewirtung 70/30 split).
+//
+//go:embed buchungsregeln.json
+var BuchungsregelnJSON []byte
+
 // GetTranslationFile returns the content of a translation file
 func GetTranslationFile(filename string) ([]byte, error) {
 	return EmbeddedFiles.ReadFile("i18n/" + filename)

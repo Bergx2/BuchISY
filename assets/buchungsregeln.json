@@ -1,0 +1,7 @@
+{
+  "vorsteuer_konten": { "19": 1406, "7": 1401 },
+  "regeln": [
+    { "kategorie": "standard", "name": "Standard-Aufwand" },
+    { "kategorie": "bewirtung", "name": "Bewirtung (§ 4 Abs. 5 EStG)", "abziehbar_prozent": 70, "konto_abziehbar": 6640, "konto_nicht_abziehbar": 6644 }
+  ]
+}
