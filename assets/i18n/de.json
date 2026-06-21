@@ -185,6 +185,12 @@
   "month.11": "November",
   "month.12": "Dezember",
 
+  "booking.editor.title": "Buchung manuell bearbeiten",
+  "booking.editor.add": "+ Zeile",
+  "booking.editor.diff": "Differenz: %s €",
+  "booking.editor.pickaccount": "Konto wählen…",
+  "booking.soll": "Soll",
+  "booking.haben": "Haben",
   "booking.balanced": "Σ Soll = Σ Haben ✓",
   "booking.unbalanced": "Nicht ausgeglichen!",
   "booking.section": "Buchungsvorschlag",

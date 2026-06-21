@@ -185,6 +185,12 @@
   "month.11": "November",
   "month.12": "December",
 
+  "booking.editor.title": "Edit booking manually",
+  "booking.editor.add": "+ Line",
+  "booking.editor.diff": "Difference: %s €",
+  "booking.editor.pickaccount": "Pick account…",
+  "booking.soll": "Debit",
+  "booking.haben": "Credit",
   "booking.balanced": "Σ debit = Σ credit ✓",
   "booking.unbalanced": "Not balanced!",
   "booking.section": "Booking proposal",
