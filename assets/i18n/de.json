@@ -200,5 +200,9 @@
   "settings.datev.berater": "DATEV Berater-Nr.",
   "settings.datev.mandant": "DATEV Mandanten-Nr.",
   "settings.datev.wj": "Wirtschaftsjahr-Beginn (TTMMJJJJ)",
-  "settings.datev.hint": "Optional — leer lassen, falls noch nicht bekannt."
+  "settings.datev.hint": "Optional — leer lassen, falls noch nicht bekannt.",
+
+  "controlling.title": "Controlling",
+  "controlling.heading": "Gebuchte Summen je Konto",
+  "controlling.total": "Summe: %s €"
 }
