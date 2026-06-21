@@ -20,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/bergx2/buchisy/assets"
 	"github.com/bergx2/buchisy/internal/anthropic"
 	"github.com/bergx2/buchisy/internal/core"
 	"github.com/bergx2/buchisy/internal/db"
@@ -44,6 +45,8 @@ type App struct {
 	dbRepo             *db.Repository
 	csvRepo            *core.CSVRepository // Kept for CSV export
 	storageManager     *core.StorageManager
+	chartStore         *core.ChartStore
+	chart              *core.ChartOfAccounts
 
 	// Current state
 	currentYear   int
@@ -223,6 +226,14 @@ func (a *App) startProfile(profile string) {
 	a.storageManager = storageManager
 	a.currentYear = now.Year()
 	a.currentMonth = now.Month()
+
+	a.chartStore = core.NewChartStore(configDir, assets.SKR04JSON)
+	if chart, err := a.chartStore.Load(); err != nil {
+		logger.Warn("Failed to load chart of accounts: %v", err)
+		a.chart = core.NewChartOfAccounts(nil)
+	} else {
+		a.chart = chart
+	}
 
 	// One folder per Zahlungskonto, created at <StorageRoot>/<Name>/.
 	a.ensureAccountFolders()
