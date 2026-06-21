@@ -85,6 +85,9 @@ type Settings struct {
 	LastUsedFolder         string        `json:"last_used_folder"`      // Last folder for Belege / attachments
 	LastStatementFolder    string        `json:"last_statement_folder"` // Last folder for Kontoauszüge
 	OwnVATID               string        `json:"own_vat_id"`            // The user's own company VAT-ID — excluded during auto-extract
+	DatevBeraterNr         string        `json:"datev_berater_nr,omitempty"` // optional DATEV consultant number
+	DatevMandantNr         string        `json:"datev_mandant_nr,omitempty"` // optional DATEV client number
+	DatevWJBeginn          string        `json:"datev_wj_beginn,omitempty"`  // fiscal-year start YYYYMMDD (optional)
 	DebugMode              bool          `json:"debug_mode"`            // Enable verbose debug logging
 	WindowWidth            int           `json:"window_width"`          // Window width in pixels
 	WindowHeight           int           `json:"window_height"`         // Window height in pixels

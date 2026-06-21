@@ -86,6 +86,34 @@ func round2(v float64) float64 {
 	return math.Round(v*100) / 100
 }
 
+// PaymentEntry returns the single Haben (credit) entry of the booking — the
+// Zahlungskonto side. ok is false unless there is exactly one Haben entry.
+func (b Booking) PaymentEntry() (BookingEntry, bool) {
+	var found BookingEntry
+	n := 0
+	for _, e := range b.Entries {
+		if !e.Soll {
+			found = e
+			n++
+		}
+	}
+	if n != 1 {
+		return BookingEntry{}, false
+	}
+	return found, true
+}
+
+// DebitEntries returns the Soll (debit) entries — the expense/Vorsteuer lines.
+func (b Booking) DebitEntries() []BookingEntry {
+	out := make([]BookingEntry, 0, len(b.Entries))
+	for _, e := range b.Entries {
+		if e.Soll {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // BuildBooking turns a receipt's tax lines into a balanced Booking per the
 // category rule. expenseAccount is the Soll account for the "standard" case;
 // paymentAccount is the Haben account (Zahlungskonto). Returns an error for an

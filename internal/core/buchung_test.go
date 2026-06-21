@@ -101,3 +101,23 @@ func TestBuildBookingBalancesWithMissingVorsteuerAccount(t *testing.T) {
 		t.Errorf("haben = %v, want 169 (= Σ Soll, not raw gross 171.50)", b.HabenSum())
 	}
 }
+
+func TestBookingPaymentSplit(t *testing.T) {
+	b := Booking{Entries: []BookingEntry{
+		{Konto: 6640, Betrag: 12.71, Soll: true},
+		{Konto: 6644, Betrag: 5.44, Soll: true},
+		{Konto: 1800, Betrag: 18.15, Soll: false},
+	}}
+	pay, ok := b.PaymentEntry()
+	if !ok || pay.Konto != 1800 {
+		t.Fatalf("payment = %+v ok=%v", pay, ok)
+	}
+	if len(b.DebitEntries()) != 2 {
+		t.Errorf("want 2 debit entries, got %d", len(b.DebitEntries()))
+	}
+	// two Haben → not a clean single-payment booking
+	b2 := Booking{Entries: []BookingEntry{{Konto: 1, Betrag: 1, Soll: false}, {Konto: 2, Betrag: 1, Soll: false}}}
+	if _, ok := b2.PaymentEntry(); ok {
+		t.Error("two Haben entries should yield ok=false")
+	}
+}
