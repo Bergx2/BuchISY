@@ -42,7 +42,11 @@ func (e *PDFTextExtractor) ExtractText(path string) (string, error) {
 		sb.WriteString("\n")
 	}
 
-	return sb.String(), nil
+	// PDFs sometimes encode a separator glyph (e.g. the hyphen in a receipt
+	// number "MC9C7PFZ-103052") with a font mapping the extractor can't decode,
+	// yielding the Unicode replacement char U+FFFD. Normalize it to a hyphen so
+	// numbers like "MC9C7PFZ�103052" come through whole.
+	return strings.ReplaceAll(sb.String(), "�", "-"), nil
 }
 
 // HasText checks if the extracted text is meaningful (not just whitespace).
