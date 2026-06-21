@@ -718,6 +718,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("CSV-Export", func() { a.showCSVExportDialog() }),
 			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
+			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
 		)
 		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)
 		pos.Y += overflowBtn.Size().Height

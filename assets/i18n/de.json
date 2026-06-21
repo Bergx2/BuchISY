@@ -228,5 +228,10 @@
 
   "controlling.title": "Controlling",
   "controlling.heading": "Gebuchte Summen je Konto",
-  "controlling.total": "Summe: %s €"
+  "controlling.total": "Summe: %s €",
+
+  "ustva.title": "USt-Voranmeldung",
+  "ustva.heading": "Abziehbare Vorsteuer",
+  "ustva.vorsteuer": "Vorsteuer",
+  "ustva.total": "Summe Vorsteuer: %s €"
 }

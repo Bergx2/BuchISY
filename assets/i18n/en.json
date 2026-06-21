@@ -228,5 +228,10 @@
 
   "controlling.title": "Controlling",
   "controlling.heading": "Booked sums per account",
-  "controlling.total": "Total: %s €"
+  "controlling.total": "Total: %s €",
+
+  "ustva.title": "VAT return",
+  "ustva.heading": "Deductible input VAT",
+  "ustva.vorsteuer": "Input VAT",
+  "ustva.total": "Total input VAT: %s €"
 }
