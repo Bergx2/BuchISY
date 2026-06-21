@@ -47,6 +47,8 @@ type App struct {
 	storageManager     *core.StorageManager
 	chartStore         *core.ChartStore
 	chart              *core.ChartOfAccounts
+	bookingRules       *core.BookingRules
+	bookingTemplates   *core.BookingTemplateStore
 
 	// Current state
 	currentYear   int
@@ -233,6 +235,17 @@ func (a *App) startProfile(profile string) {
 		a.chart = core.NewChartOfAccounts(nil)
 	} else {
 		a.chart = chart
+	}
+
+	if rules, err := core.ParseBookingRules(assets.BuchungsregelnJSON); err != nil {
+		logger.Warn("Failed to parse booking rules: %v", err)
+		a.bookingRules = &core.BookingRules{}
+	} else {
+		a.bookingRules = rules
+	}
+	a.bookingTemplates = core.NewBookingTemplateStore(configDir)
+	if err := a.bookingTemplates.Load(); err != nil {
+		logger.Warn("Failed to load booking templates: %v", err)
 	}
 
 	// One folder per Zahlungskonto, created at <StorageRoot>/<Name>/.
