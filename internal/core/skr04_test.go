@@ -16,6 +16,20 @@ func TestParseChartJSON(t *testing.T) {
 	}
 }
 
+func TestParseChartCSV(t *testing.T) {
+	csv := "Konto;Bezeichnung;Steuerschlüssel\n6640;Bewirtungskosten;\n1800;Bank;\nnicht;eine Zahl;\n"
+	accs, err := ParseChartCSV([]byte(csv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accs) != 2 {
+		t.Fatalf("got %d accounts, want 2: %+v", len(accs), accs)
+	}
+	if accs[0].Number != 6640 || accs[0].Name != "Bewirtungskosten" {
+		t.Errorf("row 0 = %+v", accs[0])
+	}
+}
+
 func TestChartFindSearch(t *testing.T) {
 	c := NewChartOfAccounts([]SKRAccount{
 		{Number: 6644, Name: "Nicht abziehbare Bewirtungskosten", Type: "expense"},

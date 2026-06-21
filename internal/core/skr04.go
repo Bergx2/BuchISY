@@ -1,11 +1,16 @@
 package core
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // SKRAccount is one account of an SKR04-style chart of accounts.
@@ -73,6 +78,48 @@ func ParseChartJSON(data []byte) ([]SKRAccount, error) {
 	var accs []SKRAccount
 	if err := json.Unmarshal(data, &accs); err != nil {
 		return nil, fmt.Errorf("failed to parse chart JSON: %w", err)
+	}
+	return accs, nil
+}
+
+// ParseChartCSV imports accounts from a CSV export. Separator may be ',' or
+// ';'. A non-numeric first cell (header or junk row) is skipped. Columns:
+// Konto, Bezeichnung, [Steuerschlüssel]. Decodes ISO-8859-1 when needed.
+func ParseChartCSV(data []byte) ([]SKRAccount, error) {
+	if !utf8.Valid(data) {
+		if dec, err := charmap.ISO8859_1.NewDecoder().Bytes(data); err == nil {
+			data = dec
+		}
+	}
+	sep := ','
+	if bytes.Count(data, []byte(";")) > bytes.Count(data, []byte(",")) {
+		sep = ';'
+	}
+	r := csv.NewReader(bytes.NewReader(data))
+	r.Comma = sep
+	r.FieldsPerRecord = -1
+	r.LazyQuotes = true
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read chart CSV: %w", err)
+	}
+	var accs []SKRAccount
+	for _, rec := range records {
+		if len(rec) == 0 {
+			continue
+		}
+		num, err := strconv.Atoi(strings.TrimSpace(rec[0]))
+		if err != nil {
+			continue // header / non-account row
+		}
+		a := SKRAccount{Number: num}
+		if len(rec) > 1 {
+			a.Name = strings.TrimSpace(rec[1])
+		}
+		if len(rec) > 2 {
+			a.TaxKey = strings.TrimSpace(rec[2])
+		}
+		accs = append(accs, a)
 	}
 	return accs, nil
 }
