@@ -181,5 +181,8 @@
   "month.09": "September",
   "month.10": "Oktober",
   "month.11": "November",
-  "month.12": "Dezember"
+  "month.12": "Dezember",
+
+  "booking.balanced": "Σ Soll = Σ Haben ✓",
+  "booking.unbalanced": "Nicht ausgeglichen!"
 }
