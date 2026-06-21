@@ -195,6 +195,10 @@
   "export.bookings": "Buchungen exportieren",
   "export.month": "Aktuellen Monat",
   "export.year": "Ganzes Jahr",
+  "export.range": "Zeitraum",
+  "export.from": "Von",
+  "export.to": "Bis",
+  "export.do": "Exportieren",
   "export.done": "%d Buchungszeilen exportiert, %d Belege ohne Buchung übersprungen.",
 
   "settings.datev.berater": "DATEV Berater-Nr.",

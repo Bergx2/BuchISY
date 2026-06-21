@@ -16,35 +16,59 @@ import (
 )
 
 // showBookingExportDialog opens a dialog that lets the user export the
-// double-entry bookings for the current month or the whole current year
-// to a DATEV EXTF file (Windows-1252) and a Lexware CSV (UTF-8).
+// double-entry bookings for the current month, the whole current year, or any
+// chosen date range to a DATEV EXTF file (Windows-1252) and a Lexware CSV
+// (UTF-8).
 func (a *App) showBookingExportDialog() {
-	var d *dialog.CustomDialog
+	monthLabel := a.bundle.T("export.month")
+	yearLabel := a.bundle.T("export.year")
+	rangeLabel := a.bundle.T("export.range")
 
-	monthBtn := widget.NewButton(a.bundle.T("export.month"), func() {
-		if d != nil {
-			d.Hide()
+	fromEntry := widget.NewEntry()
+	fromEntry.SetPlaceHolder("TT.MM.JJJJ")
+	toEntry := widget.NewEntry()
+	toEntry.SetPlaceHolder("TT.MM.JJJJ")
+	rangeForm := container.NewVBox(
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("export.from")), nil, fromEntry),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("export.to")), nil, toEntry),
+	)
+	rangeForm.Hide()
+
+	modeRadio := widget.NewRadioGroup([]string{monthLabel, yearLabel, rangeLabel}, func(sel string) {
+		if sel == rangeLabel {
+			rangeForm.Show()
+		} else {
+			rangeForm.Hide()
 		}
-		fromY, fromM := a.currentYear, int(a.currentMonth)
-		toY, toM := a.currentYear, int(a.currentMonth)
-		period := fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
-		a.runBookingExport(fromY, fromM, toY, toM, period)
 	})
-	monthBtn.Importance = widget.HighImportance
+	modeRadio.SetSelected(monthLabel)
 
-	yearBtn := widget.NewButton(a.bundle.T("export.year"), func() {
-		if d != nil {
-			d.Hide()
-		}
-		fromY, fromM := a.currentYear, 1
-		toY, toM := a.currentYear, 12
-		period := fmt.Sprintf("%04d", a.currentYear)
-		a.runBookingExport(fromY, fromM, toY, toM, period)
-	})
-
-	content := container.NewHBox(monthBtn, yearBtn)
-	d = dialog.NewCustom(a.bundle.T("export.bookings"), a.bundle.T("btn.cancel"), content, a.window)
-	d.Show()
+	content := container.NewVBox(modeRadio, rangeForm)
+	dialog.ShowCustomConfirm(a.bundle.T("export.bookings"), a.bundle.T("export.do"), a.bundle.T("btn.cancel"), content,
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			var fromY, fromM, toY, toM int
+			var period string
+			switch modeRadio.Selected {
+			case yearLabel:
+				fromY, fromM, toY, toM = a.currentYear, 1, a.currentYear, 12
+				period = fmt.Sprintf("%04d", a.currentYear)
+			case rangeLabel:
+				fy, fm, ty, tm, err := csvExportRange(true, "", "", fromEntry.Text, toEntry.Text)
+				if err != nil {
+					a.showError(a.bundle.T("error.processing.title"), err.Error())
+					return
+				}
+				fromY, fromM, toY, toM = fy, fm, ty, tm
+				period = fmt.Sprintf("%04d-%02d_bis_%04d-%02d", fy, fm, ty, tm)
+			default: // current month
+				fromY, fromM, toY, toM = a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth)
+				period = fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+			}
+			a.runBookingExport(fromY, fromM, toY, toM, period)
+		}, a.window)
 }
 
 // runBookingExport collects rows for the given month range, builds the DATEV

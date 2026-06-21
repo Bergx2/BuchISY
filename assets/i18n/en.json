@@ -195,6 +195,10 @@
   "export.bookings": "Export bookings",
   "export.month": "Current month",
   "export.year": "Whole year",
+  "export.range": "Date range",
+  "export.from": "From",
+  "export.to": "To",
+  "export.do": "Export",
   "export.done": "%d booking rows exported, %d invoices without a booking skipped.",
 
   "settings.datev.berater": "DATEV Berater-Nr.",
