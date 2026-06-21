@@ -183,22 +183,31 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		currencySelect.SetSelected(a.settings.CurrencyDefault)
 	}
 
-	// Account select
-	accountOptions := make([]string, 0, len(a.settings.Accounts))
-	accountMap := make(map[string]int)
-	for _, acc := range a.settings.Accounts {
-		label := fmt.Sprintf("%d - %s", acc.Code, acc.Label)
-		accountOptions = append(accountOptions, label)
-		accountMap[label] = acc.Code
+	// Account picker (SKR04-based)
+	selectedAccount := meta.Gegenkonto
+	if selectedAccount == 0 {
+		selectedAccount = a.settings.DefaultAccount
 	}
-	accountSelect := widget.NewSelect(accountOptions, nil)
-	// Pre-select the suggested account
-	for label, code := range accountMap {
-		if code == meta.Gegenkonto {
-			accountSelect.SetSelected(label)
-			break
+	accountDisplay := widget.NewEntry()
+	accountDisplay.Disable()
+	updateAccountDisplay := func() {
+		if selectedAccount == 0 {
+			accountDisplay.SetText("")
+			return
+		}
+		if acc, ok := a.chart.Find(selectedAccount); ok {
+			accountDisplay.SetText(accountLabel(acc))
+		} else {
+			accountDisplay.SetText(fmt.Sprintf("%d", selectedAccount))
 		}
 	}
+	updateAccountDisplay()
+	chooseAccountBtn := widget.NewButton(a.bundle.T("picker.account.choose"), func() {
+		a.showAccountSearch(selectedAccount, func(n int) {
+			selectedAccount = n
+			updateAccountDisplay()
+		})
+	})
 
 	// Bank account select
 	bankAccountSelect := widget.NewSelect(a.bankAccountOptionList(), nil)
@@ -445,7 +454,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		section("Ablage", selectableForm(a.bundle,
 			fi(a.bundle.T("field.account"),
 				container.NewGridWithColumns(2,
-					accountSelect,
+					container.NewBorder(nil, nil, nil, chooseAccountBtn, accountDisplay),
 					container.NewBorder(nil, nil,
 						widget.NewLabelWithStyle(a.bundle.T("field.bankAccount"),
 							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -538,7 +547,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			ed.Lines(),
 			ed.Trinkgeld(),
 			currencySelect.Selected,
-			accountMap[accountSelect.Selected],
+			selectedAccount,
 			bankAccountSelect.Selected,
 			partialPaymentCheck.Checked,
 			commentEntry.Text,
