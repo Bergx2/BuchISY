@@ -48,6 +48,7 @@ type App struct {
 	chartStore         *core.ChartStore
 	chart              *core.ChartOfAccounts
 	bookingRules       *core.BookingRules
+	bookingRulesStore  *core.BookingRulesStore
 	bookingTemplates   *core.BookingTemplateStore
 
 	// Current state
@@ -237,8 +238,9 @@ func (a *App) startProfile(profile string) {
 		a.chart = chart
 	}
 
-	if rules, err := core.ParseBookingRules(assets.BuchungsregelnJSON); err != nil {
-		logger.Warn("Failed to parse booking rules: %v", err)
+	a.bookingRulesStore = core.NewBookingRulesStore(configDir, assets.BuchungsregelnJSON)
+	if rules, err := a.bookingRulesStore.Load(); err != nil {
+		logger.Warn("Failed to load booking rules: %v", err)
 		a.bookingRules = &core.BookingRules{}
 	} else {
 		a.bookingRules = rules
