@@ -68,7 +68,36 @@ func TestBuildBookingStandard(t *testing.T) {
 	if !almost(got[6815], 100) || !almost(got[1406], 19) || !almost(b.HabenSum(), 119) {
 		t.Errorf("standard booking wrong: %+v", b)
 	}
+	if !b.Balanced() {
+		t.Errorf("standard booking not balanced: %+v", b)
+	}
 	if _, err := BuildBooking(rules, "unbekannt", lines, 0, 6815, 1800); err == nil {
 		t.Error("unknown category should error")
+	}
+}
+
+// TestBuildBookingBalancesWithMissingVorsteuerAccount verifies that a booking
+// still balances when a tax line's rate has no registered Vorsteuer account.
+// In this case its VAT is not posted to Soll, so Haben must equal the sum of
+// the actual Soll entries (not the raw gross which would be higher).
+func TestBuildBookingBalancesWithMissingVorsteuerAccount(t *testing.T) {
+	// Only 19% has a Vorsteuer account; 5% does NOT.
+	rules, _ := ParseBookingRules([]byte(`{"vorsteuer_konten":{"19":1406},"regeln":[{"kategorie":"standard","name":"S"}]}`))
+	lines := []TaxLine{
+		{Netto: 100, SatzProzent: 19, MwStBetrag: 19},
+		{Netto: 50, SatzProzent: 5, MwStBetrag: 2.50},
+	}
+	b, err := BuildBooking(rules, "standard", lines, 0, 6815, 1800)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Soll: 6815=150 (net total), 1406=19 (19% VAT only; 5% VAT has no account)
+	// Haben must equal Σ Soll = 169, NOT the raw gross 171.50.
+	if !b.Balanced() {
+		t.Errorf("booking with missing Vorsteuer account not balanced: soll=%v haben=%v entries=%+v",
+			b.SollSum(), b.HabenSum(), b.Entries)
+	}
+	if !almost(b.HabenSum(), 169) {
+		t.Errorf("haben = %v, want 169 (= Σ Soll, not raw gross 171.50)", b.HabenSum())
 	}
 }

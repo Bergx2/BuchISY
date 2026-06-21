@@ -94,9 +94,12 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 		}
 	}
 
-	// Payment (Haben) = gross.
-	gross := round2(SumNetto(lines) + SumMwSt(lines) + trinkgeld)
-	entries = append(entries, BookingEntry{Konto: paymentAccount, Betrag: gross, Soll: false})
+	// Payment (Haben) = sum of all Soll entries, ensuring Σ Soll == Σ Haben by construction.
+	var sollSum float64
+	for _, e := range entries {
+		sollSum += e.Betrag
+	}
+	entries = append(entries, BookingEntry{Konto: paymentAccount, Betrag: round2(sollSum), Soll: false})
 
 	return Booking{Entries: entries}, nil
 }
