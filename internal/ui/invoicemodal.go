@@ -403,7 +403,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	}
 	categorySelect.OnChanged = func(string) { recomputeBooking() }
 
-	editBookingBtn := widget.NewButton(a.bundle.T("booking.editor.title"), func() {
+	editBookingBtn := widget.NewButton(a.bundle.T("booking.manual.adjust"), func() {
 		var seed core.Booking
 		if manualBooking != nil {
 			seed = *manualBooking

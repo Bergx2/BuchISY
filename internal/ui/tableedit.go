@@ -331,7 +331,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	}
 	categorySelect.OnChanged = func(string) { recomputeBooking() }
 
-	editBookingBtn := widget.NewButton(a.bundle.T("booking.editor.title"), func() {
+	editBookingBtn := widget.NewButton(a.bundle.T("booking.manual.adjust"), func() {
 		var seed core.Booking
 		if manualBooking != nil {
 			seed = *manualBooking

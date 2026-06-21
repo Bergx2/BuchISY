@@ -198,6 +198,7 @@
   "booking.no.lines": "No tax lines — not bookable",
   "booking.no.payment.account": "Payment account has no SKR04 account (map it in settings)",
   "booking.auto": "Automatic",
+  "booking.manual.adjust": "Adjust manually…",
   "booking.manual.hint": "Manually edited booking",
 
   "export.bookings": "Export bookings",

@@ -115,7 +115,7 @@ func (a *App) showBookingEditor(current core.Booking, onSave func(core.Booking))
 
 	content := container.NewBorder(nil, container.NewVBox(addBtn, balanceLabel), nil, nil,
 		container.NewVScroll(rowsBox))
-	d := dialog.NewCustomConfirm(a.bundle.T("booking.editor.title"), a.bundle.T("export.do"), a.bundle.T("btn.cancel"),
+	d := dialog.NewCustomConfirm(a.bundle.T("booking.editor.title"), a.bundle.T("btn.save"), a.bundle.T("btn.cancel"),
 		content, func(ok bool) {
 			if ok {
 				onSave(bookingFromRows(rows))
