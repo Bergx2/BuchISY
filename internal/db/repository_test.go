@@ -166,3 +166,28 @@ func TestMigrateCSVToDatabaseBackfillsEmptyDB(t *testing.T) {
 		t.Errorf("second run imported %d, want 0 (db not empty)", n2)
 	}
 }
+
+// TestListHandlesNullTaxColumns reproduces the field bug where invoices created
+// before the trinkgeld/steuerzeilen columns existed have NULL in those columns
+// (the ALTER TABLE migration adds them without a default), and List then failed
+// to scan NULL into float64/string — making the whole table appear empty.
+func TestListHandlesNullTaxColumns(t *testing.T) {
+	repo := newTestRepo(t)
+	if _, err := repo.Insert(core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06", Bruttobetrag: 10}); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a pre-Phase-A row: the new columns are NULL.
+	if _, err := repo.db.Exec(`UPDATE invoices SET trinkgeld = NULL, steuerzeilen = NULL`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := repo.List("2026", "06")
+	if err != nil {
+		t.Fatalf("List must not error on NULL tax columns: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1 (NULL columns hid the row)", len(rows))
+	}
+	if rows[0].Trinkgeld != 0 {
+		t.Errorf("NULL trinkgeld should read as 0, got %v", rows[0].Trinkgeld)
+	}
+}

@@ -67,10 +67,12 @@ func (r *Repository) initSchema() error {
 		return err
 	}
 
-	// Add columns introduced after the initial schema (idempotent).
+	// Add columns introduced after the initial schema (idempotent). Defaults
+	// keep pre-existing rows non-NULL; List also reads them NULL-safely for DBs
+	// already migrated without a default.
 	for _, col := range []string{
-		"ALTER TABLE invoices ADD COLUMN trinkgeld REAL",
-		"ALTER TABLE invoices ADD COLUMN steuerzeilen TEXT",
+		"ALTER TABLE invoices ADD COLUMN trinkgeld REAL DEFAULT 0",
+		"ALTER TABLE invoices ADD COLUMN steuerzeilen TEXT DEFAULT ''",
 	} {
 		if _, err := r.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -241,20 +243,25 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 
 	for rows.Next() {
 		var row core.CSVRow
-		var steuerzeilen string
+		// trinkgeld/steuerzeilen are NULL for rows created before those columns
+		// were added by the ALTER-TABLE migration, so read them NULL-safely
+		// (NULL → 0 / "") instead of failing the whole List.
+		var steuerzeilen sql.NullString
+		var trinkgeld sql.NullFloat64
 		err := rows.Scan(
 			&row.Dateiname, &row.Rechnungsdatum, &row.Jahr, &row.Monat,
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
 			&row.BetragNetto, &row.SteuersatzProzent, &row.SteuersatzBetrag, &row.Bruttobetrag,
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
 			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.VATID,
-			&row.Trinkgeld, &steuerzeilen,
+			&trinkgeld, &steuerzeilen,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
+		row.Trinkgeld = trinkgeld.Float64
 
-		row.TaxLines = core.ParseTaxLines(steuerzeilen)
+		row.TaxLines = core.ParseTaxLines(steuerzeilen.String)
 		if len(row.TaxLines) == 0 {
 			// Pass brutto as the 4th arg so gross-only rows still get a usable line.
 			row.TaxLines = core.ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag)
