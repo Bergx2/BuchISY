@@ -76,16 +76,19 @@ func (a *App) showBookingExportDialog() {
 func (a *App) runBookingExport(fromY, fromM, toY, toM int, period string) {
 	rows := a.collectInvoiceRows(fromY, fromM, toY, toM)
 
-	includeExported := false
-	cls := core.ClassifyForExport(rows, includeExported)
-	msg := a.bundle.T("export.preview", len(cls.Exportable), len(cls.AlreadyExported), len(cls.Skipped))
-	includeCheck := widget.NewCheck(a.bundle.T("export.includeExported"), nil)
-	confirm := container.NewVBox(widget.NewLabel(msg), includeCheck)
+	previewLabel := widget.NewLabel("")
+	updatePreview := func(include bool) {
+		c := core.ClassifyForExport(rows, include)
+		previewLabel.SetText(a.bundle.T("export.preview", len(c.Exportable), len(c.AlreadyExported), len(c.Skipped)))
+	}
+	includeCheck := widget.NewCheck(a.bundle.T("export.includeExported"), func(checked bool) { updatePreview(checked) })
+	updatePreview(false)
+	confirm := container.NewVBox(previewLabel, includeCheck)
 	dialog.ShowCustomConfirm(a.bundle.T("export.bookings"), a.bundle.T("export.do"), a.bundle.T("btn.cancel"), confirm, func(ok bool) {
 		if !ok {
 			return
 		}
-		cls = core.ClassifyForExport(rows, includeCheck.Checked)
+		cls := core.ClassifyForExport(rows, includeCheck.Checked)
 		a.writeBookingExport(cls.Exportable, fromY, fromM, toY, toM, period)
 	}, a.window)
 }
