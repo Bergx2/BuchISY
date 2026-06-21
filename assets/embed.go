@@ -15,6 +15,11 @@ var Translations embed.FS
 //go:embed i18n/*.json
 var EmbeddedFiles embed.FS
 
+// SKR04JSON is the bundled starter SKR04 chart of accounts (extend via import).
+//
+//go:embed skr04.json
+var SKR04JSON []byte
+
 // GetTranslationFile returns the content of a translation file
 func GetTranslationFile(filename string) ([]byte, error) {
 	return EmbeddedFiles.ReadFile("i18n/" + filename)

@@ -1,6 +1,15 @@
 package core
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+var bundledSKR04ForTest = func() []byte {
+	b, _ := os.ReadFile(filepath.Join("..", "..", "assets", "skr04.json"))
+	return b
+}()
 
 func TestParseChartJSON(t *testing.T) {
 	data := []byte(`[{"number":6640,"name":"Bewirtungskosten","type":"expense"},{"number":1800,"name":"Bank","type":"asset"}]`)
@@ -53,5 +62,16 @@ func TestChartFindSearch(t *testing.T) {
 	}
 	if r := c.Search("1800"); len(r) != 1 || r[0].Number != 1800 {
 		t.Errorf("Search(1800) = %+v", r)
+	}
+}
+
+func TestBundledChartParses(t *testing.T) {
+	accs, err := ParseChartJSON(bundledSKR04ForTest)
+	if err != nil || len(accs) == 0 {
+		t.Fatalf("bundled chart failed: %v len=%d", err, len(accs))
+	}
+	c := NewChartOfAccounts(accs)
+	if _, ok := c.Find(6640); !ok {
+		t.Error("bundled chart must contain 6640 Bewirtungskosten")
 	}
 }

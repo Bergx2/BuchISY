@@ -1,0 +1,10 @@
+[
+  {"number": 1406, "name": "Abziehbare Vorsteuer 19 %", "type": "vat"},
+  {"number": 1401, "name": "Abziehbare Vorsteuer 7 %", "type": "vat"},
+  {"number": 1600, "name": "Kasse", "type": "asset"},
+  {"number": 1800, "name": "Bank", "type": "asset"},
+  {"number": 4300, "name": "Erlöse 7 % USt", "type": "revenue"},
+  {"number": 4400, "name": "Erlöse 19 % USt", "type": "revenue"},
+  {"number": 6640, "name": "Bewirtungskosten (abziehbar)", "type": "expense"},
+  {"number": 6644, "name": "Nicht abziehbare Bewirtungskosten", "type": "expense"}
+]
