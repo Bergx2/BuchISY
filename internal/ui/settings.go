@@ -761,6 +761,48 @@ func (a *App) showSettingsView() {
 		})
 	})
 
+	// Booking rules section — seeded from current profile rules
+	vst19 := 1406
+	if k, ok := a.bookingRules.VorsteuerKonto(19); ok {
+		vst19 = k
+	}
+	vst7 := 1401
+	if k, ok := a.bookingRules.VorsteuerKonto(7); ok {
+		vst7 = k
+	}
+	bewAbz, bewNicht, bewProzent := 6640, 6644, 70.0
+	if rule, ok := a.bookingRules.Rule("bewirtung"); ok {
+		bewAbz, bewNicht, bewProzent = rule.KontoAbziehbar, rule.KontoNichtAbziehbar, rule.AbziehbarProzent
+	}
+
+	vst19Lbl := widget.NewLabel(paymentSKR04Label(a, vst19))
+	vst19Btn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(vst19, func(n int) { vst19 = n; vst19Lbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	vst7Lbl := widget.NewLabel(paymentSKR04Label(a, vst7))
+	vst7Btn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(vst7, func(n int) { vst7 = n; vst7Lbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	bewAbzLbl := widget.NewLabel(paymentSKR04Label(a, bewAbz))
+	bewAbzBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(bewAbz, func(n int) { bewAbz = n; bewAbzLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	bewNichtLbl := widget.NewLabel(paymentSKR04Label(a, bewNicht))
+	bewNichtBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(bewNicht, func(n int) { bewNicht = n; bewNichtLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	bewProzentEntry := widget.NewEntry()
+	bewProzentEntry.SetText(strings.Replace(fmt.Sprintf("%g", bewProzent), ".", ",", 1))
+
+	rulesSection := widget.NewCard("", a.bundle.T("settings.rules.section"), container.NewVBox(
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.vst19")), vst19Btn, vst19Lbl),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.vst7")), vst7Btn, vst7Lbl),
+		widget.NewSeparator(),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.bewAbz")), bewAbzBtn, bewAbzLbl),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.bewNicht")), bewNichtBtn, bewNichtLbl),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.bewProzent")), nil, bewProzentEntry),
+	))
+
 	// Tab 3: Accounts settings
 	accountsTab := container.NewVScroll(container.NewVBox(
 		container.NewBorder(nil, nil,
@@ -789,6 +831,8 @@ func (a *App) showSettingsView() {
 		widget.NewSeparator(),
 		widget.NewLabel(a.bundle.T("settings.skr04.section")),
 		skr04ImportBtn,
+		widget.NewSeparator(),
+		rulesSection,
 	))
 
 	// Tab 4: Advanced settings
@@ -942,6 +986,27 @@ func (a *App) showSettingsView() {
 			a.invoiceTable.SetDecimalSeparator(newSettings.DecimalSeparator)
 		}
 		a.loadInvoices()
+
+		// Save booking rules (per-profile: Vorsteuer accounts + Bewirtung)
+		rules := a.bookingRules
+		if rules.VorsteuerKonten == nil {
+			rules.VorsteuerKonten = map[string]int{}
+		}
+		rules.VorsteuerKonten["19"] = vst19
+		rules.VorsteuerKonten["7"] = vst7
+		for i := range rules.Regeln {
+			if rules.Regeln[i].Kategorie == "bewirtung" {
+				rules.Regeln[i].KontoAbziehbar = bewAbz
+				rules.Regeln[i].KontoNichtAbziehbar = bewNicht
+				if p := parseDecimal(bewProzentEntry.Text); p > 0 {
+					rules.Regeln[i].AbziehbarProzent = p
+				}
+			}
+		}
+		if err := a.bookingRulesStore.Save(rules); err != nil {
+			a.logger.Warn("Failed to save booking rules: %v", err)
+		}
+		a.bookingRules = rules
 
 		// Return to main view, then a quiet toast — no modal dialog
 		// breaks the flow.

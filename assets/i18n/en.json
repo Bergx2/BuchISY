@@ -215,6 +215,14 @@
   "settings.datev.wj": "Fiscal year start (DDMMYYYY)",
   "settings.datev.hint": "Optional — leave blank if unknown.",
 
+  "settings.rules.section": "Booking rules",
+  "settings.rules.pick": "Account…",
+  "settings.rules.vst19": "Input VAT 19%",
+  "settings.rules.vst7": "Input VAT 7%",
+  "settings.rules.bewAbz": "Hospitality deductible",
+  "settings.rules.bewNicht": "Hospitality non-deductible",
+  "settings.rules.bewProzent": "Hospitality deductible %",
+
   "controlling.title": "Controlling",
   "controlling.heading": "Booked sums per account",
   "controlling.total": "Total: %s €"

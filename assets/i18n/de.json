@@ -215,6 +215,14 @@
   "settings.datev.wj": "Wirtschaftsjahr-Beginn (TTMMJJJJ)",
   "settings.datev.hint": "Optional — leer lassen, falls noch nicht bekannt.",
 
+  "settings.rules.section": "Buchungsregeln",
+  "settings.rules.pick": "Konto…",
+  "settings.rules.vst19": "Vorsteuer 19 %",
+  "settings.rules.vst7": "Vorsteuer 7 %",
+  "settings.rules.bewAbz": "Bewirtung abziehbar",
+  "settings.rules.bewNicht": "Bewirtung nicht abziehbar",
+  "settings.rules.bewProzent": "Bewirtung abziehbar %",
+
   "controlling.title": "Controlling",
   "controlling.heading": "Gebuchte Summen je Konto",
   "controlling.total": "Summe: %s €"
