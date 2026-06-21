@@ -27,7 +27,11 @@ func NewBookingRulesStore(configDir string, bundled []byte) *BookingRulesStore {
 // otherwise the bundled defaults.
 func (s *BookingRulesStore) Load() (*BookingRules, error) {
 	if data, err := os.ReadFile(s.path); err == nil {
-		return ParseBookingRules(data)
+		if r, perr := ParseBookingRules(data); perr == nil {
+			return r, nil
+		}
+		// A corrupt profile file must not break all auto-bookings — fall back
+		// to the bundled defaults rather than returning empty rules.
 	}
 	return ParseBookingRules(s.bundled)
 }

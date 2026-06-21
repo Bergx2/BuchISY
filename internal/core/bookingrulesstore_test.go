@@ -1,6 +1,7 @@
 package core
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -39,4 +40,23 @@ func TestBookingRulesStore(t *testing.T) {
 		t.Errorf("profile VSt 7%% = %d, want 1571", k)
 	}
 	_ = filepath.Join(dir, "buchungsregeln.json")
+}
+
+func TestBookingRulesStoreCorruptFileFallsBackToBundled(t *testing.T) {
+	dir := t.TempDir()
+	bundled := []byte(`{"vorsteuer_konten":{"19":1406,"7":1401},"regeln":[{"kategorie":"standard","name":"Standard"}]}`)
+	// A corrupt profile file must not break all bookings — fall back to bundled.
+	if err := os.WriteFile(filepath.Join(dir, "buchungsregeln.json"), []byte("{ not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewBookingRulesStore(dir, bundled).Load()
+	if err != nil {
+		t.Fatalf("corrupt profile file should fall back, not error: %v", err)
+	}
+	if k, _ := r.VorsteuerKonto(19); k != 1406 {
+		t.Errorf("fallback VSt 19%% = %d, want 1406 (bundled)", k)
+	}
+	if _, ok := r.Rule("standard"); !ok {
+		t.Error("fallback should expose the bundled standard rule")
+	}
 }
