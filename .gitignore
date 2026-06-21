@@ -94,6 +94,9 @@ landingpage/
 # Local Claude settings
 .claude/settings.local.json
 
+# Superpowers agent worktrees (local tooling scratch)
+.claude/worktrees/
+
 # API keys and secrets
 .env
 .env.local
