@@ -445,6 +445,7 @@ func (it *InvoiceTable) refreshChips() {
 		{"anhang", "Mit Anhängen"},
 		{"teilzahlung", "Teilzahlung"},
 		{"ausgang", "Ausgangsrechnungen"},
+		{"obuchung", "Ohne Buchung"},
 	}
 	for _, c := range chips {
 		c := c
@@ -478,6 +479,8 @@ func (it *InvoiceTable) matchesChip(row core.CSVRow) bool {
 		return row.Teilzahlung
 	case "ausgang":
 		return row.Unterordner == "Ausgangsrechnungen"
+	case "obuchung":
+		return !row.Buchung.Balanced()
 	}
 	return true
 }
