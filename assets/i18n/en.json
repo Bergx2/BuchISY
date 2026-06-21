@@ -38,6 +38,7 @@
   "table.col.trinkgeld": "Tip",
   "table.col.taxlines": "VAT lines",
   "table.col.buchung": "Booking",
+  "table.col.exportiert": "Exported",
   "table.delete": "Delete File",
   "menu.copy": "Copy",
   "table.copyCell": "Copy cell",

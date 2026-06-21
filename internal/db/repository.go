@@ -74,6 +74,7 @@ func (r *Repository) initSchema() error {
 		"ALTER TABLE invoices ADD COLUMN trinkgeld REAL DEFAULT 0",
 		"ALTER TABLE invoices ADD COLUMN steuerzeilen TEXT DEFAULT ''",
 		"ALTER TABLE invoices ADD COLUMN buchung TEXT DEFAULT ''",
+		"ALTER TABLE invoices ADD COLUMN exportiert INTEGER DEFAULT 0",
 	} {
 		if _, err := r.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -92,14 +93,14 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
 			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
-			trinkgeld, steuerzeilen, buchung
+			trinkgeld, steuerzeilen, buchung, exportiert
 		) VALUES (
 			?, ?, ?, ?,
 			?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?
+			?, ?, ?, ?
 		)
 	`
 
@@ -109,7 +110,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag,
 		row.Waehrung, row.Gegenkonto, row.Bankkonto, row.Bezahldatum, row.Teilzahlung,
 		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.VATID,
-		row.Trinkgeld, core.MarshalTaxLines(row.TaxLines), core.MarshalBooking(row.Buchung),
+		row.Trinkgeld, core.MarshalTaxLines(row.TaxLines), core.MarshalBooking(row.Buchung), 0,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert invoice: %w", err)
@@ -152,6 +153,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			trinkgeld = ?,
 			steuerzeilen = ?,
 			buchung = ?,
+			exportiert = 0,
 			jahr = ?,
 			monat = ?
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
@@ -230,7 +232,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
 			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
-			trinkgeld, steuerzeilen, buchung
+			trinkgeld, steuerzeilen, buchung, exportiert
 		FROM invoices
 		WHERE jahr = ? AND monat = ?
 		ORDER BY rechnungsdatum DESC, dateiname ASC
@@ -246,24 +248,26 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 
 	for rows.Next() {
 		var row core.CSVRow
-		// trinkgeld/steuerzeilen/buchung are NULL for rows created before those
-		// columns were added by the ALTER-TABLE migration, so read them NULL-safely
-		// (NULL → 0 / "") instead of failing the whole List.
+		// trinkgeld/steuerzeilen/buchung/exportiert are NULL for rows created before
+		// those columns were added by the ALTER-TABLE migration, so read them
+		// NULL-safely (NULL → 0 / "") instead of failing the whole List.
 		var steuerzeilen sql.NullString
 		var trinkgeld sql.NullFloat64
 		var buchung sql.NullString
+		var exportiert sql.NullInt64
 		err := rows.Scan(
 			&row.Dateiname, &row.Rechnungsdatum, &row.Jahr, &row.Monat,
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
 			&row.BetragNetto, &row.SteuersatzProzent, &row.SteuersatzBetrag, &row.Bruttobetrag,
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
 			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.VATID,
-			&trinkgeld, &steuerzeilen, &buchung,
+			&trinkgeld, &steuerzeilen, &buchung, &exportiert,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 		row.Trinkgeld = trinkgeld.Float64
+		row.Exportiert = exportiert.Int64 != 0
 
 		row.TaxLines = core.ParseTaxLines(steuerzeilen.String)
 		if len(row.TaxLines) == 0 {
@@ -309,6 +313,15 @@ func (r *Repository) IsDuplicate(jahr, monat string, row core.CSVRow) (bool, err
 	}
 
 	return count > 0, nil
+}
+
+// MarkExported flags an invoice as having been included in a booking export.
+func (r *Repository) MarkExported(jahr, monat, dateiname string) error {
+	_, err := r.db.Exec(`UPDATE invoices SET exportiert = 1 WHERE jahr = ? AND monat = ? AND dateiname = ?`, jahr, monat, dateiname)
+	if err != nil {
+		return fmt.Errorf("failed to mark exported: %w", err)
+	}
+	return nil
 }
 
 // ensureDir ensures a directory exists.

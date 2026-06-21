@@ -41,6 +41,7 @@ var DefaultCSVColumns = []string{
 	"Trinkgeld",
 	"Steuerzeilen",
 	"Buchung",
+	"Exportiert",
 }
 
 // ColumnDisplayNames maps column IDs to German display names.
@@ -72,6 +73,7 @@ var ColumnDisplayNames = map[string]string{
 	"Trinkgeld":          "Trinkgeld",
 	"Steuerzeilen":       "Steuerzeilen (Detail)",
 	"Buchung":            "Buchungssatz",
+	"Exportiert":         "Exportiert",
 }
 
 // ColumnTranslationKeys maps column IDs to translation keys.
@@ -103,6 +105,7 @@ var ColumnTranslationKeys = map[string]string{
 	"Trinkgeld":          "table.col.trinkgeld",
 	"Steuerzeilen":       "table.col.taxlines",
 	"Buchung":            "table.col.buchung",
+	"Exportiert":         "table.col.exportiert",
 }
 
 var validColumns = func() map[string]struct{} {
@@ -290,6 +293,7 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			row.TaxLines = ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag)
 		}
 		row.Buchung = ParseBooking(valueForColumn(record, headerMap, "Buchung"))
+		row.Exportiert = strings.EqualFold(strings.TrimSpace(valueForColumn(record, headerMap, "Exportiert")), "true")
 		rows = append(rows, row)
 	}
 
@@ -479,6 +483,7 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"Trinkgeld":          r.formatFloat(row.Trinkgeld),
 		"Steuerzeilen":       MarshalTaxLines(row.TaxLines),
 		"Buchung":            MarshalBooking(row.Buchung),
+		"Exportiert":         fmt.Sprintf("%t", row.Exportiert),
 	}
 
 	// Build record in configured order

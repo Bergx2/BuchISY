@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 	trinkgeld REAL,
 	steuerzeilen TEXT,
 	buchung TEXT,
+	exportiert INTEGER DEFAULT 0,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

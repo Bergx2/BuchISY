@@ -176,3 +176,15 @@ func TestCSVBookingRoundTrip(t *testing.T) {
 		t.Fatalf("booking not round-tripped: %+v", rows)
 	}
 }
+
+func TestCSVExportiertRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invoices.csv")
+	repo := NewCSVRepository()
+	if err := repo.Append(path, CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06", Exportiert: true}); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := repo.Load(path)
+	if len(rows) != 1 || !rows[0].Exportiert {
+		t.Fatalf("Exportiert not round-tripped: %+v", rows)
+	}
+}

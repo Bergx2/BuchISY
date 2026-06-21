@@ -203,3 +203,25 @@ func TestDBBookingRoundTrip(t *testing.T) {
 		t.Fatalf("DB booking round-trip failed: %+v", rows)
 	}
 }
+
+func TestMarkExportedAndUpdateResets(t *testing.T) {
+	repo := newTestRepo(t)
+	if _, err := repo.Insert(core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.MarkExported("2026", "06", "a.pdf"); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := repo.List("2026", "06")
+	if len(rows) != 1 || !rows[0].Exportiert {
+		t.Fatalf("expected Exportiert=true after MarkExported: %+v", rows)
+	}
+	// Updating the invoice must reset the exported flag.
+	if err := repo.Update("2026", "06", "a.pdf", rows[0]); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ = repo.List("2026", "06")
+	if rows[0].Exportiert {
+		t.Error("Update must reset Exportiert to false")
+	}
+}

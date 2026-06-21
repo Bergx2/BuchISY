@@ -37,6 +37,7 @@ type Meta struct {
 	// invoice's Bankkonto (Zahlungskonto) folder.
 	BuchungRef string
 	Buchung    Booking // double-entry booking for this invoice
+	Exportiert bool    // true once this invoice has been included in a booking export
 }
 
 // Account represents a user-defined account (Gegenkonto).
@@ -185,6 +186,7 @@ type CSVRow struct {
 	Unterordner       string // "" | "Bar" | "Ausgangsrechnungen"
 	BuchungRef        string // statementFilename|page|lineIdx (within the Bankkonto's folder)
 	Buchung           Booking
+	Exportiert        bool
 }
 
 // ToCSVRow converts Meta to CSVRow.
@@ -221,6 +223,7 @@ func (m Meta) ToCSVRow() CSVRow {
 		HatAnhaenge:       m.HatAnhaenge,
 		BuchungRef:        m.BuchungRef,
 		Buchung:           m.Buchung,
+		Exportiert:        m.Exportiert,
 	}
 }
 
@@ -252,6 +255,7 @@ func (r CSVRow) ToMeta() Meta {
 		HatAnhaenge:       r.HatAnhaenge,
 		BuchungRef:        r.BuchungRef,
 		Buchung:           r.Buchung,
+		Exportiert:        r.Exportiert,
 	}
 }
 
