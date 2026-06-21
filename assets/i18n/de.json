@@ -37,6 +37,7 @@
   "table.col.buchungref": "Buchung",
   "table.col.trinkgeld": "Trinkgeld",
   "table.col.taxlines": "Steuerzeilen",
+  "table.col.buchung": "Buchungssatz",
   "table.delete": "Datei löschen",
   "menu.copy": "Kopieren",
   "table.copyCell": "Zelle kopieren",

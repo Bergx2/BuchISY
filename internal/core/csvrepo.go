@@ -40,6 +40,7 @@ var DefaultCSVColumns = []string{
 	"BuchungRef",
 	"Trinkgeld",
 	"Steuerzeilen",
+	"Buchung",
 }
 
 // ColumnDisplayNames maps column IDs to German display names.
@@ -70,6 +71,7 @@ var ColumnDisplayNames = map[string]string{
 	"BuchungRef":         "Buchungs-Ref",
 	"Trinkgeld":          "Trinkgeld",
 	"Steuerzeilen":       "Steuerzeilen (Detail)",
+	"Buchung":            "Buchungssatz",
 }
 
 // ColumnTranslationKeys maps column IDs to translation keys.
@@ -100,6 +102,7 @@ var ColumnTranslationKeys = map[string]string{
 	"BuchungRef":         "table.col.buchungref",
 	"Trinkgeld":          "table.col.trinkgeld",
 	"Steuerzeilen":       "table.col.taxlines",
+	"Buchung":            "table.col.buchung",
 }
 
 var validColumns = func() map[string]struct{} {
@@ -286,6 +289,7 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			// Pass brutto as the 4th arg so gross-only rows still get a usable line.
 			row.TaxLines = ReconstructTaxLines(row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag)
 		}
+		row.Buchung = ParseBooking(valueForColumn(record, headerMap, "Buchung"))
 		rows = append(rows, row)
 	}
 
@@ -474,6 +478,7 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"BuchungRef":         row.BuchungRef,
 		"Trinkgeld":          r.formatFloat(row.Trinkgeld),
 		"Steuerzeilen":       MarshalTaxLines(row.TaxLines),
+		"Buchung":            MarshalBooking(row.Buchung),
 	}
 
 	// Build record in configured order

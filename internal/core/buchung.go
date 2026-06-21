@@ -1,8 +1,10 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 )
 
 // BookingEntry is one line of a double-entry booking: an amount posted to an
@@ -52,6 +54,31 @@ func (b Booking) Balanced() bool {
 // IsEmpty reports whether the booking carries no entries and no info.
 func (b Booking) IsEmpty() bool {
 	return len(b.Entries) == 0 && b.Info == ""
+}
+
+// MarshalBooking encodes a booking as compact JSON ("" when empty).
+func MarshalBooking(b Booking) string {
+	if b.IsEmpty() {
+		return ""
+	}
+	data, err := json.Marshal(b)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// ParseBooking decodes a booking from JSON ("" / invalid → empty Booking).
+func ParseBooking(s string) Booking {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return Booking{}
+	}
+	var b Booking
+	if err := json.Unmarshal([]byte(s), &b); err != nil {
+		return Booking{}
+	}
+	return b
 }
 
 // round2 rounds a float64 to 2 decimal places.

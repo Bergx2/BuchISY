@@ -37,6 +37,7 @@
   "table.col.buchungref": "Booking",
   "table.col.trinkgeld": "Tip",
   "table.col.taxlines": "VAT lines",
+  "table.col.buchung": "Booking",
   "table.delete": "Delete File",
   "menu.copy": "Copy",
   "table.copyCell": "Copy cell",

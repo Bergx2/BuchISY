@@ -191,3 +191,15 @@ func TestListHandlesNullTaxColumns(t *testing.T) {
 		t.Errorf("NULL trinkgeld should read as 0, got %v", rows[0].Trinkgeld)
 	}
 }
+
+func TestDBBookingRoundTrip(t *testing.T) {
+	repo := newTestRepo(t)
+	if _, err := repo.Insert(core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06",
+		Buchung: core.Booking{Entries: []core.BookingEntry{{Konto: 6640, Betrag: 12.71, Soll: true}}, Info: "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := repo.List("2026", "06")
+	if len(rows) != 1 || len(rows[0].Buchung.Entries) != 1 || rows[0].Buchung.Info != "x" {
+		t.Fatalf("DB booking round-trip failed: %+v", rows)
+	}
+}

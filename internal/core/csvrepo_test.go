@@ -162,3 +162,17 @@ func TestSetColumnOrderKeepsNewColumns(t *testing.T) {
 		t.Errorf("GetHeader() = %v, must include Unterordner even for a legacy column order", header)
 	}
 }
+
+func TestCSVBookingRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invoices.csv")
+	repo := NewCSVRepository()
+	row := CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06",
+		Buchung: Booking{Entries: []BookingEntry{{Konto: 6640, Betrag: 12.71, Soll: true}, {Konto: 1800, Betrag: 12.71, Soll: false}}, Info: "Bewirtung"}}
+	if err := repo.Append(path, row); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := repo.Load(path)
+	if len(rows) != 1 || len(rows[0].Buchung.Entries) != 2 || rows[0].Buchung.Info != "Bewirtung" {
+		t.Fatalf("booking not round-tripped: %+v", rows)
+	}
+}
