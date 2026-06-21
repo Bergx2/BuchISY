@@ -12,24 +12,27 @@ import (
 	"github.com/bergx2/buchisy/internal/core"
 )
 
-// taxLineRow holds the three entry widgets for a single VAT line.
+// taxLineRow holds the widgets for a single VAT line:
+// [Netto | Satz % | MwSt-Betrag | Brutto (read-only) | ✕].
 type taxLineRow struct {
-	netto   *widget.Entry
-	satz    *widget.Entry
-	mwst    *widget.Entry
+	netto     *widget.Entry
+	satz      *widget.Entry
+	mwst      *widget.Entry
+	brutto    *widget.Label
 	removeBtn *widget.Button
 }
 
 // taxLinesEditor is a reusable widget that lets the user edit a list of
-// VAT lines (Netto / Satz % / MwSt-Betrag) plus a Trinkgeld field. It
-// exposes the computed Brutto as a read-only label that updates live.
+// VAT lines (Netto / Satz % / MwSt-Betrag) plus a Trinkgeld field. Each line
+// shows its own Brutto (Netto + MwSt) and the widget exposes the total Brutto
+// as a read-only label that updates live.
 type taxLinesEditor struct {
 	app      *App
 	onChange func()
 
-	// seeding is true while rows are being populated programmatically during
-	// construction. Auto-fill and onChange callbacks skip their work while
-	// seeding is true so that stored/typed MwSt values are not overwritten.
+	// seeding is true while rows are populated programmatically during
+	// construction; auto-fill and onChange skip their work so stored values
+	// are not overwritten.
 	seeding bool
 
 	rows        []taxLineRow
@@ -49,13 +52,14 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 		onChange: onChange,
 	}
 
+	sep := a.settings.DecimalSeparator
 	e.rowsBox = container.NewVBox()
 
 	// Trinkgeld entry
 	e.trinkEntry = widget.NewEntry()
-	e.trinkEntry.SetPlaceHolder("0" + a.settings.DecimalSeparator + "00")
+	e.trinkEntry.SetPlaceHolder("0" + sep + "00")
 	if trinkgeld != 0 {
-		e.trinkEntry.SetText(formatDecimal(trinkgeld, a.settings.DecimalSeparator))
+		e.trinkEntry.SetText(formatDecimal(trinkgeld, sep))
 	}
 	e.trinkEntry.OnChanged = func(string) {
 		if e.seeding {
@@ -64,10 +68,9 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 		e.refresh()
 	}
 
-	// Brutto label (read-only)
+	// Total Brutto label (read-only)
 	e.bruttoLabel = widget.NewLabelWithStyle(
-		formatDecimal(0, a.settings.DecimalSeparator),
-		fyne.TextAlignLeading, fyne.TextStyle{Bold: true},
+		formatDecimal(0, sep), fyne.TextAlignLeading, fyne.TextStyle{Bold: true},
 	)
 
 	// Add-line button
@@ -77,8 +80,6 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 	addBtn.Importance = widget.LowImportance
 
 	// Seed with provided lines (or one empty row).
-	// seeding=true prevents auto-fill from clobbering stored MwSt values
-	// while SetText is called on each entry during construction.
 	e.seeding = true
 	if len(lines) == 0 {
 		e.appendRow(core.TaxLine{})
@@ -89,21 +90,25 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 	}
 	e.seeding = false
 
-	// Trinkgeld row
-	trinkRow := container.NewBorder(nil, nil,
-		widget.NewLabelWithStyle("Trinkgeld", fyne.TextAlignLeading, fyne.TextStyle{}),
-		nil,
-		e.trinkEntry,
+	// Column header (above the rows).
+	header := container.NewBorder(nil, nil, nil, rowRightSpacer(),
+		container.NewGridWithColumns(4,
+			columnHeader("Netto"), columnHeader("Satz %"),
+			columnHeader("MwSt."), columnHeader("Brutto"),
+		),
 	)
 
-	// Brutto summary row
+	trinkRow := container.NewBorder(nil, nil,
+		widget.NewLabelWithStyle("Trinkgeld", fyne.TextAlignLeading, fyne.TextStyle{}),
+		nil, e.trinkEntry,
+	)
 	bruttoRow := container.NewBorder(nil, nil,
 		widget.NewLabelWithStyle("Brutto", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		nil,
-		e.bruttoLabel,
+		nil, e.bruttoLabel,
 	)
 
 	e.container = container.NewVBox(
+		header,
 		e.rowsBox,
 		addBtn,
 		widget.NewSeparator(),
@@ -113,6 +118,20 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 
 	e.refresh()
 	return e
+}
+
+// columnHeader makes a small muted column caption.
+func columnHeader(s string) *widget.Label {
+	return widget.NewLabelWithStyle(s, fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+}
+
+// rowRightSpacer reserves header space matching the row's ✕ button so the
+// four header captions line up over the four entry columns.
+func rowRightSpacer() fyne.CanvasObject {
+	b := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {})
+	b.Disable()
+	b.Hidden = true
+	return b
 }
 
 // appendRow adds a new taxLineRow for l to the editor (internal helper).
@@ -125,6 +144,7 @@ func (e *taxLinesEditor) appendRow(l core.TaxLine) {
 	satzE.SetPlaceHolder("Satz %")
 	mwstE := widget.NewEntry()
 	mwstE.SetPlaceHolder("MwSt.")
+	bruttoLbl := widget.NewLabel("")
 
 	if l.Netto != 0 {
 		netE.SetText(formatDecimal(l.Netto, sep))
@@ -136,19 +156,26 @@ func (e *taxLinesEditor) appendRow(l core.TaxLine) {
 		mwstE.SetText(formatDecimal(l.MwStBetrag, sep))
 	}
 
-	row := taxLineRow{netto: netE, satz: satzE, mwst: mwstE}
+	// Per-row state for auto-fill:
+	//   mwstManual  — the MwSt was typed by the user (or loaded from storage),
+	//                 so auto-fill must not overwrite it.
+	//   autoFilling — guards our own SetText so it isn't mistaken for a manual edit.
+	mwstManual := l.MwStBetrag != 0
+	autoFilling := false
 
-	// Auto-compute MwSt when Netto and Satz are set but the MwSt field is
-	// textually empty. Gating on the raw text (not the parsed float) means a
-	// stored or user-typed "0,00" is never silently overwritten.
+	// autoFill recomputes MwSt from Netto×Satz on EVERY net/satz change (so a
+	// value entered mid-typing is corrected once the digits are complete),
+	// unless the user has taken over the MwSt field.
 	autoFill := func() {
-		if e.seeding {
+		if e.seeding || mwstManual {
 			return
 		}
 		n := parseFloat(netE.Text, sep)
 		s := parseFloat(satzE.Text, sep)
-		if n > 0 && s > 0 && strings.TrimSpace(mwstE.Text) == "" {
+		if n > 0 && s > 0 {
+			autoFilling = true
 			mwstE.SetText(formatDecimal(round2(n*s/100), sep))
+			autoFilling = false
 		}
 	}
 
@@ -170,10 +197,13 @@ func (e *taxLinesEditor) appendRow(l core.TaxLine) {
 		if e.seeding {
 			return
 		}
+		if !autoFilling {
+			// Direct user edit. Empty field re-enables auto-fill.
+			mwstManual = strings.TrimSpace(mwstE.Text) != ""
+		}
 		e.refresh()
 	}
 
-	// Remove button — finds the row by identity (pointer equality on netto entry).
 	removeBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 		for i, r := range e.rows {
 			if r.netto == netE {
@@ -186,12 +216,17 @@ func (e *taxLinesEditor) appendRow(l core.TaxLine) {
 	})
 	removeBtn.Importance = widget.DangerImportance
 
-	row.removeBtn = removeBtn
+	row := taxLineRow{netto: netE, satz: satzE, mwst: mwstE, brutto: bruttoLbl, removeBtn: removeBtn}
 	e.rows = append(e.rows, row)
+	e.rowsBox.Add(rowContainer(row))
+}
 
-	// Build the grid for this row: [Netto | Satz% | MwSt | ✕]
-	rowWidget := container.NewGridWithColumns(4, netE, satzE, mwstE, removeBtn)
-	e.rowsBox.Add(rowWidget)
+// rowContainer lays out a row: the four value cells share the width in a grid,
+// the narrow ✕ button sits at the right at its natural (small) size.
+func rowContainer(r taxLineRow) fyne.CanvasObject {
+	return container.NewBorder(nil, nil, nil, r.removeBtn,
+		container.NewGridWithColumns(4, r.netto, r.satz, r.mwst, r.brutto),
+	)
 }
 
 // addLine appends an empty row and refreshes the container.
@@ -205,15 +240,19 @@ func (e *taxLinesEditor) addLine() {
 func (e *taxLinesEditor) rebuildRowsBox() {
 	e.rowsBox.RemoveAll()
 	for _, r := range e.rows {
-		e.rowsBox.Add(container.NewGridWithColumns(4, r.netto, r.satz, r.mwst, r.removeBtn))
+		e.rowsBox.Add(rowContainer(r))
 	}
 	e.rowsBox.Refresh()
 }
 
-// refresh recomputes Brutto and calls onChange.
+// refresh updates each row's Brutto, the total Brutto, then calls onChange.
 func (e *taxLinesEditor) refresh() {
-	brutto := core.ComputeBrutto(e.Lines(), e.Trinkgeld())
-	e.bruttoLabel.SetText(formatDecimal(brutto, e.app.settings.DecimalSeparator))
+	sep := e.app.settings.DecimalSeparator
+	for _, r := range e.rows {
+		rowBrutto := parseFloat(r.netto.Text, sep) + parseFloat(r.mwst.Text, sep)
+		r.brutto.SetText(formatDecimal(rowBrutto, sep))
+	}
+	e.bruttoLabel.SetText(formatDecimal(core.ComputeBrutto(e.Lines(), e.Trinkgeld()), sep))
 	if e.onChange != nil {
 		e.onChange()
 	}
