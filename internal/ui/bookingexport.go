@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -51,13 +52,14 @@ func (a *App) showBookingExportDialog() {
 func (a *App) runBookingExport(fromY, fromM, toY, toM int, period string) {
 	rows := a.collectInvoiceRows(fromY, fromM, toY, toM)
 
+	von, bis := datevPeriod(fromY, fromM, toY, toM)
 	h := core.DATEVHeader{
 		BeraterNr: a.settings.DatevBeraterNr,
 		MandantNr: a.settings.DatevMandantNr,
 		WJBeginn:  a.settings.DatevWJBeginn,
-		ErzeugtAm: "",
-		DatumVon:  fmt.Sprintf("%04d%02d01", fromY, fromM),
-		DatumBis:  fmt.Sprintf("%04d%02d31", toY, toM),
+		ErzeugtAm: time.Now().Format("20060102150405") + "000",
+		DatumVon:  von,
+		DatumBis:  bis,
 	}
 	datevBytes, dExp, dSkip := core.BuildDATEVStapel(h, rows)
 	lexBytes, _, _ := core.BuildLexwareCSV(rows)
@@ -93,4 +95,14 @@ func (a *App) runBookingExport(fromY, fromM, toY, toM int, period string) {
 		a.logger.Info("Buchungsexport: %d Zeilen nach %s", dExp, uri.Path())
 		a.showInfo(a.bundle.T("export.bookings"), a.bundle.T("export.done", dExp, dSkip))
 	}, a.window)
+}
+
+// datevPeriod returns the EXTF DatumVon/DatumBis (YYYYMMDD) for a from/to
+// month range — DatumVon = the 1st of the from-month, DatumBis = the real
+// last day of the to-month (handles 28/29/30/31-day months).
+func datevPeriod(fromY, fromM, toY, toM int) (von, bis string) {
+	von = fmt.Sprintf("%04d%02d01", fromY, fromM)
+	lastDay := time.Date(toY, time.Month(toM)+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	bis = fmt.Sprintf("%04d%02d%02d", toY, toM, lastDay)
+	return von, bis
 }
