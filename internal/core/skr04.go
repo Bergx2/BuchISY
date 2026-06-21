@@ -1,6 +1,8 @@
 package core
 
 import (
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,4 +62,17 @@ func (c *ChartOfAccounts) Search(q string) []SKRAccount {
 		}
 	}
 	return out
+}
+
+// ParseChartJSON decodes a JSON array of accounts. Blank input yields an
+// empty slice (not an error).
+func ParseChartJSON(data []byte) ([]SKRAccount, error) {
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, nil
+	}
+	var accs []SKRAccount
+	if err := json.Unmarshal(data, &accs); err != nil {
+		return nil, fmt.Errorf("failed to parse chart JSON: %w", err)
+	}
+	return accs, nil
 }
