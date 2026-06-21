@@ -350,21 +350,32 @@ func (a *App) showSettingsView() {
 				typeSelect.SetSelected("Bank")
 			}
 
+			// SKR04 account picker for this payment account row.
+			skr04Display := widget.NewLabel(paymentSKR04Label(a, tempBankAccounts[currentIdx].SKR04Konto))
+			skr04Btn := widget.NewButton(a.bundle.T("settings.payment.skr04"), func() {
+				a.showAccountSearch(tempBankAccounts[currentIdx].SKR04Konto, func(n int) {
+					tempBankAccounts[currentIdx].SKR04Konto = n
+					skr04Display.SetText(paymentSKR04Label(a, n))
+				})
+			})
+			skr04Box := container.NewBorder(nil, nil, widget.NewLabel("SKR04"), nil,
+				container.NewVBox(skr04Display, skr04Btn))
+
 			// Borders for each field column — built once, slotted into a
 			// dynamic grid depending on whether "Ausgleich" applies.
 			nameBox := container.NewBorder(nil, nil, widget.NewLabel("Name"), nil, nameEntry)
 			ibanBox := container.NewBorder(nil, nil, widget.NewLabel("IBAN / Konto"), nil, ibanEntry)
 			typeBox := container.NewBorder(nil, nil, widget.NewLabel("Typ"), nil, typeSelect)
 			settlementBox := container.NewBorder(nil, nil, widget.NewLabel("Ausgleich"), nil, settlementSelect)
-			fields := container.New(layout.NewGridLayoutWithColumns(4))
+			fields := container.New(layout.NewGridLayoutWithColumns(5))
 
 			showSettlement := func(visible bool) {
 				if visible {
-					fields.Layout = layout.NewGridLayoutWithColumns(4)
-					fields.Objects = []fyne.CanvasObject{nameBox, ibanBox, typeBox, settlementBox}
+					fields.Layout = layout.NewGridLayoutWithColumns(5)
+					fields.Objects = []fyne.CanvasObject{nameBox, ibanBox, typeBox, settlementBox, skr04Box}
 				} else {
-					fields.Layout = layout.NewGridLayoutWithColumns(3)
-					fields.Objects = []fyne.CanvasObject{nameBox, ibanBox, typeBox}
+					fields.Layout = layout.NewGridLayoutWithColumns(4)
+					fields.Objects = []fyne.CanvasObject{nameBox, ibanBox, typeBox, skr04Box}
 				}
 				fields.Refresh()
 			}
@@ -944,4 +955,17 @@ func equalStringSlices(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// paymentSKR04Label renders the SKR04 mapping for a payment account row.
+// Returns the i18n "none" string when konto == 0, the human-readable account
+// label when the chart contains the account, or the bare number as fallback.
+func paymentSKR04Label(a *App, konto int) string {
+	if konto == 0 {
+		return a.bundle.T("settings.payment.skr04.none")
+	}
+	if acc, ok := a.chart.Find(konto); ok {
+		return accountLabel(acc)
+	}
+	return fmt.Sprintf("%d", konto)
 }

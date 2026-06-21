@@ -169,6 +169,8 @@
   "picker.account.choose": "Choose account…",
   "common.close": "Close",
   "settings.restoreDefaults": "Restore Defaults",
+  "settings.payment.skr04": "SKR04 account…",
+  "settings.payment.skr04.none": "— (default by type)",
 
   "month.01": "January",
   "month.02": "February",
