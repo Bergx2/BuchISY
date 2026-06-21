@@ -33,7 +33,7 @@ func (a *App) showAccountSearch(current int, onPick func(number int)) {
 	results := a.chart.All()
 
 	searchEntry := widget.NewEntry()
-	searchEntry.SetPlaceHolder("Konto suchen…")
+	searchEntry.SetPlaceHolder(a.bundle.T("picker.account.search"))
 
 	var list *widget.List
 	var dlg dialog.Dialog
@@ -79,8 +79,8 @@ func (a *App) showAccountSearch(current int, onPick func(number int)) {
 	)
 
 	dlg = dialog.NewCustom(
-		"Konto auswählen",
-		"Schließen",
+		a.bundle.T("picker.account.title"),
+		a.bundle.T("common.close"),
 		container.NewStack(
 			container.New(fixedHeightLayout{height: 400}, content),
 		),

@@ -157,6 +157,15 @@
   "settings.wipeDatabase.success": "Database has been wiped. All invoice data has been deleted.",
 
   "settings.skr04.import": "Import SKR04…",
+  "settings.skr04.section": "SKR04 chart of accounts",
+  "settings.skr04.readError": "Could not read file: %v",
+  "settings.skr04.parseError": "Could not parse file: %v",
+  "settings.skr04.saveError": "Could not save SKR04: %v",
+  "settings.skr04.imported": "%d accounts imported",
+
+  "picker.account.search": "Search account…",
+  "picker.account.title": "Select account",
+  "common.close": "Close",
   "settings.restoreDefaults": "Restore Defaults",
 
   "month.01": "January",

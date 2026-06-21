@@ -157,6 +157,15 @@
   "settings.wipeDatabase.success": "Datenbank wurde geleert. Alle Rechnungsdaten wurden gelöscht.",
 
   "settings.skr04.import": "SKR04 importieren…",
+  "settings.skr04.section": "SKR04 Kontenrahmen",
+  "settings.skr04.readError": "Datei konnte nicht gelesen werden: %v",
+  "settings.skr04.parseError": "SKR04-Datei konnte nicht verarbeitet werden: %v",
+  "settings.skr04.saveError": "SKR04 konnte nicht gespeichert werden: %v",
+  "settings.skr04.imported": "%d Konten importiert",
+
+  "picker.account.search": "Konto suchen…",
+  "picker.account.title": "Konto auswählen",
+  "common.close": "Schließen",
   "settings.restoreDefaults": "Standardwerte wiederherstellen",
 
   "month.01": "Januar",

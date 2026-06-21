@@ -715,22 +715,22 @@ func (a *App) showSettingsView() {
 		a.showFilePicker(func(path string) {
 			data, err := os.ReadFile(path)
 			if err != nil {
-				a.showError(a.bundle.T("error.processing.title"), fmt.Sprintf("Datei konnte nicht gelesen werden: %v", err))
+				a.showError(a.bundle.T("error.processing.title"), a.bundle.T("settings.skr04.readError", err))
 				return
 			}
 			accs, err := core.ParseChartCSV(data)
 			if err != nil {
-				a.showError(a.bundle.T("error.processing.title"), fmt.Sprintf("SKR04-Datei konnte nicht verarbeitet werden: %v", err))
+				a.showError(a.bundle.T("error.processing.title"), a.bundle.T("settings.skr04.parseError", err))
 				return
 			}
 			if err := a.chartStore.SaveImport(accs); err != nil {
-				a.showError(a.bundle.T("error.processing.title"), fmt.Sprintf("SKR04 konnte nicht gespeichert werden: %v", err))
+				a.showError(a.bundle.T("error.processing.title"), a.bundle.T("settings.skr04.saveError", err))
 				return
 			}
 			if c, err := a.chartStore.Load(); err == nil {
 				a.chart = c
 			}
-			a.showToast(fmt.Sprintf("%d Konten importiert", len(accs)))
+			a.showToast(a.bundle.T("settings.skr04.imported", len(accs)))
 		})
 	})
 
@@ -760,7 +760,7 @@ func (a *App) showSettingsView() {
 			bankAccountsList,
 		)),
 		widget.NewSeparator(),
-		widget.NewLabel("SKR04 Kontenrahmen"),
+		widget.NewLabel(a.bundle.T("settings.skr04.section")),
 		skr04ImportBtn,
 	))
 
