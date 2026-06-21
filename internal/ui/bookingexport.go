@@ -106,7 +106,7 @@ func (a *App) writeBookingExport(exportable []core.CSVRow, fromY, fromM, toY, to
 		DatumVon:  von,
 		DatumBis:  bis,
 	}
-	datevBytes, dExp, dSkip := core.BuildDATEVStapel(h, exportable)
+	datevBytes, dExp, _ := core.BuildDATEVStapel(h, exportable)
 	lexBytes, _, _ := core.BuildLexwareCSV(exportable)
 
 	datevName := "DATEV-EXTF_" + period + ".csv"
@@ -146,7 +146,7 @@ func (a *App) writeBookingExport(exportable []core.CSVRow, fromY, fromM, toY, to
 		a.loadInvoices() // reload from DB to reflect the new Exportiert state
 
 		a.logger.Info("Buchungsexport: %d Zeilen nach %s", dExp, uri.Path())
-		a.showInfo(a.bundle.T("export.bookings"), a.bundle.T("export.done", dExp, dSkip))
+		a.showInfo(a.bundle.T("export.bookings"), a.bundle.T("export.done", dExp))
 	}, a.window)
 }
 

@@ -211,7 +211,7 @@
   "export.do": "Export",
   "export.preview": "%d bookable, %d already exported, %d skipped.",
   "export.includeExported": "Include already exported",
-  "export.done": "%d booking rows exported, %d invoices without a booking skipped.",
+  "export.done": "%d booking rows exported.",
 
   "settings.datev.berater": "DATEV Berater-Nr.",
   "settings.datev.mandant": "DATEV Mandanten-Nr.",

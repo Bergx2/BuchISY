@@ -211,7 +211,7 @@
   "export.do": "Exportieren",
   "export.preview": "%d buchbar, %d bereits exportiert, %d übersprungen.",
   "export.includeExported": "Auch bereits exportierte einbeziehen",
-  "export.done": "%d Buchungszeilen exportiert, %d Belege ohne Buchung übersprungen.",
+  "export.done": "%d Buchungszeilen exportiert.",
 
   "settings.datev.berater": "DATEV Berater-Nr.",
   "settings.datev.mandant": "DATEV Mandanten-Nr.",
