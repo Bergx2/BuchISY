@@ -59,6 +59,7 @@ type BankAccount struct {
 	IBAN              string `json:"iban"`
 	AccountType       string `json:"account_type"`       // bank | creditcard | cash
 	SettlementAccount string `json:"settlement_account"` // account that settles a credit card monthly
+	SKR04Konto        int    `json:"skr04_konto,omitempty"`
 	IsCreditCard      bool   `json:"is_credit_card"`     // legacy flag, kept only for migration
 }
 
@@ -265,4 +266,27 @@ func (mc MonthContext) String() string {
 // FolderName returns the folder name for this month (YYYY-MM).
 func (mc MonthContext) FolderName() string {
 	return fmt.Sprintf("%04d-%02d", mc.Year, mc.Month)
+}
+
+// PaymentAccountSKR04 returns the SKR04 account that the Haben (credit) side of
+// a booking should post to for a given Zahlungskonto, looked up by name. An
+// explicit BankAccount.SKR04Konto wins; otherwise it falls back by account type
+// (bank→1800, cash→1600). Returns (0,false) when nothing maps.
+func (s Settings) PaymentAccountSKR04(bankAccountName string) (int, bool) {
+	for _, ba := range s.BankAccounts {
+		if ba.Name != bankAccountName {
+			continue
+		}
+		if ba.SKR04Konto != 0 {
+			return ba.SKR04Konto, true
+		}
+		switch ba.AccountType {
+		case AccountTypeBank:
+			return 1800, true
+		case AccountTypeCash:
+			return 1600, true
+		}
+		return 0, false
+	}
+	return 0, false
 }
