@@ -78,6 +78,11 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	// Forward-declared so the calendar buttons can target this window.
 	var editWin fyne.Window
 
+	// recomputeBooking is forward-declared so closures created before it
+	// is assigned (account picker, bank account select) can call it safely
+	// via the nil guard.
+	var recomputeBooking func()
+
 	companyEntry := widget.NewEntry()
 	companyEntry.SetText(meta.Auftraggeber)
 	companyEntry.SetPlaceHolder(a.bundle.T("field.company"))
@@ -139,10 +144,18 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		a.showAccountSearch(selectedAccount, func(n int) {
 			selectedAccount = n
 			updateAccountDisplay()
+			if recomputeBooking != nil {
+				recomputeBooking()
+			}
 		})
 	})
 
 	bankAccountSelect := widget.NewSelect(a.bankAccountOptionList(), nil)
+	bankAccountSelect.OnChanged = func(string) {
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	}
 	a.preselectBankAccount(bankAccountSelect, meta.Bankkonto)
 	addBankBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
 		a.addBankAccountInline(editWin, func(name string) {
@@ -278,9 +291,39 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	dateEntry.OnChanged = onAnyChange
 
 	// Create the VAT-lines editor now that updateFilenamePreview is defined.
-	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, updateFilenamePreview)
+	// onChange is a combined callback: filename preview + booking recompute.
+	// recomputeBooking is forward-declared at the top of this function so
+	// both this closure and the account/bank-account closures above can
+	// reference it safely via the nil guard.
+	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, func() {
+		updateFilenamePreview()
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	})
 
 	updateFilenamePreview()
+
+	// Booking category: learned template for this company, else "standard".
+	category := "standard"
+	if tmpl, ok := a.bookingTemplates.Get(meta.Auftraggeber); ok {
+		category = tmpl.Kategorie
+	}
+	catOptions, catKeyByLabel := a.bookingCategoryOptions()
+	categorySelect := widget.NewSelect(catOptions, nil)
+	categorySelect.SetSelected(a.bookingCategoryLabel(category))
+
+	bookingPrev := newBookingPreview(a)
+	recomputeBooking = func() {
+		b, bookable, reason := a.computeInvoiceBooking(
+			catKeyByLabel[categorySelect.Selected],
+			ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+		bookingPrev.set(b, bookable, reason)
+	}
+	categorySelect.OnChanged = func(string) { recomputeBooking() }
+
+	// Initial booking preview — call after all widgets are set up.
+	recomputeBooking()
 
 	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
 		editWin.Close()
@@ -401,6 +444,10 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		// Währungsumrechnung (nur bei Fremdwährung sichtbar).
 		currencyConversionContainer,
 		section(a.bundle.T("field.comment"), commentEntry),
+		section(a.bundle.T("booking.section"), selectableForm(a.bundle,
+			fi(a.bundle.T("booking.category"), categorySelect),
+			fi("", bookingPrev.container),
+		)),
 		widget.NewSeparator(),
 		newCopyableLabel(a.bundle, a.bundle.T("modal.filenamePreview")),
 		filenameEntry,
@@ -452,6 +499,13 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 				targetMonth = time.Month(m)
 			}
 		}
+		// Compute the final booking (empty Booking when not bookable).
+		finalBooking, bookable, _ := a.computeInvoiceBooking(
+			catKeyByLabel[categorySelect.Selected],
+			ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+		if !bookable {
+			finalBooking = core.Booking{}
+		}
 		err := a.updateInvoice(
 			row,
 			originalPath,
@@ -474,10 +528,18 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			targetYear,
 			targetMonth,
 			ausgangsrechnungCheck.Checked,
+			finalBooking,
 		)
 		if err != nil {
 			dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), editWin)
 			return
+		}
+		// Learn the booking template for this company on successful update.
+		if bookable && companyEntry.Text != "" {
+			_ = a.bookingTemplates.Set(companyEntry.Text, core.BookingTemplate{
+				Kategorie:    catKeyByLabel[categorySelect.Selected],
+				ExpenseKonto: selectedAccount,
+			})
 		}
 		a.loadInvoices()
 		editWin.Close()
@@ -540,6 +602,7 @@ func (a *App) updateInvoice(
 	targetYear int,
 	targetMonth time.Month,
 	ausgangsrechnung bool,
+	buchung core.Booking,
 ) error {
 	// Attachments are managed live via the _AnhangN switcher in the edit
 	// dialog, so an updated invoice keeps whatever attachments it already had.
@@ -633,6 +696,7 @@ func (a *App) updateInvoice(
 	newRow.HatAnhaenge = originalRow.HatAnhaenge
 	newRow.AnzahlAnhaenge = originalRow.AnzahlAnhaenge
 	newRow.Unterordner = unterordner
+	newRow.Buchung = buchung
 
 	// SQLite is the source of truth. Jahr/Monat columns track the filing
 	// period (target folder), not the invoice date.
