@@ -209,6 +209,8 @@
   "export.from": "Von",
   "export.to": "Bis",
   "export.do": "Exportieren",
+  "export.preview": "%d buchbar, %d bereits exportiert, %d übersprungen.",
+  "export.includeExported": "Auch bereits exportierte einbeziehen",
   "export.done": "%d Buchungszeilen exportiert, %d Belege ohne Buchung übersprungen.",
 
   "settings.datev.berater": "DATEV Berater-Nr.",

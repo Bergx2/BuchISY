@@ -71,11 +71,29 @@ func (a *App) showBookingExportDialog() {
 		}, a.window)
 }
 
-// runBookingExport collects rows for the given month range, builds the DATEV
-// and Lexware files, and asks the user for a target folder before writing.
+// runBookingExport collects rows for the given month range, shows a preview
+// dialog with the export classification, and on confirmation writes the files.
 func (a *App) runBookingExport(fromY, fromM, toY, toM int, period string) {
 	rows := a.collectInvoiceRows(fromY, fromM, toY, toM)
 
+	includeExported := false
+	cls := core.ClassifyForExport(rows, includeExported)
+	msg := a.bundle.T("export.preview", len(cls.Exportable), len(cls.AlreadyExported), len(cls.Skipped))
+	includeCheck := widget.NewCheck(a.bundle.T("export.includeExported"), nil)
+	confirm := container.NewVBox(widget.NewLabel(msg), includeCheck)
+	dialog.ShowCustomConfirm(a.bundle.T("export.bookings"), a.bundle.T("export.do"), a.bundle.T("btn.cancel"), confirm, func(ok bool) {
+		if !ok {
+			return
+		}
+		cls = core.ClassifyForExport(rows, includeCheck.Checked)
+		a.writeBookingExport(cls.Exportable, fromY, fromM, toY, toM, period)
+	}, a.window)
+}
+
+// writeBookingExport builds the DATEV and Lexware files from the given
+// exportable rows, asks the user for a target folder, writes both files, and
+// on success marks each row as exported and reloads the invoice table.
+func (a *App) writeBookingExport(exportable []core.CSVRow, fromY, fromM, toY, toM int, period string) {
 	von, bis := datevPeriod(fromY, fromM, toY, toM)
 	h := core.DATEVHeader{
 		BeraterNr: a.settings.DatevBeraterNr,
@@ -85,8 +103,8 @@ func (a *App) runBookingExport(fromY, fromM, toY, toM int, period string) {
 		DatumVon:  von,
 		DatumBis:  bis,
 	}
-	datevBytes, dExp, dSkip := core.BuildDATEVStapel(h, rows)
-	lexBytes, _, _ := core.BuildLexwareCSV(rows)
+	datevBytes, dExp, dSkip := core.BuildDATEVStapel(h, exportable)
+	lexBytes, _, _ := core.BuildLexwareCSV(exportable)
 
 	datevName := "DATEV-EXTF_" + period + ".csv"
 	lexName := "Lexware-Buchungen_" + period + ".csv"
@@ -115,6 +133,14 @@ func (a *App) runBookingExport(fromY, fromM, toY, toM int, period string) {
 			a.showError(a.bundle.T("error.processing.title"), werr.Error())
 			return
 		}
+
+		// Mark each exported row in the database.
+		for _, r := range exportable {
+			if merr := a.dbRepo.MarkExported(r.Jahr, r.Monat, r.Dateiname); merr != nil {
+				a.logger.Warn("MarkExported failed for %s: %v", r.Dateiname, merr)
+			}
+		}
+		a.loadInvoices() // reload from DB to reflect the new Exportiert state
 
 		a.logger.Info("Buchungsexport: %d Zeilen nach %s", dExp, uri.Path())
 		a.showInfo(a.bundle.T("export.bookings"), a.bundle.T("export.done", dExp, dSkip))
