@@ -42,7 +42,7 @@ func (a *App) showBookingExportDialog() {
 	})
 
 	content := container.NewHBox(monthBtn, yearBtn)
-	d = dialog.NewCustom("Buchungen exportieren", a.bundle.T("btn.cancel"), content, a.window)
+	d = dialog.NewCustom(a.bundle.T("export.bookings"), a.bundle.T("btn.cancel"), content, a.window)
 	d.Show()
 }
 
@@ -91,6 +91,6 @@ func (a *App) runBookingExport(fromY, fromM, toY, toM int, period string) {
 		}
 
 		a.logger.Info("Buchungsexport: %d Zeilen nach %s", dExp, uri.Path())
-		a.showInfo("Buchungen exportieren", a.bundle.T("export.done", dExp, dSkip))
+		a.showInfo(a.bundle.T("export.bookings"), a.bundle.T("export.done", dExp, dSkip))
 	}, a.window)
 }
