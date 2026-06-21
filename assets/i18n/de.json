@@ -190,5 +190,15 @@
   "booking.section": "Buchungsvorschlag",
   "booking.category": "Kategorie",
   "booking.no.lines": "Keine MwSt-Zeilen — nicht buchbar",
-  "booking.no.payment.account": "Zahlungskonto ohne SKR04-Konto (in Einstellungen zuordnen)"
+  "booking.no.payment.account": "Zahlungskonto ohne SKR04-Konto (in Einstellungen zuordnen)",
+
+  "export.bookings": "Buchungen exportieren",
+  "export.month": "Aktuellen Monat",
+  "export.year": "Ganzes Jahr",
+  "export.done": "%d Buchungszeilen exportiert, %d Belege ohne Buchung übersprungen.",
+
+  "settings.datev.berater": "DATEV Berater-Nr.",
+  "settings.datev.mandant": "DATEV Mandanten-Nr.",
+  "settings.datev.wj": "Wirtschaftsjahr-Beginn (TTMMJJJJ)",
+  "settings.datev.hint": "Optional — leer lassen, falls noch nicht bekannt."
 }

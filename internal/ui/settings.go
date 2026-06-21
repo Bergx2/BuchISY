@@ -502,6 +502,22 @@ func (a *App) showSettingsView() {
 	debugHint := newCopyableLabel(a.bundle, a.bundle.T("settings.debugMode.hint"))
 	debugHint.Wrapping = fyne.TextWrapWord
 
+	// DATEV identifier entries
+	datevBeraterEntry := widget.NewEntry()
+	datevBeraterEntry.SetText(a.settings.DatevBeraterNr)
+	datevBeraterEntry.SetPlaceHolder("z. B. 1234567")
+
+	datevMandantEntry := widget.NewEntry()
+	datevMandantEntry.SetText(a.settings.DatevMandantNr)
+	datevMandantEntry.SetPlaceHolder("z. B. 10000")
+
+	datevWJBeginnEntry := widget.NewEntry()
+	datevWJBeginnEntry.SetText(a.settings.DatevWJBeginn)
+	datevWJBeginnEntry.SetPlaceHolder("01012026")
+
+	datevHint := newCopyableLabel(a.bundle, a.bundle.T("settings.datev.hint"))
+	datevHint.Wrapping = fyne.TextWrapWord
+
 	// Wipe database button
 	wipeDBBtn := widget.NewButton(a.bundle.T("settings.wipeDatabase"), func() {
 		// Show confirmation dialog
@@ -787,6 +803,15 @@ func (a *App) showSettingsView() {
 		debugHint,
 		widget.NewSeparator(),
 
+		widget.NewLabel("DATEV"),
+		widget.NewForm(
+			widget.NewFormItem(a.bundle.T("settings.datev.berater"), datevBeraterEntry),
+			widget.NewFormItem(a.bundle.T("settings.datev.mandant"), datevMandantEntry),
+			widget.NewFormItem(a.bundle.T("settings.datev.wj"), datevWJBeginnEntry),
+		),
+		datevHint,
+		widget.NewSeparator(),
+
 		widget.NewLabel(a.bundle.T("settings.database")),
 		wipeDBBtn,
 		widget.NewLabel(a.bundle.T("settings.wipeDatabase.hint")),
@@ -869,6 +894,9 @@ func (a *App) showSettingsView() {
 		}
 
 		newSettings.DebugMode = debugModeCheck.Checked
+		newSettings.DatevBeraterNr = strings.TrimSpace(datevBeraterEntry.Text)
+		newSettings.DatevMandantNr = strings.TrimSpace(datevMandantEntry.Text)
+		newSettings.DatevWJBeginn = strings.TrimSpace(datevWJBeginnEntry.Text)
 		newSettings.ColumnOrder = tempColumnOrder
 		columnOrderChanged := !equalStringSlices(prevColumnOrder, newSettings.ColumnOrder)
 

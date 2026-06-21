@@ -190,5 +190,15 @@
   "booking.section": "Booking proposal",
   "booking.category": "Category",
   "booking.no.lines": "No tax lines — not bookable",
-  "booking.no.payment.account": "Payment account has no SKR04 account (map it in settings)"
+  "booking.no.payment.account": "Payment account has no SKR04 account (map it in settings)",
+
+  "export.bookings": "Export bookings",
+  "export.month": "Current month",
+  "export.year": "Whole year",
+  "export.done": "%d booking rows exported, %d invoices without a booking skipped.",
+
+  "settings.datev.berater": "DATEV Berater-Nr.",
+  "settings.datev.mandant": "DATEV Mandanten-Nr.",
+  "settings.datev.wj": "Fiscal year start (DDMMYYYY)",
+  "settings.datev.hint": "Optional — leave blank if unknown."
 }
