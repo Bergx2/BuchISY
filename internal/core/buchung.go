@@ -1,6 +1,9 @@
 package core
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 // BookingEntry is one line of a double-entry booking: an amount posted to an
 // account on the debit (Soll=true) or credit (Soll=false) side.
@@ -49,4 +52,51 @@ func (b Booking) Balanced() bool {
 // IsEmpty reports whether the booking carries no entries and no info.
 func (b Booking) IsEmpty() bool {
 	return len(b.Entries) == 0 && b.Info == ""
+}
+
+// round2 rounds a float64 to 2 decimal places.
+func round2(v float64) float64 {
+	return math.Round(v*100) / 100
+}
+
+// BuildBooking turns a receipt's tax lines into a balanced Booking per the
+// category rule. expenseAccount is the Soll account for the "standard" case;
+// paymentAccount is the Haben account (Zahlungskonto). Returns an error for an
+// unknown category.
+func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkgeld float64, expenseAccount, paymentAccount int) (Booking, error) {
+	rule, ok := rules.Rule(kategorie)
+	if !ok {
+		return Booking{}, fmt.Errorf("unbekannte Buchungskategorie: %s", kategorie)
+	}
+
+	netTotal := round2(SumNetto(lines) + trinkgeld)
+	var entries []BookingEntry
+
+	switch kategorie {
+	case "bewirtung":
+		abz := round2(netTotal * rule.AbziehbarProzent / 100)
+		nicht := round2(netTotal - abz)
+		entries = append(entries,
+			BookingEntry{Konto: rule.KontoAbziehbar, Betrag: abz, Soll: true},
+			BookingEntry{Konto: rule.KontoNichtAbziehbar, Betrag: nicht, Soll: true},
+		)
+	default: // "standard"
+		entries = append(entries, BookingEntry{Konto: expenseAccount, Betrag: netTotal, Soll: true})
+	}
+
+	// Vorsteuer per rate (Soll).
+	for _, l := range lines {
+		if l.MwStBetrag == 0 {
+			continue
+		}
+		if konto, ok := rules.VorsteuerKonto(l.SatzProzent); ok {
+			entries = append(entries, BookingEntry{Konto: konto, Betrag: round2(l.MwStBetrag), Soll: true})
+		}
+	}
+
+	// Payment (Haben) = gross.
+	gross := round2(SumNetto(lines) + SumMwSt(lines) + trinkgeld)
+	entries = append(entries, BookingEntry{Konto: paymentAccount, Betrag: gross, Soll: false})
+
+	return Booking{Entries: entries}, nil
 }
