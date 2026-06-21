@@ -186,5 +186,9 @@
   "month.12": "December",
 
   "booking.balanced": "Σ debit = Σ credit ✓",
-  "booking.unbalanced": "Not balanced!"
+  "booking.unbalanced": "Not balanced!",
+  "booking.section": "Booking proposal",
+  "booking.category": "Category",
+  "booking.no.lines": "No tax lines — not bookable",
+  "booking.no.payment.account": "Payment account has no SKR04 account (map it in settings)"
 }

@@ -186,5 +186,9 @@
   "month.12": "Dezember",
 
   "booking.balanced": "Σ Soll = Σ Haben ✓",
-  "booking.unbalanced": "Nicht ausgeglichen!"
+  "booking.unbalanced": "Nicht ausgeglichen!",
+  "booking.section": "Buchungsvorschlag",
+  "booking.category": "Kategorie",
+  "booking.no.lines": "Keine MwSt-Zeilen — nicht buchbar",
+  "booking.no.payment.account": "Zahlungskonto ohne SKR04-Konto (in Einstellungen zuordnen)"
 }

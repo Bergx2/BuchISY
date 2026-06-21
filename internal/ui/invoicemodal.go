@@ -135,6 +135,11 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// on this window (assigned further down).
 	var confirmWin fyne.Window
 
+	// recomputeBooking is forward-declared so closures created before it
+	// is assigned (account picker, bank account select) can call it safely
+	// via the nil guard.
+	var recomputeBooking func()
+
 	// Create form entries
 	companyEntry := widget.NewEntry()
 	companyEntry.SetText(meta.Auftraggeber)
@@ -206,11 +211,19 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		a.showAccountSearch(selectedAccount, func(n int) {
 			selectedAccount = n
 			updateAccountDisplay()
+			if recomputeBooking != nil {
+				recomputeBooking()
+			}
 		})
 	})
 
 	// Bank account select
 	bankAccountSelect := widget.NewSelect(a.bankAccountOptionList(), nil)
+	bankAccountSelect.OnChanged = func(string) {
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	}
 	a.preselectBankAccount(bankAccountSelect, meta.Bankkonto)
 	addBankBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
 		a.addBankAccountInline(confirmWin, func(name string) {
@@ -356,12 +369,38 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	dateEntry.OnChanged = onAnyChange
 
 	// Create the VAT-lines editor now that updateFilenamePreview is defined.
-	// onChange is updateFilenamePreview so the filename preview updates live
-	// whenever any amount entry changes.
-	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, updateFilenamePreview)
+	// onChange is a combined callback: filename preview + booking recompute.
+	// recomputeBooking is forward-declared at the top of this function so
+	// both this closure and the account/bank-account closures above can
+	// reference it safely via the nil guard.
+	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, func() {
+		updateFilenamePreview()
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	})
+
+	// Booking category: learned template for this company, else "standard".
+	category := "standard"
+	if tmpl, ok := a.bookingTemplates.Get(meta.Auftraggeber); ok {
+		category = tmpl.Kategorie
+	}
+	catOptions, catKeyByLabel := a.bookingCategoryOptions()
+	categorySelect := widget.NewSelect(catOptions, nil)
+	categorySelect.SetSelected(a.bookingCategoryLabel(category))
+
+	bookingPrev := newBookingPreview(a)
+	recomputeBooking = func() {
+		b, bookable, reason := a.computeInvoiceBooking(
+			catKeyByLabel[categorySelect.Selected],
+			ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+		bookingPrev.set(b, bookable, reason)
+	}
+	categorySelect.OnChanged = func(string) { recomputeBooking() }
 
 	// Initial preview - call after all widgets are set up
 	updateFilenamePreview()
+	recomputeBooking()
 
 	// Attachments — mutable copy of the initial list so the "+ Anhang"-
 	// button can append more sources before the user saves. saveBtn's
@@ -467,6 +506,10 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		// Currency conversion fields (shown only for non-default currency).
 		currencyConversionContainer,
 		section(a.bundle.T("field.comment"), commentEntry),
+		section(a.bundle.T("booking.section"), selectableForm(a.bundle,
+			fi(a.bundle.T("booking.category"), categorySelect),
+			fi("", bookingPrev.container),
+		)),
 		rememberCheck,
 		widget.NewSeparator(),
 		newCopyableLabel(a.bundle, a.bundle.T("modal.filenamePreview")),
@@ -535,6 +578,13 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				targetMonth = time.Month(m)
 			}
 		}
+		// Compute the final booking (empty Booking when not bookable).
+		finalBooking, bookable, _ := a.computeInvoiceBooking(
+			catKeyByLabel[categorySelect.Selected],
+			ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+		if !bookable {
+			finalBooking = core.Booking{}
+		}
 		err := a.saveInvoice(
 			originalPath,
 			dynamicAttachments,
@@ -558,11 +608,19 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			ausgangsrechnungCheck.Checked,
 			targetYear,
 			targetMonth,
+			finalBooking,
 		)
 		if err != nil {
 			// Keep the window open so the user can correct the data.
 			dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), confirmWin)
 			return
+		}
+		// Learn the booking template for this company on successful save.
+		if bookable && companyEntry.Text != "" {
+			_ = a.bookingTemplates.Set(companyEntry.Text, core.BookingTemplate{
+				Kategorie:    catKeyByLabel[categorySelect.Selected],
+				ExpenseKonto: selectedAccount,
+			})
 		}
 		a.loadInvoices()
 		confirmWin.Close()
@@ -642,6 +700,7 @@ func (a *App) saveInvoice(
 	ausgangsrechnung bool,
 	targetYear int,
 	targetMonth time.Month,
+	buchung core.Booking,
 ) error {
 	// Build meta
 	meta := core.Meta{
@@ -708,6 +767,7 @@ func (a *App) saveInvoice(
 	newRow := meta.ToCSVRow()
 	newRow.Dateiname = filename
 	newRow.Unterordner = unterordner
+	newRow.Buchung = buchung
 
 	// Check for duplicates in database
 	isDuplicate, err := a.dbRepo.IsDuplicate(meta.Jahr, meta.Monat, newRow)
