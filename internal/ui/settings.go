@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -709,6 +710,30 @@ func (a *App) showSettingsView() {
 		apiKeyContainer,
 	))
 
+	// SKR04 import button
+	skr04ImportBtn := widget.NewButton(a.bundle.T("settings.skr04.import"), func() {
+		a.showFilePicker(func(path string) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				a.showError(a.bundle.T("error.processing.title"), fmt.Sprintf("Datei konnte nicht gelesen werden: %v", err))
+				return
+			}
+			accs, err := core.ParseChartCSV(data)
+			if err != nil {
+				a.showError(a.bundle.T("error.processing.title"), fmt.Sprintf("SKR04-Datei konnte nicht verarbeitet werden: %v", err))
+				return
+			}
+			if err := a.chartStore.SaveImport(accs); err != nil {
+				a.showError(a.bundle.T("error.processing.title"), fmt.Sprintf("SKR04 konnte nicht gespeichert werden: %v", err))
+				return
+			}
+			if c, err := a.chartStore.Load(); err == nil {
+				a.chart = c
+			}
+			a.showToast(fmt.Sprintf("%d Konten importiert", len(accs)))
+		})
+	})
+
 	// Tab 3: Accounts settings
 	accountsTab := container.NewVScroll(container.NewVBox(
 		container.NewBorder(nil, nil,
@@ -734,6 +759,9 @@ func (a *App) showSettingsView() {
 			widget.NewSeparator(),
 			bankAccountsList,
 		)),
+		widget.NewSeparator(),
+		widget.NewLabel("SKR04 Kontenrahmen"),
+		skr04ImportBtn,
 	))
 
 	// Tab 4: Advanced settings

@@ -156,6 +156,7 @@
   "settings.wipeDatabase.confirm.message": "⚠️ WARNING: This action will delete ALL invoices from the database!\n\nPDF files and CSV files will remain on disk, but all database entries will be lost.\n\nDo you really want to proceed?",
   "settings.wipeDatabase.success": "Database has been wiped. All invoice data has been deleted.",
 
+  "settings.skr04.import": "Import SKR04…",
   "settings.restoreDefaults": "Restore Defaults",
 
   "month.01": "January",

@@ -156,6 +156,7 @@
   "settings.wipeDatabase.confirm.message": "⚠️ WARNUNG: Diese Aktion löscht ALLE Rechnungen aus der Datenbank!\n\nDie PDF-Dateien und CSV-Dateien bleiben auf der Festplatte erhalten, aber alle Datenbankeinträge gehen verloren.\n\nMöchten Sie wirklich fortfahren?",
   "settings.wipeDatabase.success": "Datenbank wurde geleert. Alle Rechnungsdaten wurden gelöscht.",
 
+  "settings.skr04.import": "SKR04 importieren…",
   "settings.restoreDefaults": "Standardwerte wiederherstellen",
 
   "month.01": "Januar",
