@@ -1029,7 +1029,17 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 			return core.Meta{}, fmt.Errorf("failed to get API key: %w", err)
 		}
 
-		meta, confidence, err = a.anthropicExtractor.Extract(ctx, apiKey, a.settings.AnthropicModel, text, a.ownVATIDList()...)
+		// Multimodal: send the extracted text together with the rendered page
+		// images, so receipts whose tables are images (POS / SumUp / restaurant
+		// bills) are read too. Falls back to text-only if rendering fails.
+		images, mediaType, imgErr := core.PDFAllPagesToBase64(path)
+		if imgErr != nil || len(images) == 0 {
+			a.logger.Warn("Page rendering for multimodal extraction failed (%v); using text only", imgErr)
+			meta, confidence, err = a.anthropicExtractor.Extract(ctx, apiKey, a.settings.AnthropicModel, text, a.ownVATIDList()...)
+		} else {
+			a.logger.Info("Multimodal extraction: text + %d page image(s)", len(images))
+			meta, confidence, err = a.anthropicExtractor.ExtractMultimodal(ctx, apiKey, a.settings.AnthropicModel, text, images, mediaType, a.ownVATIDList()...)
+		}
 		if err != nil {
 			return core.Meta{}, fmt.Errorf("claude extraction failed: %w", err)
 		}

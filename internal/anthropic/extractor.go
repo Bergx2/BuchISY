@@ -344,6 +344,40 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string, own
 	return meta, confidence, nil
 }
 
+// ExtractMultimodal extracts invoice metadata from BOTH the extracted text and
+// the rendered page images. Many receipts (POS / SumUp / restaurant bills) carry
+// their VAT table as an image that text extraction cannot read; sending the page
+// images alongside the text lets Claude read the form text and the image table
+// together. imagesBase64 are PNG-encoded pages, mediaType e.g. "image/png".
+func (e *Extractor) ExtractMultimodal(ctx context.Context, apiKey, model, text string, imagesBase64 []string, mediaType string, ownVATIDs ...string) (core.Meta, float64, error) {
+	text = preprocessText(text, 10000)
+	prompt := systemPromptFor(ownVATIDs)
+	userMessage := "Dokumenttext (kann unvollständig sein — Tabellen/Beträge stehen oft nur in den beigefügten Seitenbildern, dann diese auswerten):\n\n" + text
+
+	if e.debug && e.logger != nil {
+		e.logger.Debug("=== CLAUDE MULTIMODAL API REQUEST ===")
+		e.logger.Debug("Model: %s, text: %d chars, images: %d", model, len(text), len(imagesBase64))
+	}
+
+	response, err := e.client.SendWithImages(ctx, apiKey, model, prompt, userMessage, imagesBase64, mediaType)
+	if err != nil {
+		if e.debug && e.logger != nil {
+			e.logger.Debug("=== CLAUDE MULTIMODAL API ERROR ===\nError: %v", err)
+		}
+		return core.Meta{}, 0, fmt.Errorf("multimodal API request failed: %w", err)
+	}
+
+	if e.debug && e.logger != nil {
+		e.logger.Debug("=== CLAUDE MULTIMODAL API RESPONSE ===\nFull response: %s", response)
+	}
+
+	meta, err := parseExtractionResponse(response, ownVATIDs)
+	if err != nil {
+		return core.Meta{}, 0, err
+	}
+	return meta, 0.95, nil
+}
+
 // parseExtractionJSON parses the JSON response from Claude API into a Meta.
 // ownVATIDs is the list of the user's own VAT-IDs; if Claude returned
 // one of them as vat_id, we drop it (defense-in-depth, since the LLM
