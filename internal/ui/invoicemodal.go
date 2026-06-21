@@ -390,13 +390,38 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	categorySelect.SetSelected(a.bookingCategoryLabel(category))
 
 	bookingPrev := newBookingPreview(a)
+	var manualBooking *core.Booking
 	recomputeBooking = func() {
+		if manualBooking != nil {
+			bookingPrev.set(*manualBooking, manualBooking.Balanced(), a.bundle.T("booking.manual.hint"))
+			return
+		}
 		b, bookable, reason := a.computeInvoiceBooking(
 			catKeyByLabel[categorySelect.Selected],
 			ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
 		bookingPrev.set(b, bookable, reason)
 	}
 	categorySelect.OnChanged = func(string) { recomputeBooking() }
+
+	editBookingBtn := widget.NewButton(a.bundle.T("booking.editor.title"), func() {
+		var seed core.Booking
+		if manualBooking != nil {
+			seed = *manualBooking
+		} else {
+			b, _, _ := a.computeInvoiceBooking(
+				catKeyByLabel[categorySelect.Selected],
+				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+			seed = b
+		}
+		a.showBookingEditor(seed, func(edited core.Booking) {
+			manualBooking = &edited
+			recomputeBooking()
+		})
+	})
+	autoBookingBtn := widget.NewButton(a.bundle.T("booking.auto"), func() {
+		manualBooking = nil
+		recomputeBooking()
+	})
 
 	// Initial preview - call after all widgets are set up
 	updateFilenamePreview()
@@ -507,7 +532,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		currencyConversionContainer,
 		section(a.bundle.T("field.comment"), commentEntry),
 		section(a.bundle.T("booking.section"), selectableForm(a.bundle,
-			fi(a.bundle.T("booking.category"), categorySelect),
+			fi(a.bundle.T("booking.category"), container.NewBorder(nil, nil, nil,
+				container.NewHBox(editBookingBtn, autoBookingBtn), categorySelect)),
 			fi("", bookingPrev.container),
 		)),
 		rememberCheck,
@@ -578,12 +604,19 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				targetMonth = time.Month(m)
 			}
 		}
-		// Compute the final booking (empty Booking when not bookable).
-		finalBooking, bookable, _ := a.computeInvoiceBooking(
-			catKeyByLabel[categorySelect.Selected],
-			ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
-		if !bookable {
-			finalBooking = core.Booking{}
+		// Compute the final booking, branching on manual override.
+		var finalBooking core.Booking
+		learn := false
+		if manualBooking != nil {
+			finalBooking = *manualBooking
+		} else {
+			b, bookable, _ := a.computeInvoiceBooking(
+				catKeyByLabel[categorySelect.Selected],
+				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+			if bookable {
+				finalBooking = b
+				learn = true
+			}
 		}
 		err := a.saveInvoice(
 			originalPath,
@@ -615,8 +648,9 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), confirmWin)
 			return
 		}
-		// Learn the booking template for this company on successful save.
-		if bookable && companyEntry.Text != "" {
+		// Learn the booking template for this company on successful save
+		// (only when using the auto path — skip when a manual booking was set).
+		if learn && companyEntry.Text != "" {
 			_ = a.bookingTemplates.Set(companyEntry.Text, core.BookingTemplate{
 				Kategorie:    catKeyByLabel[categorySelect.Selected],
 				ExpenseKonto: selectedAccount,

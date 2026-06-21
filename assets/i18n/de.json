@@ -197,6 +197,8 @@
   "booking.category": "Kategorie",
   "booking.no.lines": "Keine MwSt-Zeilen — nicht buchbar",
   "booking.no.payment.account": "Zahlungskonto ohne SKR04-Konto (in Einstellungen zuordnen)",
+  "booking.auto": "Automatisch",
+  "booking.manual.hint": "Manuell bearbeitete Buchung",
 
   "export.bookings": "Buchungen exportieren",
   "export.month": "Aktuellen Monat",
