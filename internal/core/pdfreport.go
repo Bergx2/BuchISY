@@ -98,3 +98,35 @@ func truncate(s string, n int) string {
 	}
 	return s
 }
+
+// BuildControllingPDF renders per-account summed amounts as a portrait table.
+func BuildControllingPDF(sums []AccountSum, total float64, title string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P")
+
+	headers := []string{"Konto", "Bezeichnung", "Summe"}
+	widths := []float64{25, 120, 35}
+	pdf.SetFont("Arial", "B", 9)
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 7, tr(h), "1", 0, "L", false, 0, "")
+	}
+	pdf.Ln(7)
+	pdf.SetFont("Arial", "", 9)
+
+	for _, s := range sums {
+		pdf.CellFormat(widths[0], 6, tr(fmt.Sprintf("%d", s.Konto)), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[1], 6, tr(truncate(s.Name, 70)), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[2], 6, tr(pdfAmount(s.Summe)), "1", 0, "R", false, 0, "")
+		pdf.Ln(6)
+	}
+
+	pdf.SetFont("Arial", "B", 9)
+	pdf.CellFormat(widths[0]+widths[1], 7, tr("Summe"), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[2], 7, tr(pdfAmount(round2(total))), "1", 0, "R", false, 0, "")
+	pdf.Ln(7)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

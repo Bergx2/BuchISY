@@ -23,3 +23,17 @@ func TestBuildBookingJournalPDF(t *testing.T) {
 		t.Errorf("empty journal errored: %v", err)
 	}
 }
+
+func TestBuildControllingPDF(t *testing.T) {
+	sums := []AccountSum{{Konto: 6640, Name: "Bewirtungskosten (abziehbar)", Summe: 1240.00}}
+	data, err := BuildControllingPDF(sums, 1240.00, "Controlling 2026")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 100 || string(data[:4]) != "%PDF" {
+		t.Fatalf("not a PDF (%d bytes)", len(data))
+	}
+	if _, err := BuildControllingPDF(nil, 0, "Leer"); err != nil {
+		t.Errorf("empty controlling PDF errored: %v", err)
+	}
+}
