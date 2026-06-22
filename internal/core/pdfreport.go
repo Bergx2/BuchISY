@@ -130,3 +130,49 @@ func BuildControllingPDF(sums []AccountSum, total float64, title string) ([]byte
 	}
 	return buf.Bytes(), nil
 }
+
+// BuildInvoiceListPDF renders the invoices as a landscape table with a Brutto total.
+func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "L")
+
+	headers := []string{"Datum", "Auftraggeber", "Rechnungsnr.", "Netto", "MwSt", "Brutto"}
+	widths := []float64{22, 90, 45, 30, 30, 30}
+	pdf.SetFont("Arial", "B", 9)
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 7, tr(h), "1", 0, "L", false, 0, "")
+	}
+	pdf.Ln(7)
+	pdf.SetFont("Arial", "", 9)
+
+	var totalBrutto float64
+	for _, r := range rows {
+		cells := []struct {
+			w     float64
+			txt   string
+			align string
+		}{
+			{widths[0], r.Rechnungsdatum, "L"},
+			{widths[1], truncate(r.Auftraggeber, 52), "L"},
+			{widths[2], truncate(r.Rechnungsnummer, 26), "L"},
+			{widths[3], pdfAmount(r.BetragNetto), "R"},
+			{widths[4], pdfAmount(r.SteuersatzBetrag), "R"},
+			{widths[5], pdfAmount(r.Bruttobetrag), "R"},
+		}
+		for _, c := range cells {
+			pdf.CellFormat(c.w, 6, tr(c.txt), "1", 0, c.align, false, 0, "")
+		}
+		pdf.Ln(6)
+		totalBrutto += r.Bruttobetrag
+	}
+
+	pdf.SetFont("Arial", "B", 9)
+	pdf.CellFormat(widths[0]+widths[1]+widths[2]+widths[3]+widths[4], 7, tr("Summe Brutto"), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[5], 7, tr(pdfAmount(round2(totalBrutto))), "1", 0, "R", false, 0, "")
+	pdf.Ln(7)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

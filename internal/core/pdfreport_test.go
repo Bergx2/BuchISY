@@ -37,3 +37,17 @@ func TestBuildControllingPDF(t *testing.T) {
 		t.Errorf("empty controlling PDF errored: %v", err)
 	}
 }
+
+func TestBuildInvoiceListPDF(t *testing.T) {
+	rows := []CSVRow{{Rechnungsdatum: "18.06.2026", Auftraggeber: "Müller GmbH", Rechnungsnummer: "R-1", BetragNetto: 100, SteuersatzBetrag: 19, Bruttobetrag: 119}}
+	data, err := BuildInvoiceListPDF(rows, "Belegliste Juni 2026")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 100 || string(data[:4]) != "%PDF" {
+		t.Fatalf("not a PDF (%d bytes)", len(data))
+	}
+	if _, err := BuildInvoiceListPDF(nil, "Leer"); err != nil {
+		t.Errorf("empty list PDF errored: %v", err)
+	}
+}
