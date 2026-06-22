@@ -83,3 +83,26 @@ func TestParseLineAmount(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLineIsCredit(t *testing.T) {
+	credits := []string{
+		"05.01. Gutschrift Kunde 2.000,00 H",
+		"03.01. Zahlungseingang Müller 500,00",
+		"07.01. SEPA-Gutschrift 80,00 +",
+	}
+	debits := []string{
+		"14.01. AMAZON WEB SERVICES 78,53",
+		"03.01. Lastschrift Telekom -49,99",
+		"02.01. Kartenzahlung REWE 23,40",
+	}
+	for _, c := range credits {
+		if !ParseLineIsCredit(c) {
+			t.Errorf("expected credit: %q", c)
+		}
+	}
+	for _, d := range debits {
+		if ParseLineIsCredit(d) {
+			t.Errorf("expected debit: %q", d)
+		}
+	}
+}

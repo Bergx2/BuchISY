@@ -34,6 +34,7 @@ type StatementBooking struct {
 	LeftPt     float64     `json:"left_pt"`               // leftmost x position
 	Text       string      `json:"text"`                  // full visible line text
 	Betrag     float64     `json:"betrag,omitempty"`      // parsed absolute amount of the line
+	IstGutschrift bool     `json:"gutschrift,omitempty"` // clearly an incoming credit (Haben)
 	InvoiceRef *InvoiceRef `json:"invoice_ref,omitempty"` // nil = unlinked
 }
 

@@ -14,6 +14,12 @@ import (
 // lineAmountRe matches German money amounts like "1.234,56" or "78,53".
 var lineAmountRe = regexp.MustCompile(`\d{1,3}(?:\.\d{3})*,\d{2}`)
 
+// creditKeywordRe matches clear credit (Haben / incoming) signals on a line.
+var creditKeywordRe = regexp.MustCompile(`(?i)gutschrift|zahlungseingang|geldeingang|überweisungseingang|lohn|gehalt`)
+
+// trailingCreditRe matches an amount followed by a credit marker (" H" or "+").
+var trailingCreditRe = regexp.MustCompile(`\d,\d{2}\s*([H+])\b|\d,\d{2}\s*\+`)
+
 // dateLineRe matches a transaction line's leading date. Accepts both
 // "DD.MM." (Sparkasse-style short date) and full "DD.MM.YYYY".
 var dateLineRe = regexp.MustCompile(`^\s*([0-3]?\d)\.([01]?\d)\.(\d{4}|\d{2}|)`)
@@ -45,6 +51,19 @@ func ParseLineAmount(text string) float64 {
 		return 0
 	}
 	return v
+}
+
+// ParseLineIsCredit reports whether a statement line is CLEARLY an incoming
+// credit (Haben). Ambiguous lines return false (treated as a debit) so a real
+// expense match is never silently dropped.
+func ParseLineIsCredit(text string) bool {
+	if creditKeywordRe.MatchString(text) {
+		return true
+	}
+	if trailingCreditRe.MatchString(text) {
+		return true
+	}
+	return false
 }
 
 // ParseStatementBookings scans every page of a bank-statement PDF and
@@ -132,13 +151,14 @@ func bookingsFromPageHTML(pageHTML string, page int) []StatementBooking {
 		// If year is missing (e.g. "05.01."), keep as-is; UI can
 		// resolve to full year using statement period.
 		bookings = append(bookings, StatementBooking{
-			Page:    page,
-			LineIdx: idx,
-			Date:    date,
-			TopPt:   ln.top,
-			LeftPt:  ln.left,
-			Text:    ln.text,
-			Betrag:  ParseLineAmount(ln.text),
+			Page:          page,
+			LineIdx:       idx,
+			Date:          date,
+			TopPt:         ln.top,
+			LeftPt:        ln.left,
+			Text:          ln.text,
+			Betrag:        ParseLineAmount(ln.text),
+			IstGutschrift: ParseLineIsCredit(ln.text),
 		})
 	}
 	return bookings
