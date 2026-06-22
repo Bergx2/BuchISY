@@ -153,6 +153,122 @@ func dayDistance(a, b string) int {
 	return int(d + 0.5)
 }
 
+// GroupMatch holds one n:1 grouped-payment result: N invoice filenames summing
+// to a single statement line's Betrag.
+type GroupMatch struct {
+	Dateinamen []string        // invoice Dateiname values in the group
+	Line       StatementBooking // the statement line that matches the sum
+	File       string          // source statement file (filled by the caller)
+}
+
+// FindGroupedPayments finds statement lines (non-credit) whose Betrag equals the
+// sum of 2 or 3 invoices within cfg.DateWindowDays of that line. Only invoices
+// with InvoiceEURAmount > 0 are considered. Returns one disjoint group per line
+// (first match wins); invoices are not reused across groups. File is left empty
+// — the caller fills it from the statement cache.
+func FindGroupedPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchConfig) []GroupMatch {
+	window := cfg.DateWindowDays
+	if window <= 0 {
+		window = 5
+	}
+
+	usedFilenames := map[string]bool{}
+	var results []GroupMatch
+
+	for _, l := range lines {
+		if l.IstGutschrift || l.Betrag <= 0 {
+			continue
+		}
+		// Build windowed candidate list for this line.
+		var candidates []CSVRow
+		for _, inv := range invoices {
+			if usedFilenames[inv.Dateiname] {
+				continue
+			}
+			amt := InvoiceEURAmount(inv)
+			if amt <= 0 {
+				continue
+			}
+			// Date proximity check.
+			invDate := inv.Bezahldatum
+			if invDate == "" {
+				invDate = inv.Rechnungsdatum
+			}
+			if dayDistance(invDate, l.Date) > window {
+				continue
+			}
+			candidates = append(candidates, inv)
+		}
+
+		// Search pairs (size 2).
+		found := false
+		for i := 0; i < len(candidates) && !found; i++ {
+			for j := i + 1; j < len(candidates) && !found; j++ {
+				sum := round2(InvoiceEURAmount(candidates[i]) + InvoiceEURAmount(candidates[j]))
+				if absf(sum-l.Betrag) <= 0.01 {
+					names := []string{candidates[i].Dateiname, candidates[j].Dateiname}
+					results = append(results, GroupMatch{Dateinamen: names, Line: l})
+					usedFilenames[candidates[i].Dateiname] = true
+					usedFilenames[candidates[j].Dateiname] = true
+					found = true
+				}
+			}
+		}
+		if found {
+			continue
+		}
+
+		// Search triples (size 3).
+		for i := 0; i < len(candidates) && !found; i++ {
+			for j := i + 1; j < len(candidates) && !found; j++ {
+				for k := j + 1; k < len(candidates) && !found; k++ {
+					sum := round2(InvoiceEURAmount(candidates[i]) + InvoiceEURAmount(candidates[j]) + InvoiceEURAmount(candidates[k]))
+					if absf(sum-l.Betrag) <= 0.01 {
+						names := []string{candidates[i].Dateiname, candidates[j].Dateiname, candidates[k].Dateiname}
+						results = append(results, GroupMatch{Dateinamen: names, Line: l})
+						usedFilenames[candidates[i].Dateiname] = true
+						usedFilenames[candidates[j].Dateiname] = true
+						usedFilenames[candidates[k].Dateiname] = true
+						found = true
+					}
+				}
+			}
+		}
+	}
+
+	return results
+}
+
+// PartialPaymentLines returns statement lines that look like a partial payment for
+// the given invoice (Teilzahlung=true). Only non-credit lines with
+// 0 < Betrag < InvoiceEURAmount(row)-0.01 are returned, ranked by date proximity
+// to the invoice's Bezahldatum (or Rechnungsdatum).
+func PartialPaymentLines(row CSVRow, lines []StatementBooking) []ScoredLine {
+	if !row.Teilzahlung {
+		return nil
+	}
+	fullAmt := InvoiceEURAmount(row)
+	invDate := row.Bezahldatum
+	if invDate == "" {
+		invDate = row.Rechnungsdatum
+	}
+
+	var cands []ScoredLine
+	for _, l := range lines {
+		if l.IstGutschrift {
+			continue
+		}
+		if l.Betrag <= 0 || l.Betrag >= fullAmt-0.01 {
+			continue
+		}
+		days := dayDistance(invDate, l.Date)
+		score := 1.0 / (1.0 + float64(days))
+		cands = append(cands, ScoredLine{Line: l, Score: score})
+	}
+	sort.SliceStable(cands, func(i, j int) bool { return cands[i].Score > cands[j].Score })
+	return cands
+}
+
 // parseFlexDate parses "DD.MM.YYYY" or "DD.MM." (taking the year from other).
 func parseFlexDate(s, other string) (time.Time, bool) {
 	parts := strings.Split(strings.TrimSpace(s), ".")

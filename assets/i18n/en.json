@@ -266,6 +266,9 @@
   "reconcile.cashBalance": "Cash balance",
   "reconcile.cashOk": "✓ covered",
   "reconcile.cashUncovered": "⚠ %d receipt(s) uncovered",
+  "reconcile.group": "%d receipts",
+  "reconcile.linkAll": "Link all",
+  "reconcile.partial": "Partial payment",
 
   "status.cashCovered": "Cash covered",
   "status.cashUncovered": "Cash uncovered",

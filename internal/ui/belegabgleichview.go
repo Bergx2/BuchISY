@@ -298,6 +298,117 @@ func (a *App) showBelegabgleich() {
 		}
 	}
 
+	// ── Step 5: Grouped (n:1) and partial (1:n) payment detection ─────────
+	// Per bank/creditcard account: collect still-unclaimed lines from the
+	// parse-once cache and the still-unmatched invoices; run group + partial
+	// detection. Results are rendered in the dialog below.
+
+	// Collect unmatched invoice rows (no BuchungRef and not auto-linked this run).
+	autoLinkedSet := map[string]bool{}
+	for _, r := range autoResults {
+		// We only care about those that were actually linked (not demoted).
+		top := r.candidates[0]
+		key := refKey(top.file, top.scored.Line.Page, top.scored.Line.LineIdx)
+		if !claimed[key] { // demoted: key was NOT claimed (claimed would be set), skip
+			continue
+		}
+		autoLinkedSet[r.row.Dateiname] = true
+	}
+
+	type groupSuggestion struct {
+		group core.GroupMatch
+	}
+	type partialSuggestion struct {
+		row        core.CSVRow
+		candidates []scoredWithFile
+	}
+
+	var groupSuggestions []groupSuggestion
+	var partialSuggestions []partialSuggestion
+
+	// Track which accounts we've already processed to avoid duplicate group detection.
+	groupProcessedAcct := map[string]bool{}
+
+	for _, row := range rows {
+		if row.BuchungRef != "" || autoLinkedSet[row.Dateiname] {
+			continue
+		}
+		at := accountType(row.Bankkonto)
+		if at != core.AccountTypeBank && at != core.AccountTypeCreditCard {
+			continue
+		}
+
+		// Partial payment suggestions for this invoice (Teilzahlung=true).
+		if row.Teilzahlung {
+			var allLines []core.StatementBooking
+			for _, sl := range stmtCache[row.Bankkonto] {
+				k := refKey(sl.File, sl.Line.Page, sl.Line.LineIdx)
+				if !claimed[k] {
+					allLines = append(allLines, sl.Line)
+				}
+			}
+			if cands := core.PartialPaymentLines(row, allLines); len(cands) > 0 {
+				// Build scoredWithFile candidates — need file per line.
+				lineToFile := map[string]string{} // "page:lineIdx" → file
+				for _, sl := range stmtCache[row.Bankkonto] {
+					lkey := fmt.Sprintf("%d:%d", sl.Line.Page, sl.Line.LineIdx)
+					lineToFile[lkey] = sl.File
+				}
+				swf := make([]scoredWithFile, 0, len(cands))
+				for _, c := range cands {
+					lkey := fmt.Sprintf("%d:%d", c.Line.Page, c.Line.LineIdx)
+					swf = append(swf, scoredWithFile{scored: c, file: lineToFile[lkey]})
+				}
+				partialSuggestions = append(partialSuggestions, partialSuggestion{row: row, candidates: swf})
+			}
+		}
+
+		// Group detection per account (run once per account).
+		if !groupProcessedAcct[row.Bankkonto] {
+			groupProcessedAcct[row.Bankkonto] = true
+
+			// Unclaimed lines for this account.
+			var unclaimedLines []core.StatementBooking
+			for _, sl := range stmtCache[row.Bankkonto] {
+				k := refKey(sl.File, sl.Line.Page, sl.Line.LineIdx)
+				if !claimed[k] {
+					unclaimedLines = append(unclaimedLines, sl.Line)
+				}
+			}
+
+			// Unmatched invoices for this account.
+			var unmatchedInvoices []core.CSVRow
+			for _, r2 := range rows {
+				if r2.Bankkonto != row.Bankkonto {
+					continue
+				}
+				if r2.BuchungRef != "" || autoLinkedSet[r2.Dateiname] {
+					continue
+				}
+				at2 := accountType(r2.Bankkonto)
+				if at2 != core.AccountTypeBank && at2 != core.AccountTypeCreditCard {
+					continue
+				}
+				unmatchedInvoices = append(unmatchedInvoices, r2)
+			}
+
+			groups := core.FindGroupedPayments(unmatchedInvoices, unclaimedLines, a.matchConfig())
+			for gi := range groups {
+				// Fill File from the stmt cache.
+				g := groups[gi]
+				lineKey := fmt.Sprintf("%d:%d", g.Line.Page, g.Line.LineIdx)
+				for _, sl := range stmtCache[row.Bankkonto] {
+					k := fmt.Sprintf("%d:%d", sl.Line.Page, sl.Line.LineIdx)
+					if k == lineKey {
+						g.File = sl.File
+						break
+					}
+				}
+				groupSuggestions = append(groupSuggestions, groupSuggestion{group: g})
+			}
+		}
+	}
+
 	// Refresh table so auto-linked rows show their new BuchungRef.
 	a.loadInvoices()
 
@@ -330,7 +441,7 @@ func (a *App) showBelegabgleich() {
 	// Build dialog content.
 	var content fyne.CanvasObject
 
-	if autoLinked == 0 && len(suggestions) == 0 {
+	if autoLinked == 0 && len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 {
 		vbox := container.NewVBox(widget.NewLabel(a.bundle.T("reconcile.none")))
 		if cashBox != nil {
 			heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
@@ -454,6 +565,150 @@ func (a *App) showBelegabgleich() {
 				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn, lbl)
 			}
 
+			vbox.Add(rowWidget)
+		}
+
+		// ── Group (n:1) payment rows ────────────────────────────────────────
+		for _, gs := range groupSuggestions {
+			// Capture for closure safety.
+			grp := gs.group
+
+			lineRunes := []rune(grp.Line.Text)
+			if len(lineRunes) > 60 {
+				lineRunes = append(lineRunes[:57], []rune("…")...)
+			}
+			betragStr := strings.Replace(fmt.Sprintf("%.2f", grp.Line.Betrag), ".", ",", 1)
+			filePart := ""
+			if grp.File != "" {
+				filePart = " (" + filepath.Base(grp.File) + ")"
+			}
+			countLabel := fmt.Sprintf(a.bundle.T("reconcile.group"), len(grp.Dateinamen))
+			rowLabel := fmt.Sprintf("%s (%s) = S.%d Z.%d · %s · %s € · %s%s",
+				countLabel,
+				strings.Join(grp.Dateinamen, ", "),
+				grp.Line.Page+1,
+				grp.Line.LineIdx,
+				grp.Line.Date,
+				betragStr,
+				string(lineRunes),
+				filePart,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			linkAllBtn := widget.NewButton(a.bundle.T("reconcile.linkAll"), nil)
+			linkAllBtn.OnTapped = func() {
+				lineRef := core.BuchungRef{
+					StatementFilename: grp.File,
+					Page:              grp.Line.Page,
+					LineIdx:           grp.Line.LineIdx,
+				}.String()
+				for _, name := range grp.Dateinamen {
+					// Find the matching row.
+					for _, r2 := range rows {
+						if r2.Dateiname != name {
+							continue
+						}
+						r2.BuchungRef = lineRef
+						if err := a.dbRepo.Update(r2.Jahr, r2.Monat, r2.Dateiname, r2); err != nil {
+							a.logger.Warn("Belegabgleich linkAll Update %s: %v", r2.Dateiname, err)
+						}
+						break
+					}
+				}
+				// Claim the line so no other row in this session can reuse it.
+				k := refKey(grp.File, grp.Line.Page, grp.Line.LineIdx)
+				claimed[k] = true
+				linkAllBtn.Disable()
+				lbl.SetText("✓ " + rowLabel)
+				a.loadInvoices()
+			}
+
+			vbox.Add(container.NewBorder(nil, nil, nil, linkAllBtn, lbl))
+		}
+
+		// ── Partial (1:n) payment rows ───────────────────────────────────────
+		for _, ps := range partialSuggestions {
+			// Capture for closure safety.
+			psug := ps
+			pSelIdx := 0
+
+			if len(psug.candidates) == 0 {
+				continue
+			}
+			top := psug.candidates[0]
+			invEUR := core.InvoiceEURAmount(psug.row)
+			invAmtStr := strings.Replace(fmt.Sprintf("%.2f", invEUR), ".", ",", 1)
+			lineBetragStr := strings.Replace(fmt.Sprintf("%.2f", top.scored.Line.Betrag), ".", ",", 1)
+			lineRunes := []rune(top.scored.Line.Text)
+			if len(lineRunes) > 60 {
+				lineRunes = append(lineRunes[:57], []rune("…")...)
+			}
+			baseName := filepath.Base(top.file)
+			rowLabel := fmt.Sprintf("[%s] %s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+				a.bundle.T("reconcile.partial"),
+				psug.row.Auftraggeber,
+				invAmtStr,
+				top.scored.Line.Page+1,
+				top.scored.Line.LineIdx,
+				top.scored.Line.Date,
+				lineBetragStr,
+				string(lineRunes),
+				baseName,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			confirmBtn := widget.NewButton(a.bundle.T("reconcile.confirm"), nil)
+			confirmBtn.OnTapped = func() {
+				chosen := psug.candidates[pSelIdx]
+				psug.row.BuchungRef = core.BuchungRef{
+					StatementFilename: chosen.file,
+					Page:              chosen.scored.Line.Page,
+					LineIdx:           chosen.scored.Line.LineIdx,
+				}.String()
+				if err := a.dbRepo.Update(psug.row.Jahr, psug.row.Monat, psug.row.Dateiname, psug.row); err != nil {
+					a.logger.Warn("Belegabgleich partial confirm Update %s: %v", psug.row.Dateiname, err)
+				}
+				k := refKey(chosen.file, chosen.scored.Line.Page, chosen.scored.Line.LineIdx)
+				claimed[k] = true
+				confirmBtn.Disable()
+				lbl.SetText("✓ " + rowLabel)
+				a.loadInvoices()
+			}
+
+			var rowWidget fyne.CanvasObject
+			if len(psug.candidates) >= 2 {
+				options := make([]string, len(psug.candidates))
+				for i, c := range psug.candidates {
+					runes := []rune(c.scored.Line.Text)
+					if len(runes) > 60 {
+						runes = append(runes[:57], []rune("…")...)
+					}
+					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
+					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
+						i+1,
+						c.scored.Line.Page+1,
+						c.scored.Line.LineIdx,
+						c.scored.Line.Date,
+						bStr,
+						string(runes),
+					)
+				}
+				sel := widget.NewSelect(options, func(selected string) {
+					for i, opt := range options {
+						if opt == selected {
+							pSelIdx = i
+							break
+						}
+					}
+				})
+				sel.SetSelected(options[0])
+				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn,
+					container.NewVBox(lbl, sel))
+			} else {
+				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn, lbl)
+			}
 			vbox.Add(rowWidget)
 		}
 

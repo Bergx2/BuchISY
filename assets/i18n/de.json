@@ -266,6 +266,9 @@
   "reconcile.cashBalance": "Kassenbestand",
   "reconcile.cashOk": "✓ gedeckt",
   "reconcile.cashUncovered": "⚠ %d Beleg(e) nicht gedeckt",
+  "reconcile.group": "%d Belege",
+  "reconcile.linkAll": "Alle verknüpfen",
+  "reconcile.partial": "Teilzahlung",
 
   "status.cashCovered": "Bar gedeckt",
   "status.cashUncovered": "Bar nicht gedeckt",

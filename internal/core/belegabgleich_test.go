@@ -1,6 +1,8 @@
 package core
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestMatchInvoiceToStatement(t *testing.T) {
 	lines := []StatementBooking{
@@ -30,6 +32,53 @@ func TestMatchInvoiceToStatement(t *testing.T) {
 	fx := CSVRow{Auftraggeber: "AWS", Bezahldatum: "14.01.2026", Bruttobetrag: 89.18, Waehrung: "USD", Wechselkurs: 1.1583, Gebuehr: 1.54}
 	if !almost(InvoiceEURAmount(fx), 78.53) {
 		t.Errorf("InvoiceEURAmount(fx) = %v, want 78.53", InvoiceEURAmount(fx))
+	}
+}
+
+func TestFindGroupedPayments(t *testing.T) {
+	cfg := DefaultMatchConfig()
+	invoices := []CSVRow{
+		{Dateiname: "a.pdf", Auftraggeber: "X", Bezahldatum: "10.01.2026", Bruttobetrag: 30, Waehrung: "EUR"},
+		{Dateiname: "b.pdf", Auftraggeber: "Y", Bezahldatum: "10.01.2026", Bruttobetrag: 70, Waehrung: "EUR"},
+		{Dateiname: "c.pdf", Auftraggeber: "Z", Bezahldatum: "10.01.2026", Bruttobetrag: 999, Waehrung: "EUR"},
+	}
+	lines := []StatementBooking{{Page: 0, LineIdx: 1, Date: "10.01.2026", Text: "Sammelüberweisung 100,00", Betrag: 100}}
+	groups := FindGroupedPayments(invoices, lines, cfg)
+	if len(groups) != 1 || len(groups[0].Dateinamen) != 2 {
+		t.Fatalf("expected one 2-invoice group summing to 100, got %+v", groups)
+	}
+	// Verify the correct pair was found (a+b=100, not involving c=999).
+	names := map[string]bool{groups[0].Dateinamen[0]: true, groups[0].Dateinamen[1]: true}
+	if !names["a.pdf"] || !names["b.pdf"] {
+		t.Errorf("expected a.pdf+b.pdf in group, got %v", groups[0].Dateinamen)
+	}
+	// Credit lines must be skipped.
+	creditLines := []StatementBooking{{Page: 0, LineIdx: 2, Date: "10.01.2026", Betrag: 100, IstGutschrift: true}}
+	if g := FindGroupedPayments(invoices, creditLines, cfg); len(g) != 0 {
+		t.Errorf("credit line must be skipped, got %+v", g)
+	}
+	// No group when no pair sums to line amount.
+	noMatch := []StatementBooking{{Page: 0, LineIdx: 3, Date: "10.01.2026", Betrag: 55}}
+	if g := FindGroupedPayments(invoices, noMatch, cfg); len(g) != 0 {
+		t.Errorf("no group expected, got %+v", g)
+	}
+}
+
+func TestPartialPaymentLines(t *testing.T) {
+	lines := []StatementBooking{
+		{Page: 0, LineIdx: 1, Date: "10.01.2026", Text: "Teilzahlung 1", Betrag: 50},
+		{Page: 0, LineIdx: 2, Date: "10.01.2026", Text: "Gutschrift", Betrag: 50, IstGutschrift: true},
+		{Page: 0, LineIdx: 3, Date: "10.01.2026", Text: "Vollzahlung", Betrag: 100},
+	}
+	row := CSVRow{Dateiname: "r.pdf", Bezahldatum: "10.01.2026", Bruttobetrag: 100, Waehrung: "EUR", Teilzahlung: true}
+	cands := PartialPaymentLines(row, lines)
+	if len(cands) != 1 || cands[0].Line.LineIdx != 1 {
+		t.Fatalf("expected one partial candidate (lineIdx=1), got %+v", cands)
+	}
+	// Non-Teilzahlung row: must return nil.
+	rowFull := CSVRow{Dateiname: "r2.pdf", Bezahldatum: "10.01.2026", Bruttobetrag: 100, Waehrung: "EUR", Teilzahlung: false}
+	if cands2 := PartialPaymentLines(rowFull, lines); len(cands2) != 0 {
+		t.Errorf("non-Teilzahlung: expected nil, got %+v", cands2)
 	}
 }
 
