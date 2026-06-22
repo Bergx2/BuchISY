@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -13,11 +14,23 @@ import (
 	"github.com/bergx2/buchisy/internal/core"
 )
 
+// scoredWithFile pairs a candidate ScoredLine with the statement file it came from.
+type scoredWithFile struct {
+	scored core.ScoredLine
+	file   string
+}
+
 // belegSuggestion is a single MatchSuggest entry collected during reconciliation.
+// candidates is ranked; candidates[0] is the default selection.
 type belegSuggestion struct {
-	row       core.CSVRow
-	candidate core.ScoredLine
-	fileName  string
+	row        core.CSVRow
+	candidates []scoredWithFile
+}
+
+// stmtLine pairs a parsed StatementBooking with its source file (base name).
+type stmtLine struct {
+	File string
+	Line core.StatementBooking
 }
 
 // matchConfig builds a core.MatchConfig from the current settings,
@@ -51,11 +64,43 @@ func (a *App) showBelegabgleich() {
 		return ""
 	}
 
-	autoLinked := 0
-	var suggestions []belegSuggestion
+	// ── Step 1: Build parse-once cache per account ──────────────────────────
+	// For each unique bank/creditcard account referenced by the unlinked rows,
+	// parse every statement file exactly once and cache all lines tagged with
+	// their source file. Reuse this cache for all invoices of that account.
+
+	type matchResult struct {
+		row        core.CSVRow
+		kind       core.MatchKind
+		candidates []scoredWithFile
+	}
+
+	stmtCache := map[string][]stmtLine{} // account name → all cached lines across files
+	cacheBuilt := map[string]bool{}
+
+	ensureCache := func(acct string) {
+		if cacheBuilt[acct] {
+			return
+		}
+		cacheBuilt[acct] = true
+		for _, name := range a.listStatements(acct) {
+			fullPath := filepath.Join(a.statementFolder(acct), name)
+			lines, err := core.ParseStatementBookings(fullPath)
+			if err != nil {
+				a.logger.Warn("Belegabgleich: parse statement %s: %v", name, err)
+				continue
+			}
+			for _, l := range lines {
+				stmtCache[acct] = append(stmtCache[acct], stmtLine{File: name, Line: l})
+			}
+		}
+	}
+
+	// ── Step 2: Compute match results for every unlinked invoice ────────────
+	// Match per file so each candidate's file is known unambiguously.
+	var allResults []matchResult
 
 	for _, row := range rows {
-		// Skip already-linked and cash accounts.
 		if row.BuchungRef != "" {
 			continue
 		}
@@ -64,49 +109,54 @@ func (a *App) showBelegabgleich() {
 			continue
 		}
 
-		// Per-file matching: iterate statements, keep best outcome across files.
+		ensureCache(row.Bankkonto)
+		cached := stmtCache[row.Bankkonto]
+
+		// Group cached lines by file, preserving encounter order.
+		fileLines := map[string][]core.StatementBooking{}
+		fileOrder := []string{}
+		for _, sl := range cached {
+			if _, seen := fileLines[sl.File]; !seen {
+				fileOrder = append(fileOrder, sl.File)
+			}
+			fileLines[sl.File] = append(fileLines[sl.File], sl.Line)
+		}
+
 		bestKind := core.MatchNone
-		var bestCandidate core.ScoredLine
-		bestFile := ""
+		var bestCandidates []scoredWithFile
 		autoCount := 0
 
-		for _, name := range a.listStatements(row.Bankkonto) {
-			fullPath := filepath.Join(a.statementFolder(row.Bankkonto), name)
-			lines, err := core.ParseStatementBookings(fullPath)
-			if err != nil {
-				a.logger.Warn("Belegabgleich: parse statement %s: %v", name, err)
-				continue
-			}
-			kind, cands := core.MatchInvoiceToStatement(row, lines, a.matchConfig())
+		for _, name := range fileOrder {
+			linesForFile := fileLines[name]
+			kind, cands := core.MatchInvoiceToStatement(row, linesForFile, a.matchConfig())
 			if kind == core.MatchNone || len(cands) == 0 {
 				continue
 			}
-			top := cands[0]
 
 			if kind == core.MatchAuto {
 				autoCount++
 			}
 
-			// Prefer MatchAuto with a single candidate; else best MatchSuggest by top score.
+			// Convert []ScoredLine → []scoredWithFile, tagging each with its file.
+			swf := make([]scoredWithFile, len(cands))
+			for i, c := range cands {
+				swf[i] = scoredWithFile{scored: c, file: name}
+			}
+
 			switch {
 			case kind == core.MatchAuto && bestKind != core.MatchAuto:
 				bestKind = kind
-				bestCandidate = top
-				bestFile = name
+				bestCandidates = swf
 			case kind == core.MatchAuto && bestKind == core.MatchAuto:
-				// Multiple MatchAuto matches across files — keep highest score.
-				if top.Score > bestCandidate.Score {
-					bestCandidate = top
-					bestFile = name
+				if cands[0].Score > bestCandidates[0].scored.Score {
+					bestCandidates = swf
 				}
 			case kind == core.MatchSuggest && bestKind == core.MatchNone:
 				bestKind = kind
-				bestCandidate = top
-				bestFile = name
+				bestCandidates = swf
 			case kind == core.MatchSuggest && bestKind == core.MatchSuggest:
-				if top.Score > bestCandidate.Score {
-					bestCandidate = top
-					bestFile = name
+				if cands[0].Score > bestCandidates[0].scored.Score {
+					bestCandidates = swf
 				}
 			}
 		}
@@ -117,24 +167,81 @@ func (a *App) showBelegabgleich() {
 			bestKind = core.MatchSuggest
 		}
 
-		switch bestKind {
-		case core.MatchAuto:
-			row.BuchungRef = core.BuchungRef{
-				StatementFilename: bestFile,
-				Page:              bestCandidate.Line.Page,
-				LineIdx:           bestCandidate.Line.LineIdx,
-			}.String()
-			if err := a.dbRepo.Update(row.Jahr, row.Monat, row.Dateiname, row); err != nil {
-				a.logger.Warn("Belegabgleich auto-link Update %s: %v", row.Dateiname, err)
-			}
-			autoLinked++
-		case core.MatchSuggest:
-			suggestions = append(suggestions, belegSuggestion{
-				row:       row,
-				candidate: bestCandidate,
-				fileName:  bestFile,
-			})
+		if bestKind == core.MatchNone || len(bestCandidates) == 0 {
+			continue
 		}
+
+		allResults = append(allResults, matchResult{
+			row:        row,
+			kind:       bestKind,
+			candidates: bestCandidates,
+		})
+	}
+
+	// ── Step 3: Greedy auto-link by score; claim each statement line at most once ──
+	claimed := map[string]bool{}
+
+	refKey := func(file string, page, lineIdx int) string {
+		return core.BuchungRef{StatementFilename: file, Page: page, LineIdx: lineIdx}.String()
+	}
+
+	// Separate auto from suggest results; sort autos DESC by top-candidate score.
+	var autoResults []matchResult
+	var suggestResults []matchResult
+	for _, r := range allResults {
+		if r.kind == core.MatchAuto {
+			autoResults = append(autoResults, r)
+		} else {
+			suggestResults = append(suggestResults, r)
+		}
+	}
+	sort.SliceStable(autoResults, func(i, j int) bool {
+		return autoResults[i].candidates[0].scored.Score > autoResults[j].candidates[0].scored.Score
+	})
+
+	autoLinked := 0
+	var suggestions []belegSuggestion
+
+	for _, r := range autoResults {
+		top := r.candidates[0]
+		key := refKey(top.file, top.scored.Line.Page, top.scored.Line.LineIdx)
+		if claimed[key] {
+			// Line already taken by a higher-scored invoice — demote to suggestion.
+			suggestResults = append(suggestResults, matchResult{
+				row:        r.row,
+				kind:       core.MatchSuggest,
+				candidates: r.candidates,
+			})
+			continue
+		}
+		r.row.BuchungRef = core.BuchungRef{
+			StatementFilename: top.file,
+			Page:              top.scored.Line.Page,
+			LineIdx:           top.scored.Line.LineIdx,
+		}.String()
+		if err := a.dbRepo.Update(r.row.Jahr, r.row.Monat, r.row.Dateiname, r.row); err != nil {
+			a.logger.Warn("Belegabgleich auto-link Update %s: %v", r.row.Dateiname, err)
+		}
+		claimed[key] = true
+		autoLinked++
+	}
+
+	// Build suggestions: filter out already-claimed candidates; skip if none remain.
+	for _, r := range suggestResults {
+		var remaining []scoredWithFile
+		for _, c := range r.candidates {
+			k := refKey(c.file, c.scored.Line.Page, c.scored.Line.LineIdx)
+			if !claimed[k] {
+				remaining = append(remaining, c)
+			}
+		}
+		if len(remaining) == 0 {
+			continue
+		}
+		suggestions = append(suggestions, belegSuggestion{
+			row:        r.row,
+			candidates: remaining,
+		})
 	}
 
 	// Refresh table so auto-linked rows show their new BuchungRef.
@@ -185,34 +292,58 @@ func (a *App) showBelegabgleich() {
 
 		vbox := container.NewVBox(header)
 
-		for i, s := range suggestions {
-			// Capture loop vars for closure.
-			idx := i
+		for _, s := range suggestions {
+			// Capture loop variable for closure safety.
 			sug := s
 
-			amountVal := core.InvoiceEURAmount(sug.row)
-			amountStr := strings.Replace(fmt.Sprintf("%.2f", amountVal), ".", ",", 1)
-			rowLabel := fmt.Sprintf("%s  %s €  →  %s  (%s)",
+			top := sug.candidates[0]
+
+			// Invoice EUR amount: prefer BetragNetto_EUR if set, else Bruttobetrag.
+			invEUR := core.InvoiceEURAmount(sug.row)
+			invAmtStr := strings.Replace(fmt.Sprintf("%.2f", invEUR), ".", ",", 1)
+
+			lineDate := top.scored.Line.Date
+			lineBetragStr := strings.Replace(fmt.Sprintf("%.2f", top.scored.Line.Betrag), ".", ",", 1)
+
+			// Truncate line text to ~60 runes.
+			lineRunes := []rune(top.scored.Line.Text)
+			if len(lineRunes) > 60 {
+				lineRunes = append(lineRunes[:57], []rune("…")...)
+			}
+
+			baseName := filepath.Base(top.file)
+
+			// Label format:
+			// <Auftraggeber>  <invEUR> €  →  S.<p> Z.<l> · <date> · <betrag> € · <text>  (<file>)
+			rowLabel := fmt.Sprintf("%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
 				sug.row.Auftraggeber,
-				amountStr,
-				sug.candidate.Line.Display(),
-				sug.fileName,
+				invAmtStr,
+				top.scored.Line.Page+1,
+				top.scored.Line.LineIdx,
+				lineDate,
+				lineBetragStr,
+				string(lineRunes),
+				baseName,
 			)
 			lbl := widget.NewLabel(rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			confirmBtn := widget.NewButton(a.bundle.T("reconcile.confirm"), nil)
-			_ = idx // idx used via sug to avoid stale pointer
 
 			confirmBtn.OnTapped = func() {
+				chosen := sug.candidates[0]
 				sug.row.BuchungRef = core.BuchungRef{
-					StatementFilename: sug.fileName,
-					Page:              sug.candidate.Line.Page,
-					LineIdx:           sug.candidate.Line.LineIdx,
+					StatementFilename: chosen.file,
+					Page:              chosen.scored.Line.Page,
+					LineIdx:           chosen.scored.Line.LineIdx,
 				}.String()
 				if err := a.dbRepo.Update(sug.row.Jahr, sug.row.Monat, sug.row.Dateiname, sug.row); err != nil {
 					a.logger.Warn("Belegabgleich confirm Update %s: %v", sug.row.Dateiname, err)
 				}
+				// Mark this line claimed so other confirms in the same dialog session
+				// cannot reuse it.
+				k := refKey(chosen.file, chosen.scored.Line.Page, chosen.scored.Line.LineIdx)
+				claimed[k] = true
 				confirmBtn.Disable()
 				lbl.SetText("✓ " + rowLabel)
 				a.loadInvoices()
