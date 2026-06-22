@@ -179,13 +179,14 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Placeholder for the editor — created after updateFilenamePreview is defined.
 	var ed *taxLinesEditor
 
-	// Currency select
-	currencyOptions := []string{"EUR", "USD"}
-	currencySelect := widget.NewSelect(currencyOptions, nil)
-	if meta.Waehrung != "" {
-		currencySelect.SetSelected(meta.Waehrung)
-	} else {
-		currencySelect.SetSelected(a.settings.CurrencyDefault)
+	// Currency select — full ISO list, EUR/USD/CAD/AUD first
+	currencySelect := widget.NewSelect(core.CurrencyOptions(), nil)
+	{
+		code := meta.Waehrung
+		if code == "" {
+			code = a.settings.CurrencyDefault
+		}
+		currencySelect.SetSelected(core.CurrencyOptionForCode(code))
 	}
 
 	// Account picker (SKR04-based)
@@ -271,6 +272,42 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	}
 	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
 
+	// Exchange rate + CC-fee% entries for live EUR conversion
+	kursEntry := widget.NewEntry()
+	kursEntry.SetPlaceHolder(a.bundle.T("field.rate"))
+	if meta.Wechselkurs > 0 {
+		kursEntry.SetText(strings.Replace(fmt.Sprintf("%g", meta.Wechselkurs), ".", ",", 1))
+	}
+	feePctEntry := widget.NewEntry()
+	feePctEntry.SetPlaceHolder(a.bundle.T("field.fee.percent"))
+	if meta.GebuehrProzent > 0 {
+		feePctEntry.SetText(strings.Replace(fmt.Sprintf("%g", meta.GebuehrProzent), ".", ",", 1))
+	}
+	gesamtEURLabel := widget.NewLabel("")
+
+	// recomputeEUR reads kurs/pct + gross/net from the tax-lines editor and
+	// updates netEUREntry, feeEntry, and gesamtEURLabel live. ed may be nil
+	// during initial construction — guarded below.
+	recomputeEUR := func() {
+		kurs := parseDecimal(kursEntry.Text)
+		pct := parseDecimal(feePctEntry.Text)
+		var brutto, netto float64
+		if ed != nil {
+			brutto = ed.Brutto()
+			netto = core.SumNetto(ed.Lines())
+		}
+		c := core.ConvertForeignPayment(brutto, netto, kurs, pct)
+		if kurs > 0 {
+			netEUREntry.SetText(fmt.Sprintf("%.2f", c.NettoEUR))
+			if pct > 0 {
+				feeEntry.SetText(fmt.Sprintf("%.2f", c.GebuehrEUR))
+			}
+			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", fmt.Sprintf("%.2f", c.GesamtEUR)))
+		}
+	}
+	kursEntry.OnChanged = func(string) { recomputeEUR() }
+	feePctEntry.OnChanged = func(string) { recomputeEUR() }
+
 	// Container for currency conversion fields (initially hidden)
 	currencyConversionContainer := container.NewVBox()
 
@@ -324,7 +361,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			SteuersatzProzent: mwstProzent,
 			SteuersatzBetrag:  mwstBetrag,
 			Bruttobetrag:      brutto,
-			Waehrung:          currencySelect.Selected,
+			Waehrung:          core.CurrencyCodeFromOption(currencySelect.Selected),
 		}
 		// Extract year and month from DD.MM.YYYY format
 		parts := strings.Split(dateEntry.Text, ".")
@@ -378,6 +415,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		if recomputeBooking != nil {
 			recomputeBooking()
 		}
+		recomputeEUR()
 	})
 
 	// Booking category: learned template for this company, else "standard".
@@ -542,19 +580,25 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		filenameEntry,
 	)
 
-	// Currency conversion visibility logic: show net (EUR) + fee fields
+	// Currency conversion visibility logic: show kurs/fee%/net-EUR/fee fields
 	// only when the chosen currency differs from the default currency.
+	// Compare by CODE (not the full "CODE — Name" option string).
 	updateCurrencyConversionVisibility := func() {
-		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+		if currencySelect.Selected != "" &&
+			core.CurrencyCodeFromOption(currencySelect.Selected) != a.settings.CurrencyDefault {
 			defaultCurrency := a.settings.CurrencyDefault
 			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
 			netEURLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.net_eur"), defaultCurrency)
 			currencyConversionContainer.Objects = []fyne.CanvasObject{
 				widget.NewForm(
+					widget.NewFormItem(a.bundle.T("field.rate"), kursEntry),
+					widget.NewFormItem(a.bundle.T("field.fee.percent"), feePctEntry),
 					widget.NewFormItem(netEURLabel, netEUREntry),
 					widget.NewFormItem(feeLabel, feeEntry),
+					widget.NewFormItem(a.bundle.T("field.total.eur.label"), gesamtEURLabel),
 				),
 			}
+			recomputeEUR()
 		} else {
 			currencyConversionContainer.Objects = []fyne.CanvasObject{}
 		}
@@ -629,13 +673,15 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			paymentDateEntry.Text,
 			ed.Lines(),
 			ed.Trinkgeld(),
-			currencySelect.Selected,
+			core.CurrencyCodeFromOption(currencySelect.Selected),
 			selectedAccount,
 			bankAccountSelect.Selected,
 			partialPaymentCheck.Checked,
 			commentEntry.Text,
 			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
 			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
+			parseDecimal(kursEntry.Text),
+			parseDecimal(feePctEntry.Text),
 			rememberCheck.Checked,
 			filenameEntry.Text,
 			ausgangsrechnungCheck.Checked,
@@ -729,6 +775,8 @@ func (a *App) saveInvoice(
 	comment string,
 	netEUR float64,
 	fee float64,
+	wechselkurs float64,
+	gebuehrProzent float64,
 	rememberMapping bool,
 	filenameInput string,
 	ausgangsrechnung bool,
@@ -757,6 +805,8 @@ func (a *App) saveInvoice(
 		Kommentar:         comment,
 		BetragNetto_EUR:   netEUR,
 		Gebuehr:           fee,
+		Wechselkurs:       wechselkurs,
+		GebuehrProzent:    gebuehrProzent,
 		HatAnhaenge:       len(attachments) > 0,
 	}
 
