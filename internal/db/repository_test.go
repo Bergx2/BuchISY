@@ -215,6 +215,25 @@ func TestDBWechselkursRoundTrip(t *testing.T) {
 	}
 }
 
+func TestBuchungRefRoundTrip(t *testing.T) {
+	repo := newTestRepo(t)
+	if _, err := repo.Insert(core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06", BuchungRef: "Auszug.pdf|0|3"}); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := repo.List("2026", "06")
+	if len(rows) != 1 || rows[0].BuchungRef != "Auszug.pdf|0|3" {
+		t.Fatalf("BuchungRef not persisted via DB: %+v", rows)
+	}
+	rows[0].BuchungRef = "Auszug2.pdf|1|5"
+	if err := repo.Update("2026", "06", "a.pdf", rows[0]); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ = repo.List("2026", "06")
+	if rows[0].BuchungRef != "Auszug2.pdf|1|5" {
+		t.Errorf("Update did not persist BuchungRef: %q", rows[0].BuchungRef)
+	}
+}
+
 func TestMarkExportedAndUpdateResets(t *testing.T) {
 	repo := newTestRepo(t)
 	if _, err := repo.Insert(core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06"}); err != nil {

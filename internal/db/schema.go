@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 	exportiert INTEGER DEFAULT 0,
 	wechselkurs REAL DEFAULT 0,
 	gebuehr_prozent REAL DEFAULT 0,
+	buchung_ref TEXT DEFAULT '',
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
