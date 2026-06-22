@@ -21,7 +21,7 @@ type scoredWithFile struct {
 }
 
 // belegSuggestion is a single MatchSuggest entry collected during reconciliation.
-// candidates is ranked; candidates[0] is the default selection.
+// candidates is ranked best-first; candidates[0] is the default selection.
 type belegSuggestion struct {
 	row        core.CSVRow
 	candidates []scoredWithFile
@@ -101,6 +101,7 @@ func (a *App) showBelegabgleich() {
 	var allResults []matchResult
 
 	for _, row := range rows {
+		// Skip already-linked and non-bank/creditcard accounts.
 		if row.BuchungRef != "" {
 			continue
 		}
@@ -125,6 +126,7 @@ func (a *App) showBelegabgleich() {
 		bestKind := core.MatchNone
 		var bestCandidates []scoredWithFile
 		autoCount := 0
+		var allSuggestCandidates []scoredWithFile
 
 		for _, name := range fileOrder {
 			linesForFile := fileLines[name]
@@ -159,6 +161,11 @@ func (a *App) showBelegabgleich() {
 					bestCandidates = swf
 				}
 			}
+
+			// Collect ALL candidates from every file for potential suggestion.
+			for _, c := range cands {
+				allSuggestCandidates = append(allSuggestCandidates, scoredWithFile{scored: c, file: name})
+			}
 		}
 
 		// Two+ statement files each produced an unambiguous match for the same
@@ -176,6 +183,7 @@ func (a *App) showBelegabgleich() {
 			kind:       bestKind,
 			candidates: bestCandidates,
 		})
+		_ = allSuggestCandidates // collected above but candidates already in bestCandidates
 	}
 
 	// ── Step 3: Greedy auto-link by score; claim each statement line at most once ──
@@ -296,6 +304,10 @@ func (a *App) showBelegabgleich() {
 			// Capture loop variable for closure safety.
 			sug := s
 
+			// selIdx tracks which candidate is currently selected for THIS suggestion.
+			// Declared inside the per-iteration scope so each row has its own index.
+			selIdx := 0
+
 			top := sug.candidates[0]
 
 			// Invoice EUR amount: prefer BetragNetto_EUR if set, else Bruttobetrag.
@@ -331,7 +343,7 @@ func (a *App) showBelegabgleich() {
 			confirmBtn := widget.NewButton(a.bundle.T("reconcile.confirm"), nil)
 
 			confirmBtn.OnTapped = func() {
-				chosen := sug.candidates[0]
+				chosen := sug.candidates[selIdx]
 				sug.row.BuchungRef = core.BuchungRef{
 					StatementFilename: chosen.file,
 					Page:              chosen.scored.Line.Page,
@@ -349,8 +361,44 @@ func (a *App) showBelegabgleich() {
 				a.loadInvoices()
 			}
 
-			row := container.NewBorder(nil, nil, nil, confirmBtn, lbl)
-			vbox.Add(row)
+			// Build the row container. If there are 2+ candidates, add a Select widget
+			// so the user can pick which line to confirm. A single candidate keeps the
+			// current minimal UI (label + button only).
+			var rowWidget fyne.CanvasObject
+			if len(sug.candidates) >= 2 {
+				// Build option labels: "S.<p> Z.<l> · <date> · <betrag> € · <short text>"
+				options := make([]string, len(sug.candidates))
+				for i, c := range sug.candidates {
+					runes := []rune(c.scored.Line.Text)
+					if len(runes) > 60 {
+						runes = append(runes[:57], []rune("…")...)
+					}
+					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
+					options[i] = fmt.Sprintf("S.%d Z.%d · %s · %s € · %s",
+						c.scored.Line.Page+1,
+						c.scored.Line.LineIdx,
+						c.scored.Line.Date,
+						bStr,
+						string(runes),
+					)
+				}
+				sel := widget.NewSelect(options, func(selected string) {
+					for i, opt := range options {
+						if opt == selected {
+							selIdx = i
+							break
+						}
+					}
+				})
+				sel.SetSelected(options[0])
+
+				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn,
+					container.NewVBox(lbl, sel))
+			} else {
+				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn, lbl)
+			}
+
+			vbox.Add(rowWidget)
 		}
 
 		if cashBox != nil {

@@ -603,6 +603,15 @@ func (r *rightClickTable) TappedSecondary(e *fyne.PointEvent) {
 					}))
 			}
 		}
+
+		// "Verknüpfung entfernen" — only shown when the invoice is linked to
+		// a statement line. Clears BuchungRef after confirmation.
+		if row.BuchungRef != "" {
+			items = append(items, fyne.NewMenuItemSeparator(),
+				fyne.NewMenuItem(it.bundle.T("table.unlink"), func() {
+					it.app.unlinkInvoice(row)
+				}))
+		}
 	}
 
 	menu := fyne.NewMenu("", items...)

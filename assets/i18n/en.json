@@ -47,6 +47,8 @@
   "table.copyRow": "Copy row",
   "table.delete.confirm.title": "Delete Invoice?",
   "table.delete.confirm.message": "Do you really want to delete this invoice?\n\nFile: %s\nCompany: %s\nAmount: %.2f %s\n\nThis will delete both the PDF file and the CSV entry.",
+  "table.unlink": "Remove link",
+  "table.unlinkConfirm": "Remove the link to this statement line?",
 
   "modal.title": "Review Invoice Data",
   "modal.originalFile": "Original File",

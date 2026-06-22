@@ -47,6 +47,8 @@
   "table.copyRow": "Zeile kopieren",
   "table.delete.confirm.title": "Rechnung löschen?",
   "table.delete.confirm.message": "Möchten Sie diese Rechnung wirklich löschen?\n\nDatei: %s\nFirma: %s\nBetrag: %.2f %s\n\nDies löscht sowohl die PDF-Datei als auch den CSV-Eintrag.",
+  "table.unlink": "Verknüpfung entfernen",
+  "table.unlinkConfirm": "Verknüpfung zu dieser Auszugsposition entfernen?",
 
   "modal.title": "Rechnungsdaten prüfen",
   "modal.originalFile": "Originaldatei",

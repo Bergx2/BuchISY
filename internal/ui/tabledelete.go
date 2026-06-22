@@ -9,6 +9,25 @@ import (
 	"github.com/bergx2/buchisy/internal/core"
 )
 
+// unlinkInvoice clears the BuchungRef of an invoice after user confirmation.
+func (a *App) unlinkInvoice(row core.CSVRow) {
+	dialog.ShowConfirm(
+		a.bundle.T("table.unlink"),
+		a.bundle.T("table.unlinkConfirm"),
+		func(confirm bool) {
+			if !confirm {
+				return
+			}
+			row.BuchungRef = ""
+			if err := a.dbRepo.Update(row.Jahr, row.Monat, row.Dateiname, row); err != nil {
+				a.logger.Error("unlinkInvoice Update %s: %v", row.Dateiname, err)
+			}
+			a.loadInvoices()
+		},
+		a.window,
+	)
+}
+
 // showDeleteConfirmation shows a confirmation dialog before deleting an invoice.
 func (a *App) showDeleteConfirmation(row core.CSVRow) {
 	message := a.bundle.T(
