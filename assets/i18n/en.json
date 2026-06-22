@@ -260,6 +260,10 @@
   "reconcile.summary": "%d auto-linked, %d suggestions.",
   "reconcile.confirm": "Confirm",
   "reconcile.none": "No open suggestions.",
+  "reconcile.cashHeading": "Cash",
+  "reconcile.cashBalance": "Cash balance",
+  "reconcile.cashOk": "✓ covered",
+  "reconcile.cashUncovered": "⚠ %d receipt(s) uncovered",
 
   "status.cashCovered": "Cash covered",
   "status.cashUncovered": "Cash uncovered"

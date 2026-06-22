@@ -260,6 +260,10 @@
   "reconcile.summary": "%d automatisch verknüpft, %d Vorschläge.",
   "reconcile.confirm": "Bestätigen",
   "reconcile.none": "Keine offenen Vorschläge.",
+  "reconcile.cashHeading": "Barkasse",
+  "reconcile.cashBalance": "Kassenbestand",
+  "reconcile.cashOk": "✓ gedeckt",
+  "reconcile.cashUncovered": "⚠ %d Beleg(e) nicht gedeckt",
 
   "status.cashCovered": "Bar gedeckt",
   "status.cashUncovered": "Bar nicht gedeckt"

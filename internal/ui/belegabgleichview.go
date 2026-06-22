@@ -127,11 +127,44 @@ func (a *App) showBelegabgleich() {
 	// Refresh table so auto-linked rows show their new BuchungRef.
 	a.loadInvoices()
 
+	// Build Barkasse summary block (informational only).
+	cashAccounts := a.cashAccounts()
+	var cashBox *fyne.Container
+	if len(cashAccounts) > 0 {
+		cashBox = container.NewVBox()
+		for _, acct := range cashAccounts {
+			books, _ := core.LoadCashBooks(filepath.Join(a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth), "kassenbuch.json"))
+			var book core.CashBook
+			for _, b := range books {
+				if b.Konto == acct {
+					book = b
+					break
+				}
+			}
+			unc, closing := core.CashCoverage(book, a.cashInvoicesForMonth(acct, a.currentYear, a.currentMonth))
+			closingStr := strings.Replace(fmt.Sprintf("%.2f", closing), ".", ",", 1)
+			line := fmt.Sprintf("%s: %s %s €", acct, a.bundle.T("reconcile.cashBalance"), closingStr)
+			if len(unc) > 0 {
+				line += "  " + fmt.Sprintf(a.bundle.T("reconcile.cashUncovered"), len(unc))
+			} else {
+				line += "  " + a.bundle.T("reconcile.cashOk")
+			}
+			cashBox.Add(widget.NewLabel(line))
+		}
+	}
+
 	// Build dialog content.
 	var content fyne.CanvasObject
 
 	if autoLinked == 0 && len(suggestions) == 0 {
-		content = widget.NewLabel(a.bundle.T("reconcile.none"))
+		vbox := container.NewVBox(widget.NewLabel(a.bundle.T("reconcile.none")))
+		if cashBox != nil {
+			heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
+			heading.TextStyle = fyne.TextStyle{Bold: true}
+			vbox.Add(heading)
+			vbox.Add(cashBox)
+		}
+		content = container.NewVScroll(vbox)
 	} else {
 		headerText := a.bundle.T("reconcile.summary", autoLinked, len(suggestions))
 		header := widget.NewLabel(headerText)
@@ -174,6 +207,13 @@ func (a *App) showBelegabgleich() {
 
 			row := container.NewBorder(nil, nil, nil, confirmBtn, lbl)
 			vbox.Add(row)
+		}
+
+		if cashBox != nil {
+			heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
+			heading.TextStyle = fyne.TextStyle{Bold: true}
+			vbox.Add(heading)
+			vbox.Add(cashBox)
 		}
 
 		content = container.NewVScroll(vbox)
