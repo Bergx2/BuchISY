@@ -126,7 +126,6 @@ func (a *App) showBelegabgleich() {
 		bestKind := core.MatchNone
 		var bestCandidates []scoredWithFile
 		autoCount := 0
-		var allSuggestCandidates []scoredWithFile
 
 		for _, name := range fileOrder {
 			linesForFile := fileLines[name]
@@ -161,11 +160,6 @@ func (a *App) showBelegabgleich() {
 					bestCandidates = swf
 				}
 			}
-
-			// Collect ALL candidates from every file for potential suggestion.
-			for _, c := range cands {
-				allSuggestCandidates = append(allSuggestCandidates, scoredWithFile{scored: c, file: name})
-			}
 		}
 
 		// Two+ statement files each produced an unambiguous match for the same
@@ -183,7 +177,6 @@ func (a *App) showBelegabgleich() {
 			kind:       bestKind,
 			candidates: bestCandidates,
 		})
-		_ = allSuggestCandidates // collected above but candidates already in bestCandidates
 	}
 
 	// ── Step 3: Greedy auto-link by score; claim each statement line at most once ──
@@ -374,7 +367,11 @@ func (a *App) showBelegabgleich() {
 						runes = append(runes[:57], []rune("…")...)
 					}
 					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
-					options[i] = fmt.Sprintf("S.%d Z.%d · %s · %s € · %s",
+					// Prefix with a 1-based index so option labels are unique even
+					// when two candidate lines render identically — the OnChanged
+					// string lookup then always resolves to the right candidate.
+					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
+						i+1,
 						c.scored.Line.Page+1,
 						c.scored.Line.LineIdx,
 						c.scored.Line.Date,
