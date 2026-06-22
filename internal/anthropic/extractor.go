@@ -115,9 +115,10 @@ func isOwnVATID(extracted string, ownVATIDs []string) bool {
 
 // Extractor extracts invoice metadata using Claude API.
 type Extractor struct {
-	client *Client
-	logger *logging.Logger
-	debug  bool
+	client       *Client
+	logger       *logging.Logger
+	debug        bool
+	accountHints []core.SKRAccount
 }
 
 // NewExtractor creates a new Anthropic extractor.
@@ -132,6 +133,27 @@ func NewExtractor(logger *logging.Logger, debug bool) *Extractor {
 // SetDebug enables or disables debug logging.
 func (e *Extractor) SetDebug(debug bool) {
 	e.debug = debug
+}
+
+// SetAccountHints provides the profile's chart so the extractor can propose
+// fitting Gegenkonten for unknown suppliers.
+func (e *Extractor) SetAccountHints(accounts []core.SKRAccount) {
+	e.accountHints = accounts
+}
+
+// accountHintSection renders the chart + the suggestion instruction appended to
+// the extraction prompt. Empty when no hints are set.
+func (e *Extractor) accountHintSection() string {
+	if len(e.accountHints) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n=== VERFÜGBARE GEGENKONTEN (SKR04) ===\n")
+	b.WriteString("Schlage zusätzlich 1–3 am besten passende Gegenkonten für diese Rechnung vor. Verwende AUSSCHLIESSLICH Kontonummern aus der folgenden Liste und gib sie als Feld \"gegenkonto_vorschlaege\" (JSON-Array von Zahlen, beste zuerst) zurück. Wenn keines passt, ein leeres Array.\n")
+	for _, a := range e.accountHints {
+		b.WriteString(fmt.Sprintf("%d %s\n", a.Number, a.Name))
+	}
+	return b.String()
 }
 
 // statementSystemPrompt instructs Claude to extract bank-statement
@@ -250,7 +272,7 @@ func parseStatementResponse(response string) (core.StatementMetadata, error) {
 func (e *Extractor) ExtractFromImage(ctx context.Context, apiKey, model, imageBase64, mediaType string, ownVATIDs ...string) (core.Meta, float64, error) {
 	// Simplified prompt for vision - Claude can see the invoice directly
 	visionPrompt := "Bitte extrahiere die Rechnungsinformationen aus diesem Dokument."
-	prompt := systemPromptFor(ownVATIDs)
+	prompt := systemPromptFor(ownVATIDs) + e.accountHintSection()
 
 	// Debug logging: log request
 	if e.debug && e.logger != nil {
@@ -300,7 +322,7 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string, own
 	// Limit text length to avoid token limits
 	// Keep first 10000 chars, prioritizing invoice-relevant content
 	text = preprocessText(text, 10000)
-	prompt := systemPromptFor(ownVATIDs)
+	prompt := systemPromptFor(ownVATIDs) + e.accountHintSection()
 
 	// Debug logging: log request
 	if e.debug && e.logger != nil {
@@ -351,7 +373,7 @@ func (e *Extractor) Extract(ctx context.Context, apiKey, model, text string, own
 // together. imagesBase64 are PNG-encoded pages, mediaType e.g. "image/png".
 func (e *Extractor) ExtractMultimodal(ctx context.Context, apiKey, model, text string, imagesBase64 []string, mediaType string, ownVATIDs ...string) (core.Meta, float64, error) {
 	text = preprocessText(text, 10000)
-	prompt := systemPromptFor(ownVATIDs)
+	prompt := systemPromptFor(ownVATIDs) + e.accountHintSection()
 	userMessage := "Dokumenttext (kann unvollständig sein — Tabellen/Beträge stehen oft nur in den beigefügten Seitenbildern, dann diese auswerten):\n\n" + text
 
 	if e.debug && e.logger != nil {
@@ -398,12 +420,13 @@ func parseExtractionJSON(response string, ownVATIDs []string) (core.Meta, error)
 			Netto float64 `json:"netto"`
 			MwSt  float64 `json:"mwst"`
 		} `json:"steuerzeilen"`
-		Trinkgeld      *float64 `json:"trinkgeld"`
-		Bruttobetrag   *float64 `json:"bruttobetrag"`
-		Waehrung       *string  `json:"waehrung"`
-		Rechnungsdatum *string  `json:"rechnungsdatum"`
-		Jahr           *string  `json:"jahr"`
-		Monat          *string  `json:"monat"`
+		Trinkgeld               *float64 `json:"trinkgeld"`
+		Bruttobetrag            *float64 `json:"bruttobetrag"`
+		Waehrung                *string  `json:"waehrung"`
+		Rechnungsdatum          *string  `json:"rechnungsdatum"`
+		Jahr                    *string  `json:"jahr"`
+		Monat                   *string  `json:"monat"`
+		GegenkontoVorschlaege   []int    `json:"gegenkonto_vorschlaege"`
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
@@ -458,6 +481,7 @@ func parseExtractionJSON(response string, ownVATIDs []string) (core.Meta, error)
 	if result.Monat != nil {
 		meta.Monat = *result.Monat
 	}
+	meta.KontoVorschlaege = result.GegenkontoVorschlaege
 
 	return meta, nil
 }

@@ -23,6 +23,7 @@ type Meta struct {
 	Jahr              string     // Year YYYY
 	Monat             string     // Month MM
 	Gegenkonto        int        // Account code
+	KontoVorschlaege  []int      // transient: AI-suggested Gegenkonten for unknown suppliers (not persisted)
 	Bankkonto         string     // Bank account
 	Bezahldatum       string     // Payment date DD.MM.YYYY
 	Teilzahlung       bool       // Partial payment flag

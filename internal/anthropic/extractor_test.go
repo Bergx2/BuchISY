@@ -2,7 +2,10 @@ package anthropic
 
 import (
 	"math"
+	"strings"
 	"testing"
+
+	"github.com/bergx2/buchisy/internal/core"
 )
 
 func almostA(a, b float64) bool {
@@ -74,5 +77,34 @@ func TestParseExtractionResponseKeepsForeignVAT(t *testing.T) {
 	}
 	if meta.VATID != "IE6388047V" {
 		t.Errorf("expected foreign VAT-ID to be kept, got %q", meta.VATID)
+	}
+}
+
+func TestParseExtractionAccountSuggestions(t *testing.T) {
+	resp := `{"auftraggeber":"AWS","verwendungszweck":"Hosting","bruttobetrag":119,"gegenkonto_vorschlaege":[6837,6800,27]}`
+	meta, err := parseExtractionJSON(resp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(meta.KontoVorschlaege) != 3 || meta.KontoVorschlaege[0] != 6837 {
+		t.Fatalf("KontoVorschlaege = %v", meta.KontoVorschlaege)
+	}
+	// absent field → empty (no crash)
+	m2, _ := parseExtractionJSON(`{"auftraggeber":"X"}`, nil)
+	if len(m2.KontoVorschlaege) != 0 {
+		t.Errorf("expected no suggestions, got %v", m2.KontoVorschlaege)
+	}
+}
+
+func TestAccountHintSectionListsAccounts(t *testing.T) {
+	e := NewExtractor(nil, false)
+	e.SetAccountHints([]core.SKRAccount{{Number: 6837, Name: "Fremdleistungen"}, {Number: 6815, Name: "Bürobedarf"}})
+	s := e.accountHintSection()
+	if !strings.Contains(s, "6837") || !strings.Contains(s, "Fremdleistungen") || !strings.Contains(s, "gegenkonto_vorschlaege") {
+		t.Errorf("account hint section missing content:\n%s", s)
+	}
+	// no hints → empty section (no token cost)
+	if NewExtractor(nil, false).accountHintSection() != "" {
+		t.Error("no hints should yield empty section")
 	}
 }
