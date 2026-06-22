@@ -719,6 +719,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
+			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 		)
 		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)
 		pos.Y += overflowBtn.Size().Height
@@ -818,6 +819,19 @@ func (a *App) pasteFromClipboard() {
 			"Kopiere eine Datei (Strg+C im Explorer) oder ein Bild (z. B. aus "+
 			"dem Snipping Tool, Browser oder Bildbetrachter) und versuche es erneut.",
 		a.window)
+}
+
+// showBelegListePDF builds an invoice list PDF for the current month and
+// opens a save dialog so the user can store it wherever they like.
+func (a *App) showBelegListePDF() {
+	period := fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+	rows := a.collectInvoiceRows(a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth))
+	data, err := core.BuildInvoiceListPDF(rows, "Belegliste "+period)
+	if err != nil {
+		a.showError(a.bundle.T("error.processing.title"), err.Error())
+		return
+	}
+	a.savePDF("Belegliste_"+period+".pdf", data)
 }
 
 // contextMenuWrap wraps any CanvasObject and forwards right-clicks to

@@ -226,6 +226,8 @@
   "settings.rules.bewNicht": "Hospitality non-deductible",
   "settings.rules.bewProzent": "Hospitality deductible %",
 
+  "report.pdf": "PDF",
+
   "controlling.title": "Controlling",
   "controlling.heading": "Booked sums per account",
   "controlling.total": "Total: %s €",

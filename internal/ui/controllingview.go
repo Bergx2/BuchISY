@@ -63,8 +63,19 @@ func (a *App) showControllingDialog() {
 	toggle.SetSelected(a.bundle.T("export.month"))
 	reload()
 
+	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
+		title := a.bundle.T("controlling.title")
+		data, err := core.BuildControllingPDF(sums, total, title)
+		if err != nil {
+			a.showError(a.bundle.T("error.processing.title"), err.Error())
+			return
+		}
+		a.savePDF("Controlling.pdf", data)
+	})
+
 	header := widget.NewLabelWithStyle(a.bundle.T("controlling.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	content := container.NewBorder(container.NewVBox(header, toggle), totalLabel, nil, nil, table)
+	topBar := container.NewBorder(nil, nil, nil, pdfBtn, toggle)
+	content := container.NewBorder(container.NewVBox(header, topBar), totalLabel, nil, nil, table)
 	d := dialog.NewCustom(a.bundle.T("controlling.title"), a.bundle.T("common.close"), content, a.window)
 	d.Resize(fyne.NewSize(520, 480))
 	d.Show()
