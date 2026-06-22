@@ -1,4 +1,4 @@
-// Package ui provides the Fyne-based user interface for BuchISY.
+﻿// Package ui provides the Fyne-based user interface for BuchISY.
 package ui
 
 import (
@@ -720,6 +720,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
+			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),
 		)
 		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)
 		pos.Y += overflowBtn.Size().Height

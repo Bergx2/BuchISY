@@ -1,4 +1,4 @@
-{
+﻿{
   "app.title": "BuchISY",
   "app.about": "BuchISY — © Bergx2 GmbH",
 
@@ -241,5 +241,8 @@
   "ustva.title": "VAT return",
   "ustva.heading": "Deductible input VAT",
   "ustva.vorsteuer": "Input VAT",
-  "ustva.total": "Total input VAT: %s €"
+  "ustva.total": "Total input VAT: %s €",
+
+  "backup.title": "Backup",
+  "backup.done": "Backup created (%d files)."
 }

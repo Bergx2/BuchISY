@@ -1,4 +1,4 @@
-{
+﻿{
   "app.title": "BuchISY",
   "app.about": "BuchISY — © Bergx2 GmbH",
 
@@ -241,5 +241,8 @@
   "ustva.title": "USt-Voranmeldung",
   "ustva.heading": "Abziehbare Vorsteuer",
   "ustva.vorsteuer": "Vorsteuer",
-  "ustva.total": "Summe Vorsteuer: %s €"
+  "ustva.total": "Summe Vorsteuer: %s €",
+
+  "backup.title": "Backup",
+  "backup.done": "Backup erstellt (%d Dateien)."
 }
