@@ -571,6 +571,58 @@ func cleanJSONResponse(response string) string {
 	return response
 }
 
+// RankStatementLine asks Claude which of the provided statement-line texts
+// best matches the given supplier name. It returns the 0-based index of the
+// best match, or -1 if none matches. Only the integer (or -1) is expected in
+// Claude's reply. Errors are returned as (-1, err); the caller should treat
+// them as non-fatal and fall back to heuristic ordering.
+func (e *Extractor) RankStatementLine(ctx context.Context, apiKey, model, supplier string, lineTexts []string) (int, error) {
+	if len(lineTexts) == 0 {
+		return -1, fmt.Errorf("no line texts provided")
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Welche dieser Kontoauszug-Zeilen gehört am ehesten zum Lieferanten %q? Antworte NUR mit der Zahl (0-basierter Index) oder -1, wenn keine passt. Keine Erklärung.\n\n", supplier))
+	for i, t := range lineTexts {
+		sb.WriteString(fmt.Sprintf("%d: %s\n", i, t))
+	}
+
+	reply, err := e.client.Send(ctx, apiKey, model, "Du hilfst beim Belegabgleich.", sb.String())
+	if err != nil {
+		return -1, fmt.Errorf("RankStatementLine API call failed: %w", err)
+	}
+
+	// Parse integer from reply — trim whitespace, handle leading/trailing noise.
+	reply = strings.TrimSpace(reply)
+	// Extract just the first run of digits (possibly with a leading minus sign).
+	numStr := ""
+	for _, r := range reply {
+		if (r >= '0' && r <= '9') || (r == '-' && numStr == "") {
+			numStr += string(r)
+		} else if numStr != "" {
+			break
+		}
+	}
+	if numStr == "" || numStr == "-" {
+		return -1, fmt.Errorf("RankStatementLine: could not parse integer from reply %q", reply)
+	}
+
+	var idx int
+	if _, err := fmt.Sscanf(numStr, "%d", &idx); err != nil {
+		return -1, fmt.Errorf("RankStatementLine: parse %q: %w", numStr, err)
+	}
+
+	// Clamp to valid range.
+	if idx < -1 {
+		idx = -1
+	}
+	if idx >= len(lineTexts) {
+		idx = len(lineTexts) - 1
+	}
+
+	return idx, nil
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

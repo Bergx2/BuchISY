@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/zalando/go-keyring"
 
 	"github.com/bergx2/buchisy/internal/core"
 )
@@ -252,6 +254,48 @@ func (a *App) showBelegabgleich() {
 			row:        r.row,
 			candidates: remaining,
 		})
+	}
+
+	// ── Step 4: Claude ranking for close-call ambiguous suggestions ────────
+	// For each suggestion with ≥2 candidates whose top-two scores are within
+	// 0.3 of each other, ask Claude which statement line best matches the
+	// supplier and reorder candidates so Claude's pick is first.
+	// Only runs when processing mode is "claude" and an API key is available.
+	// Errors are non-fatal: we just log and keep the heuristic order.
+	if a.settings.ProcessingMode == "claude" {
+		apiKey, keyErr := keyring.Get("BuchISY", a.keyringAccount())
+		if keyErr == nil && apiKey != "" {
+			for i := range suggestions {
+				sug := &suggestions[i]
+				if len(sug.candidates) < 2 {
+					continue
+				}
+				if sug.candidates[0].scored.Score-sug.candidates[1].scored.Score >= 0.3 {
+					continue
+				}
+				lineTexts := make([]string, len(sug.candidates))
+				for j, c := range sug.candidates {
+					lineTexts[j] = c.scored.Line.Text
+				}
+				idx, rankErr := a.anthropicExtractor.RankStatementLine(
+					context.Background(),
+					apiKey,
+					a.settings.AnthropicModel,
+					sug.row.Auftraggeber,
+					lineTexts,
+				)
+				if rankErr != nil {
+					a.logger.Warn("Belegabgleich RankStatementLine %s: %v", sug.row.Auftraggeber, rankErr)
+					continue
+				}
+				if idx > 0 && idx < len(sug.candidates) {
+					// Move Claude's pick to the front.
+					chosen := sug.candidates[idx]
+					copy(sug.candidates[1:idx+1], sug.candidates[0:idx])
+					sug.candidates[0] = chosen
+				}
+			}
+		}
 	}
 
 	// Refresh table so auto-linked rows show their new BuchungRef.
