@@ -774,6 +774,31 @@ func (a *App) showSettingsView() {
 	if rule, ok := a.bookingRules.Rule("bewirtung"); ok {
 		bewAbz, bewNicht, bewProzent = rule.KontoAbziehbar, rule.KontoNichtAbziehbar, rule.AbziehbarProzent
 	}
+	vstRC, ustRC := 1407, 3837
+	if r, ok := a.bookingRules.Rule("reverse_charge"); ok {
+		if r.KontoVStRC != 0 {
+			vstRC = r.KontoVStRC
+		}
+		if r.KontoUStRC != 0 {
+			ustRC = r.KontoUStRC
+		}
+	}
+	geschAbz, geschNicht := 6610, 6620
+	if r, ok := a.bookingRules.Rule("geschenke"); ok {
+		if r.KontoAbziehbar != 0 {
+			geschAbz = r.KontoAbziehbar
+		}
+		if r.KontoNichtAbziehbar != 0 {
+			geschNicht = r.KontoNichtAbziehbar
+		}
+	}
+	reiseKonto, kfzKonto := 6650, 6520
+	if r, ok := a.bookingRules.Rule("reisekosten"); ok && r.DefaultKonto != 0 {
+		reiseKonto = r.DefaultKonto
+	}
+	if r, ok := a.bookingRules.Rule("kfz"); ok && r.DefaultKonto != 0 {
+		kfzKonto = r.DefaultKonto
+	}
 
 	vst19Lbl := widget.NewLabel(paymentSKR04Label(a, vst19))
 	vst19Btn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
@@ -794,6 +819,31 @@ func (a *App) showSettingsView() {
 	bewProzentEntry := widget.NewEntry()
 	bewProzentEntry.SetText(strings.Replace(fmt.Sprintf("%g", bewProzent), ".", ",", 1))
 
+	vstRCLbl := widget.NewLabel(paymentSKR04Label(a, vstRC))
+	vstRCBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(vstRC, func(n int) { vstRC = n; vstRCLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	ustRCLbl := widget.NewLabel(paymentSKR04Label(a, ustRC))
+	ustRCBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(ustRC, func(n int) { ustRC = n; ustRCLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	geschAbzLbl := widget.NewLabel(paymentSKR04Label(a, geschAbz))
+	geschAbzBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(geschAbz, func(n int) { geschAbz = n; geschAbzLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	geschNichtLbl := widget.NewLabel(paymentSKR04Label(a, geschNicht))
+	geschNichtBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(geschNicht, func(n int) { geschNicht = n; geschNichtLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	reiseLbl := widget.NewLabel(paymentSKR04Label(a, reiseKonto))
+	reiseBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(reiseKonto, func(n int) { reiseKonto = n; reiseLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+	kfzLbl := widget.NewLabel(paymentSKR04Label(a, kfzKonto))
+	kfzBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
+		a.showAccountSearch(kfzKonto, func(n int) { kfzKonto = n; kfzLbl.SetText(paymentSKR04Label(a, n)) })
+	})
+
 	rulesSection := widget.NewCard("", a.bundle.T("settings.rules.section"), container.NewVBox(
 		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.vst19")), vst19Btn, vst19Lbl),
 		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.vst7")), vst7Btn, vst7Lbl),
@@ -801,6 +851,15 @@ func (a *App) showSettingsView() {
 		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.bewAbz")), bewAbzBtn, bewAbzLbl),
 		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.bewNicht")), bewNichtBtn, bewNichtLbl),
 		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.bewProzent")), nil, bewProzentEntry),
+		widget.NewSeparator(),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.vstrc")), vstRCBtn, vstRCLbl),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.ustrc")), ustRCBtn, ustRCLbl),
+		widget.NewSeparator(),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.geschabz")), geschAbzBtn, geschAbzLbl),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.geschnicht")), geschNichtBtn, geschNichtLbl),
+		widget.NewSeparator(),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.reise")), reiseBtn, reiseLbl),
+		container.NewBorder(nil, nil, widget.NewLabel(a.bundle.T("settings.rules.kfz")), kfzBtn, kfzLbl),
 	))
 
 	// Tab 3: Accounts settings
@@ -995,12 +1054,23 @@ func (a *App) showSettingsView() {
 		rules.VorsteuerKonten["19"] = vst19
 		rules.VorsteuerKonten["7"] = vst7
 		for i := range rules.Regeln {
-			if rules.Regeln[i].Kategorie == "bewirtung" {
+			switch rules.Regeln[i].Kategorie {
+			case "bewirtung":
 				rules.Regeln[i].KontoAbziehbar = bewAbz
 				rules.Regeln[i].KontoNichtAbziehbar = bewNicht
 				if p := parseDecimal(bewProzentEntry.Text); p > 0 {
 					rules.Regeln[i].AbziehbarProzent = p
 				}
+			case "reverse_charge":
+				rules.Regeln[i].KontoVStRC = vstRC
+				rules.Regeln[i].KontoUStRC = ustRC
+			case "geschenke":
+				rules.Regeln[i].KontoAbziehbar = geschAbz
+				rules.Regeln[i].KontoNichtAbziehbar = geschNicht
+			case "reisekosten":
+				rules.Regeln[i].DefaultKonto = reiseKonto
+			case "kfz":
+				rules.Regeln[i].DefaultKonto = kfzKonto
 			}
 		}
 		if err := a.bookingRulesStore.Save(rules); err != nil {

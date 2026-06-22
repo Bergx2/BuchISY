@@ -231,6 +231,12 @@
   "settings.rules.bewAbz": "Hospitality deductible",
   "settings.rules.bewNicht": "Hospitality non-deductible",
   "settings.rules.bewProzent": "Hospitality deductible %",
+  "settings.rules.vstrc": "§13b input VAT",
+  "settings.rules.ustrc": "§13b output VAT",
+  "settings.rules.geschabz": "Gifts deductible",
+  "settings.rules.geschnicht": "Gifts non-deductible",
+  "settings.rules.reise": "Travel expenses account",
+  "settings.rules.kfz": "Vehicle costs account",
 
   "report.pdf": "PDF",
 

@@ -231,6 +231,12 @@
   "settings.rules.bewAbz": "Bewirtung abziehbar",
   "settings.rules.bewNicht": "Bewirtung nicht abziehbar",
   "settings.rules.bewProzent": "Bewirtung abziehbar %",
+  "settings.rules.vstrc": "§13b Vorsteuer",
+  "settings.rules.ustrc": "§13b Umsatzsteuer",
+  "settings.rules.geschabz": "Geschenke abziehbar",
+  "settings.rules.geschnicht": "Geschenke nicht abziehbar",
+  "settings.rules.reise": "Reisekosten-Konto",
+  "settings.rules.kfz": "Kfz-Konto",
 
   "report.pdf": "PDF",
 
