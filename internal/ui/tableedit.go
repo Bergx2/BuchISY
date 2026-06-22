@@ -114,11 +114,13 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	// VAT-lines editor — declared here so updateFilenamePreview can reference it.
 	var ed *taxLinesEditor
 
-	currencySelect := widget.NewSelect([]string{"EUR", "USD"}, nil)
-	if meta.Waehrung != "" {
-		currencySelect.SetSelected(meta.Waehrung)
-	} else {
-		currencySelect.SetSelected(a.settings.CurrencyDefault)
+	currencySelect := widget.NewSelect(core.CurrencyOptions(), nil)
+	{
+		code := meta.Waehrung
+		if code == "" {
+			code = a.settings.CurrencyDefault
+		}
+		currencySelect.SetSelected(core.CurrencyOptionForCode(code))
 	}
 
 	// Account picker (SKR04-based)
@@ -200,19 +202,63 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	}
 	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
 
+	// Exchange rate + CC-fee% entries for live EUR conversion
+	kursEntry := widget.NewEntry()
+	kursEntry.SetPlaceHolder(a.bundle.T("field.rate"))
+	if meta.Wechselkurs > 0 {
+		kursEntry.SetText(strings.Replace(fmt.Sprintf("%g", meta.Wechselkurs), ".", ",", 1))
+	}
+	feePctEntry := widget.NewEntry()
+	feePctEntry.SetPlaceHolder(a.bundle.T("field.fee.percent"))
+	if meta.GebuehrProzent > 0 {
+		feePctEntry.SetText(strings.Replace(fmt.Sprintf("%g", meta.GebuehrProzent), ".", ",", 1))
+	}
+	gesamtEURLabel := widget.NewLabel("")
+
+	// recomputeEUR reads kurs/pct + gross/net from the tax-lines editor and
+	// updates netEUREntry, feeEntry, and gesamtEURLabel live. ed may be nil
+	// during initial construction — guarded below.
+	recomputeEUR := func() {
+		kurs := parseDecimal(kursEntry.Text)
+		pct := parseDecimal(feePctEntry.Text)
+		var brutto, netto float64
+		if ed != nil {
+			brutto = ed.Brutto()
+			netto = core.SumNetto(ed.Lines())
+		}
+		c := core.ConvertForeignPayment(brutto, netto, kurs, pct)
+		if kurs > 0 {
+			netEUREntry.SetText(fmt.Sprintf("%.2f", c.NettoEUR))
+			if pct > 0 {
+				feeEntry.SetText(fmt.Sprintf("%.2f", c.GebuehrEUR))
+			}
+			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", fmt.Sprintf("%.2f", c.GesamtEUR)))
+		} else {
+			gesamtEURLabel.SetText("") // clear stale total when the rate is removed
+		}
+	}
+	kursEntry.OnChanged = func(string) { recomputeEUR() }
+	feePctEntry.OnChanged = func(string) { recomputeEUR() }
+
 	// Currency conversion fields are only shown when a non-default
 	// currency is selected; this container is (re)populated on demand.
 	currencyConversionContainer := container.NewVBox()
 	updateCurrencyConversionVisibility := func() {
-		if currencySelect.Selected != "" && currencySelect.Selected != a.settings.CurrencyDefault {
+		if currencySelect.Selected != "" &&
+			core.CurrencyCodeFromOption(currencySelect.Selected) != a.settings.CurrencyDefault {
 			defaultCurrency := a.settings.CurrencyDefault
 			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
+			netEURLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.net_eur"), defaultCurrency)
 			currencyConversionContainer.Objects = []fyne.CanvasObject{
-				selectableForm(a.bundle,
-					fi(fmt.Sprintf("%s (%s)", a.bundle.T("field.net_eur"), defaultCurrency), netEUREntry),
-					fi(feeLabel, feeEntry),
+				widget.NewForm(
+					widget.NewFormItem(a.bundle.T("field.rate"), kursEntry),
+					widget.NewFormItem(a.bundle.T("field.fee.percent"), feePctEntry),
+					widget.NewFormItem(netEURLabel, netEUREntry),
+					widget.NewFormItem(feeLabel, feeEntry),
+					widget.NewFormItem(a.bundle.T("field.total.eur.label"), gesamtEURLabel),
 				),
 			}
+			recomputeEUR()
 		} else {
 			currencyConversionContainer.Objects = []fyne.CanvasObject{}
 		}
@@ -252,7 +298,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			SteuersatzProzent: mwstProzent,
 			SteuersatzBetrag:  mwstBetrag,
 			Bruttobetrag:      brutto,
-			Waehrung:          currencySelect.Selected,
+			Waehrung:          core.CurrencyCodeFromOption(currencySelect.Selected),
 		}
 		parts := strings.Split(dateEntry.Text, ".")
 		if len(parts) == 3 {
@@ -300,6 +346,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		if recomputeBooking != nil {
 			recomputeBooking()
 		}
+		recomputeEUR()
 	})
 
 	updateFilenamePreview()
@@ -554,13 +601,15 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			paymentDateEntry.Text,
 			ed.Lines(),
 			ed.Trinkgeld(),
-			currencySelect.Selected,
+			core.CurrencyCodeFromOption(currencySelect.Selected),
 			selectedAccount,
 			bankAccountSelect.Selected,
 			partialPaymentCheck.Checked,
 			commentEntry.Text,
 			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
 			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
+			parseDecimal(kursEntry.Text),
+			parseDecimal(feePctEntry.Text),
 			filenameEntry.Text,
 			targetYear,
 			targetMonth,
@@ -636,6 +685,8 @@ func (a *App) updateInvoice(
 	comment string,
 	netEUR float64,
 	fee float64,
+	wechselkurs float64,
+	gebuehrProzent float64,
 	filenameInput string,
 	targetYear int,
 	targetMonth time.Month,
@@ -666,6 +717,8 @@ func (a *App) updateInvoice(
 		Kommentar:         comment,
 		BetragNetto_EUR:   netEUR,
 		Gebuehr:           fee,
+		Wechselkurs:       wechselkurs,
+		GebuehrProzent:    gebuehrProzent,
 		HatAnhaenge:       willHaveAttachments,
 	}
 	parts := strings.Split(invoiceDate, ".")
