@@ -274,5 +274,7 @@
   "status.cashUncovered": "Bar nicht gedeckt",
 
   "settings.matchWindow": "Abgleich: Datumsfenster (Tage)",
-  "settings.matchTolerance": "Abgleich: Fremdwährungs-Toleranz (%)"
+  "settings.matchTolerance": "Abgleich: Fremdwährungs-Toleranz (%)",
+
+  "reconcile.lineTaken": "Auszugsposition bereits verknüpft"
 }

@@ -274,5 +274,7 @@
   "status.cashUncovered": "Cash uncovered",
 
   "settings.matchWindow": "Reconciliation: date window (days)",
-  "settings.matchTolerance": "Reconciliation: foreign tolerance (%)"
+  "settings.matchTolerance": "Reconciliation: foreign tolerance (%)",
+
+  "reconcile.lineTaken": "Statement line already linked"
 }

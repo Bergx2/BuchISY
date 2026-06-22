@@ -1,4 +1,4 @@
-package ui
+﻿package ui
 
 import (
 	"context"
@@ -96,6 +96,10 @@ func (a *App) showBelegabgleich() {
 		return ""
 	}
 
+	// FIX 3: Hoist matchConfig out of hot loops — computed once here and
+	// passed to every MatchInvoiceToStatement / FindGroupedPayments call.
+	cfg := a.matchConfig()
+
 	// ── Step 1: Build parse-once cache per account ──────────────────────────
 	// For each unique bank/creditcard account referenced by the unlinked rows,
 	// parse every statement file exactly once and cache all lines tagged with
@@ -161,7 +165,8 @@ func (a *App) showBelegabgleich() {
 
 		for _, name := range fileOrder {
 			linesForFile := fileLines[name]
-			kind, cands := core.MatchInvoiceToStatement(row, linesForFile, a.matchConfig())
+			// FIX 3: use hoisted cfg instead of calling a.matchConfig() per iteration.
+			kind, cands := core.MatchInvoiceToStatement(row, linesForFile, cfg)
 			if kind == core.MatchNone || len(cands) == 0 {
 				continue
 			}
@@ -185,11 +190,24 @@ func (a *App) showBelegabgleich() {
 					bestCandidates = swf
 				}
 			case kind == core.MatchSuggest && bestKind == core.MatchNone:
+				// FIX 2: first suggest file — start accumulation.
 				bestKind = kind
 				bestCandidates = swf
 			case kind == core.MatchSuggest && bestKind == core.MatchSuggest:
-				if cands[0].Score > bestCandidates[0].scored.Score {
-					bestCandidates = swf
+				// FIX 2: additional suggest file — ACCUMULATE candidates instead of
+				// replacing with only the higher-scored file's slice.
+				// Deduplicate by (file, page, lineIdx) before appending.
+				seen := map[string]bool{}
+				for _, c := range bestCandidates {
+					key := core.BuchungRef{StatementFilename: c.file, Page: c.scored.Line.Page, LineIdx: c.scored.Line.LineIdx}.String()
+					seen[key] = true
+				}
+				for _, c := range swf {
+					key := core.BuchungRef{StatementFilename: c.file, Page: c.scored.Line.Page, LineIdx: c.scored.Line.LineIdx}.String()
+					if !seen[key] {
+						bestCandidates = append(bestCandidates, c)
+						seen[key] = true
+					}
 				}
 			}
 		}
@@ -198,6 +216,14 @@ func (a *App) showBelegabgleich() {
 		// invoice — that is ambiguous across files; never silently auto-link.
 		if bestKind == core.MatchAuto && autoCount >= 2 {
 			bestKind = core.MatchSuggest
+		}
+
+		// FIX 2: After the file loop, if final bestKind is MatchSuggest, sort
+		// all accumulated candidates by score descending so best appears first.
+		if bestKind == core.MatchSuggest && len(bestCandidates) > 1 {
+			sort.SliceStable(bestCandidates, func(i, j int) bool {
+				return bestCandidates[i].scored.Score > bestCandidates[j].scored.Score
+			})
 		}
 
 		if bestKind == core.MatchNone || len(bestCandidates) == 0 {
@@ -411,7 +437,8 @@ func (a *App) showBelegabgleich() {
 						avail = append(avail, inv)
 					}
 				}
-				for _, g := range core.FindGroupedPayments(avail, sl.lines, a.matchConfig()) {
+				// FIX 3: use hoisted cfg instead of calling a.matchConfig() per iteration.
+				for _, g := range core.FindGroupedPayments(avail, sl.lines, cfg) {
 					g.File = sl.file
 					for _, dn := range g.Dateinamen {
 						groupedInvoices[dn] = true
@@ -513,7 +540,14 @@ func (a *App) showBelegabgleich() {
 			confirmBtn := widget.NewButton(a.bundle.T("reconcile.confirm"), nil)
 
 			confirmBtn.OnTapped = func() {
+				// FIX 1: Guard against double-linking the same statement line.
 				chosen := sug.candidates[selIdx]
+				key := refKey(chosen.file, chosen.scored.Line.Page, chosen.scored.Line.LineIdx)
+				if claimed[key] {
+					lbl.SetText("⚠ " + a.bundle.T("reconcile.lineTaken"))
+					confirmBtn.Disable()
+					return
+				}
 				sug.row.BuchungRef = core.BuchungRef{
 					StatementFilename: chosen.file,
 					Page:              chosen.scored.Line.Page,
@@ -530,8 +564,7 @@ func (a *App) showBelegabgleich() {
 				}
 				// Mark this line claimed so other confirms in the same dialog session
 				// cannot reuse it.
-				k := refKey(chosen.file, chosen.scored.Line.Page, chosen.scored.Line.LineIdx)
-				claimed[k] = true
+				claimed[key] = true
 				confirmBtn.Disable()
 				lbl.SetText("✓ " + rowLabel)
 				a.loadInvoices()
@@ -611,6 +644,13 @@ func (a *App) showBelegabgleich() {
 
 			linkAllBtn := widget.NewButton(a.bundle.T("reconcile.linkAll"), nil)
 			linkAllBtn.OnTapped = func() {
+				// FIX 1: Guard against double-linking the same statement line.
+				grpKey := refKey(grp.File, grp.Line.Page, grp.Line.LineIdx)
+				if claimed[grpKey] {
+					lbl.SetText("⚠ " + a.bundle.T("reconcile.lineTaken"))
+					linkAllBtn.Disable()
+					return
+				}
 				lineRef := core.BuchungRef{
 					StatementFilename: grp.File,
 					Page:              grp.Line.Page,
@@ -630,8 +670,7 @@ func (a *App) showBelegabgleich() {
 					}
 				}
 				// Claim the line so no other row in this session can reuse it.
-				k := refKey(grp.File, grp.Line.Page, grp.Line.LineIdx)
-				claimed[k] = true
+				claimed[grpKey] = true
 				linkAllBtn.Disable()
 				lbl.SetText("✓ " + rowLabel)
 				a.loadInvoices()
@@ -674,7 +713,14 @@ func (a *App) showBelegabgleich() {
 
 			confirmBtn := widget.NewButton(a.bundle.T("reconcile.confirm"), nil)
 			confirmBtn.OnTapped = func() {
+				// FIX 1: Guard against double-linking the same statement line.
 				chosen := psug.candidates[pSelIdx]
+				key := refKey(chosen.file, chosen.scored.Line.Page, chosen.scored.Line.LineIdx)
+				if claimed[key] {
+					lbl.SetText("⚠ " + a.bundle.T("reconcile.lineTaken"))
+					confirmBtn.Disable()
+					return
+				}
 				psug.row.BuchungRef = core.BuchungRef{
 					StatementFilename: chosen.file,
 					Page:              chosen.scored.Line.Page,
@@ -683,8 +729,7 @@ func (a *App) showBelegabgleich() {
 				if err := a.dbRepo.Update(psug.row.Jahr, psug.row.Monat, psug.row.Dateiname, psug.row); err != nil {
 					a.logger.Warn("Belegabgleich partial confirm Update %s: %v", psug.row.Dateiname, err)
 				}
-				k := refKey(chosen.file, chosen.scored.Line.Page, chosen.scored.Line.LineIdx)
-				claimed[k] = true
+				claimed[key] = true
 				confirmBtn.Disable()
 				lbl.SetText("✓ " + rowLabel)
 				a.loadInvoices()
