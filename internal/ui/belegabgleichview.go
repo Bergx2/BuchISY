@@ -43,6 +43,9 @@ func (a *App) matchConfig() core.MatchConfig {
 	if a.settings.MatchForeignTolerancePct > 0 {
 		cfg.ForeignTolerancePct = a.settings.MatchForeignTolerancePct
 	}
+	if a.statementAliases != nil {
+		cfg.Aliases, _ = a.statementAliases.Load()
+	}
 	return cfg
 }
 
@@ -223,6 +226,12 @@ func (a *App) showBelegabgleich() {
 		if err := a.dbRepo.Update(r.row.Jahr, r.row.Monat, r.row.Dateiname, r.row); err != nil {
 			a.logger.Warn("Belegabgleich auto-link Update %s: %v", r.row.Dateiname, err)
 		}
+		if a.statementAliases != nil {
+			a.statementAliases.Learn(r.row.Auftraggeber, top.scored.Line.Text)
+			if err := a.statementAliases.Save(); err != nil {
+				a.logger.Warn("Belegabgleich auto-link: save aliases: %v", err)
+			}
+		}
 		claimed[key] = true
 		autoLinked++
 	}
@@ -344,6 +353,12 @@ func (a *App) showBelegabgleich() {
 				}.String()
 				if err := a.dbRepo.Update(sug.row.Jahr, sug.row.Monat, sug.row.Dateiname, sug.row); err != nil {
 					a.logger.Warn("Belegabgleich confirm Update %s: %v", sug.row.Dateiname, err)
+				}
+				if a.statementAliases != nil {
+					a.statementAliases.Learn(sug.row.Auftraggeber, chosen.scored.Line.Text)
+					if err := a.statementAliases.Save(); err != nil {
+						a.logger.Warn("Belegabgleich confirm: save aliases: %v", err)
+					}
 				}
 				// Mark this line claimed so other confirms in the same dialog session
 				// cannot reuse it.
