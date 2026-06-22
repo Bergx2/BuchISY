@@ -906,7 +906,10 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 			return "✓ " + core.ParseBuchungRef(row.BuchungRef).Display() // linked
 		}
 		if it.app != nil && it.app.isCashAccount(row.Bankkonto) {
-			return "—" // cash: not statement-matched
+			if it.app.cashUncovered[row.Dateiname] {
+				return "⚠ " + it.bundle.T("status.cashUncovered")
+			}
+			return "✓ " + it.bundle.T("status.cashCovered")
 		}
 		return "○" // unlinked
 	default:

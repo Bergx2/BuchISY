@@ -259,5 +259,8 @@
   "reconcile.title": "Belegabgleich",
   "reconcile.summary": "%d automatisch verknüpft, %d Vorschläge.",
   "reconcile.confirm": "Bestätigen",
-  "reconcile.none": "Keine offenen Vorschläge."
+  "reconcile.none": "Keine offenen Vorschläge.",
+
+  "status.cashCovered": "Bar gedeckt",
+  "status.cashUncovered": "Bar nicht gedeckt"
 }

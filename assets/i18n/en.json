@@ -259,5 +259,8 @@
   "reconcile.title": "Reconciliation",
   "reconcile.summary": "%d auto-linked, %d suggestions.",
   "reconcile.confirm": "Confirm",
-  "reconcile.none": "No open suggestions."
+  "reconcile.none": "No open suggestions.",
+
+  "status.cashCovered": "Cash covered",
+  "status.cashUncovered": "Cash uncovered"
 }

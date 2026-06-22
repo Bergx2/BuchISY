@@ -52,9 +52,10 @@ type App struct {
 	bookingTemplates   *core.BookingTemplateStore
 
 	// Current state
-	currentYear   int
-	currentMonth  time.Month
-	viewWholeYear bool
+	currentYear    int
+	currentMonth   time.Month
+	viewWholeYear  bool
+	cashUncovered  map[string]bool // Dateiname → not covered; recomputed each loadInvoices
 
 	// Main-view mode: "" / "belege" → invoice table (default), "konten"
 	// → bank-statement browser per Zahlungskonto.
@@ -922,6 +923,24 @@ func (a *App) loadInvoices() {
 			all = append(all, monthRows...)
 		}
 		a.annotateAttachments(all)
+		// Rebuild coverage for every displayed month.
+		a.cashUncovered = map[string]bool{}
+		for m := time.January; m <= time.December; m++ {
+			for _, acct := range a.cashAccounts() {
+				books, _ := core.LoadCashBooks(filepath.Join(a.storageManager.GetMonthFolder(a.currentYear, m), "kassenbuch.json"))
+				var book core.CashBook
+				for _, b := range books {
+					if b.Konto == acct {
+						book = b
+						break
+					}
+				}
+				unc, _ := core.CashCoverage(book, a.cashInvoicesForMonth(acct, a.currentYear, m))
+				for k := range unc {
+					a.cashUncovered[k] = true
+				}
+			}
+		}
 		a.invoiceTable.SetData(all)
 		return
 	}
@@ -936,6 +955,22 @@ func (a *App) loadInvoices() {
 	}
 
 	a.annotateAttachments(rows)
+	// Rebuild cash coverage for the displayed month.
+	a.cashUncovered = map[string]bool{}
+	for _, acct := range a.cashAccounts() {
+		books, _ := core.LoadCashBooks(filepath.Join(a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth), "kassenbuch.json"))
+		var book core.CashBook
+		for _, b := range books {
+			if b.Konto == acct {
+				book = b
+				break
+			}
+		}
+		unc, _ := core.CashCoverage(book, a.cashInvoicesForMonth(acct, a.currentYear, a.currentMonth))
+		for k := range unc {
+			a.cashUncovered[k] = true
+		}
+	}
 	a.invoiceTable.SetData(rows)
 }
 
