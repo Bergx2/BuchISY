@@ -244,5 +244,8 @@
   "ustva.total": "Summe Vorsteuer: %s €",
 
   "backup.title": "Backup",
-  "backup.done": "Backup erstellt (%d Dateien)."
+  "backup.done": "Backup erstellt (%d Dateien).",
+
+  "warnings.title": "Plausibilitätswarnungen",
+  "warnings.intro": "Bitte prüfen — trotzdem speichern?"
 }

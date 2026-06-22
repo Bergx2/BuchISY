@@ -244,5 +244,8 @@
   "ustva.total": "Total input VAT: %s €",
 
   "backup.title": "Backup",
-  "backup.done": "Backup created (%d files)."
+  "backup.done": "Backup created (%d files).",
+
+  "warnings.title": "Plausibility warnings",
+  "warnings.intro": "Please review — save anyway?"
 }

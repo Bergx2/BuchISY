@@ -664,48 +664,71 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				learn = true
 			}
 		}
-		err := a.saveInvoice(
-			originalPath,
-			dynamicAttachments,
-			companyEntry.Text,
-			shortDescEntry.Text,
-			invoiceNumEntry.Text,
-			vatIDEntry.Text,
-			dateEntry.Text,
-			paymentDateEntry.Text,
-			ed.Lines(),
-			ed.Trinkgeld(),
-			core.CurrencyCodeFromOption(currencySelect.Selected),
-			selectedAccount,
-			bankAccountSelect.Selected,
-			partialPaymentCheck.Checked,
-			commentEntry.Text,
-			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
-			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
-			parseDecimal(kursEntry.Text),
-			parseDecimal(feePctEntry.Text),
-			rememberCheck.Checked,
-			filenameEntry.Text,
-			ausgangsrechnungCheck.Checked,
-			targetYear,
-			targetMonth,
-			finalBooking,
-		)
-		if err != nil {
-			// Keep the window open so the user can correct the data.
-			dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), confirmWin)
+
+		doSave := func() {
+			err := a.saveInvoice(
+				originalPath,
+				dynamicAttachments,
+				companyEntry.Text,
+				shortDescEntry.Text,
+				invoiceNumEntry.Text,
+				vatIDEntry.Text,
+				dateEntry.Text,
+				paymentDateEntry.Text,
+				ed.Lines(),
+				ed.Trinkgeld(),
+				core.CurrencyCodeFromOption(currencySelect.Selected),
+				selectedAccount,
+				bankAccountSelect.Selected,
+				partialPaymentCheck.Checked,
+				commentEntry.Text,
+				parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
+				parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
+				parseDecimal(kursEntry.Text),
+				parseDecimal(feePctEntry.Text),
+				rememberCheck.Checked,
+				filenameEntry.Text,
+				ausgangsrechnungCheck.Checked,
+				targetYear,
+				targetMonth,
+				finalBooking,
+			)
+			if err != nil {
+				// Keep the window open so the user can correct the data.
+				dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), confirmWin)
+				return
+			}
+			// Learn the booking template for this company on successful save
+			// (only when using the auto path — skip when a manual booking was set).
+			if learn && companyEntry.Text != "" {
+				_ = a.bookingTemplates.Set(companyEntry.Text, core.BookingTemplate{
+					Kategorie:    catKeyByLabel[categorySelect.Selected],
+					ExpenseKonto: selectedAccount,
+				})
+			}
+			a.loadInvoices()
+			confirmWin.Close()
+		}
+
+		warnings := core.InvoiceWarnings(core.CSVRow{
+			BetragNetto:      core.SumNetto(ed.Lines()),
+			SteuersatzBetrag: core.SumMwSt(ed.Lines()),
+			Bruttobetrag:     ed.Brutto(),
+			Trinkgeld:        ed.Trinkgeld(),
+			Gegenkonto:       selectedAccount,
+			Waehrung:         core.CurrencyCodeFromOption(currencySelect.Selected),
+			Wechselkurs:      parseDecimal(kursEntry.Text),
+		})
+		if len(warnings) > 0 {
+			msg := a.bundle.T("warnings.intro") + "\n• " + strings.Join(warnings, "\n• ")
+			dialog.NewConfirm(a.bundle.T("warnings.title"), msg, func(ok bool) {
+				if ok {
+					doSave()
+				}
+			}, confirmWin).Show()
 			return
 		}
-		// Learn the booking template for this company on successful save
-		// (only when using the auto path — skip when a manual booking was set).
-		if learn && companyEntry.Text != "" {
-			_ = a.bookingTemplates.Set(companyEntry.Text, core.BookingTemplate{
-				Kategorie:    catKeyByLabel[categorySelect.Selected],
-				ExpenseKonto: selectedAccount,
-			})
-		}
-		a.loadInvoices()
-		confirmWin.Close()
+		doSave()
 	}
 
 	preview, previewStrip = buildDocumentPreview(originalPath, meta)
