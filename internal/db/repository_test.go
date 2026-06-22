@@ -204,6 +204,17 @@ func TestDBBookingRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDBWechselkursRoundTrip(t *testing.T) {
+	repo := newTestRepo(t)
+	if _, err := repo.Insert(core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06", Wechselkurs: 1.1583, GebuehrProzent: 2}); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := repo.List("2026", "06")
+	if len(rows) != 1 || rows[0].Wechselkurs != 1.1583 || rows[0].GebuehrProzent != 2 {
+		t.Fatalf("DB kurs/prozent round-trip failed: %+v", rows)
+	}
+}
+
 func TestMarkExportedAndUpdateResets(t *testing.T) {
 	repo := newTestRepo(t)
 	if _, err := repo.Insert(core.CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06"}); err != nil {

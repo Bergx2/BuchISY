@@ -30,6 +30,8 @@ type Meta struct {
 	Kommentar         string     // Comment/note for this invoice
 	BetragNetto_EUR   float64    // Net amount in default currency (EUR) for foreign currency invoices
 	Gebuehr           float64    // Fee (e.g., currency exchange fee)
+	Wechselkurs       float64    // Exchange rate used for currency conversion
+	GebuehrProzent    float64    // Fee rate in percent (e.g., currency exchange fee %)
 	HatAnhaenge       bool       // Indicates if invoice has additional file attachments
 	// BuchungRef is "<statementFilename>|<page>|<lineIdx>" pointing to
 	// a booking on a bank statement; empty when this invoice is not
@@ -181,6 +183,8 @@ type CSVRow struct {
 	Kommentar         string
 	BetragNetto_EUR   float64
 	Gebuehr           float64
+	Wechselkurs       float64
+	GebuehrProzent    float64
 	HatAnhaenge       bool
 	AnzahlAnhaenge    int
 	Unterordner       string // "" | "Bar" | "Ausgangsrechnungen"
@@ -220,6 +224,8 @@ func (m Meta) ToCSVRow() CSVRow {
 		Kommentar:         m.Kommentar,
 		BetragNetto_EUR:   m.BetragNetto_EUR,
 		Gebuehr:           m.Gebuehr,
+		Wechselkurs:       m.Wechselkurs,
+		GebuehrProzent:    m.GebuehrProzent,
 		HatAnhaenge:       m.HatAnhaenge,
 		BuchungRef:        m.BuchungRef,
 		Buchung:           m.Buchung,
@@ -252,6 +258,8 @@ func (r CSVRow) ToMeta() Meta {
 		Kommentar:         r.Kommentar,
 		BetragNetto_EUR:   r.BetragNetto_EUR,
 		Gebuehr:           r.Gebuehr,
+		Wechselkurs:       r.Wechselkurs,
+		GebuehrProzent:    r.GebuehrProzent,
 		HatAnhaenge:       r.HatAnhaenge,
 		BuchungRef:        r.BuchungRef,
 		Buchung:           r.Buchung,

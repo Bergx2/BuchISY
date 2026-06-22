@@ -34,6 +34,8 @@ var DefaultCSVColumns = []string{
 	"Kommentar",
 	"BetragNetto_EUR",
 	"Gebuehr",
+	"Wechselkurs",
+	"GebuehrProzent",
 	"HatAnhaenge",
 	"AnzahlAnhaenge",
 	"Unterordner",
@@ -66,6 +68,8 @@ var ColumnDisplayNames = map[string]string{
 	"Kommentar":          "Kommentar",
 	"BetragNetto_EUR":    "Betrag Netto (EUR)",
 	"Gebuehr":            "Gebühr",
+	"Wechselkurs":        "Wechselkurs",
+	"GebuehrProzent":     "Gebühr %",
 	"HatAnhaenge":        "Anhänge",
 	"AnzahlAnhaenge":     "Anzahl Anhänge",
 	"Unterordner":        "Unterordner",
@@ -98,6 +102,8 @@ var ColumnTranslationKeys = map[string]string{
 	"Kommentar":          "table.col.comment",
 	"BetragNetto_EUR":    "table.col.net_eur",
 	"Gebuehr":            "table.col.fee",
+	"Wechselkurs":        "table.col.wechselkurs",
+	"GebuehrProzent":     "table.col.gebuehrprozent",
 	"HatAnhaenge":        "table.col.hasattachments",
 	"AnzahlAnhaenge":     "table.col.attachmentcount",
 	"Unterordner":        "table.col.unterordner",
@@ -286,6 +292,8 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 			row.HatAnhaenge = true
 		}
 		row.Trinkgeld = parseFloat(valueForColumn(record, headerMap, "Trinkgeld"))
+		row.Wechselkurs = parseFloat(valueForColumn(record, headerMap, "Wechselkurs"))
+		row.GebuehrProzent = parseFloat(valueForColumn(record, headerMap, "GebuehrProzent"))
 		row.TaxLines = ParseTaxLines(valueForColumn(record, headerMap, "Steuerzeilen"))
 		if len(row.TaxLines) == 0 {
 			// Legacy row without detail: reconstruct one line from aggregates.
@@ -476,6 +484,8 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"Kommentar":          row.Kommentar,
 		"BetragNetto_EUR":    r.formatFloat(row.BetragNetto_EUR),
 		"Gebuehr":            r.formatFloat(row.Gebuehr),
+		"Wechselkurs":        r.formatRate(row.Wechselkurs),
+		"GebuehrProzent":     r.formatRate(row.GebuehrProzent),
 		"HatAnhaenge":        formatBool(row.HatAnhaenge),
 		"AnzahlAnhaenge":     strconv.Itoa(row.AnzahlAnhaenge),
 		"Unterordner":        row.Unterordner,
@@ -498,6 +508,16 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 	}
 
 	return record
+}
+
+// formatRate formats a float64 as a string with 4 decimal places using the configured decimal separator.
+// Used for exchange rates and fee percentages that require more precision than 2 decimal places.
+func (r *CSVRepository) formatRate(f float64) string {
+	formatted := fmt.Sprintf("%.4f", f)
+	if r.decimalSeparator == "," {
+		formatted = strings.Replace(formatted, ".", ",", 1)
+	}
+	return formatted
 }
 
 // formatBool formats a bool as a string ("true" or "false").

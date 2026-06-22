@@ -31,6 +31,8 @@
   "table.col.comment": "Kommentar",
   "table.col.net_eur": "Betrag netto (EUR)",
   "table.col.fee": "Gebühr",
+  "table.col.wechselkurs": "Wechselkurs",
+  "table.col.gebuehrprozent": "Gebühr %",
   "table.col.hasattachments": "Anhänge",
   "table.col.attachmentcount": "Anzahl Anhänge",
   "table.col.unterordner": "Unterordner",

@@ -188,3 +188,15 @@ func TestCSVExportiertRoundTrip(t *testing.T) {
 		t.Fatalf("Exportiert not round-tripped: %+v", rows)
 	}
 }
+
+func TestCSVWechselkursRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invoices.csv")
+	repo := NewCSVRepository()
+	if err := repo.Append(path, CSVRow{Dateiname: "a.pdf", Jahr: "2026", Monat: "06", Wechselkurs: 1.1583, GebuehrProzent: 2}); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := repo.Load(path)
+	if len(rows) != 1 || rows[0].Wechselkurs != 1.1583 || rows[0].GebuehrProzent != 2 {
+		t.Fatalf("kurs/prozent not round-tripped: %+v", rows)
+	}
+}

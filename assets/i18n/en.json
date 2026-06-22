@@ -31,6 +31,8 @@
   "table.col.comment": "Comment",
   "table.col.net_eur": "Net Amount (EUR)",
   "table.col.fee": "Fee",
+  "table.col.wechselkurs": "Exchange rate",
+  "table.col.gebuehrprozent": "Fee %",
   "table.col.hasattachments": "Attachments",
   "table.col.attachmentcount": "Attachment Count",
   "table.col.unterordner": "Subfolder",

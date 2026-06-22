@@ -75,6 +75,8 @@ func (r *Repository) initSchema() error {
 		"ALTER TABLE invoices ADD COLUMN steuerzeilen TEXT DEFAULT ''",
 		"ALTER TABLE invoices ADD COLUMN buchung TEXT DEFAULT ''",
 		"ALTER TABLE invoices ADD COLUMN exportiert INTEGER DEFAULT 0",
+		"ALTER TABLE invoices ADD COLUMN wechselkurs REAL DEFAULT 0",
+		"ALTER TABLE invoices ADD COLUMN gebuehr_prozent REAL DEFAULT 0",
 	} {
 		if _, err := r.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -93,14 +95,16 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
 			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
-			trinkgeld, steuerzeilen, buchung, exportiert
+			trinkgeld, steuerzeilen, buchung, exportiert,
+			wechselkurs, gebuehr_prozent
 		) VALUES (
 			?, ?, ?, ?,
 			?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?, ?
+			?, ?, ?, ?,
+			?, ?
 		)
 	`
 
@@ -111,6 +115,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.Waehrung, row.Gegenkonto, row.Bankkonto, row.Bezahldatum, row.Teilzahlung,
 		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.VATID,
 		row.Trinkgeld, core.MarshalTaxLines(row.TaxLines), core.MarshalBooking(row.Buchung), 0,
+		row.Wechselkurs, row.GebuehrProzent,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert invoice: %w", err)
@@ -154,6 +159,8 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			steuerzeilen = ?,
 			buchung = ?,
 			exportiert = 0,
+			wechselkurs = ?,
+			gebuehr_prozent = ?,
 			jahr = ?,
 			monat = ?
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
@@ -182,6 +189,8 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.Trinkgeld,
 		core.MarshalTaxLines(row.TaxLines),
 		core.MarshalBooking(row.Buchung),
+		row.Wechselkurs,
+		row.GebuehrProzent,
 		row.Jahr, row.Monat,
 		jahr, monat, oldDateiname,
 	)
@@ -232,7 +241,8 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
 			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
-			trinkgeld, steuerzeilen, buchung, exportiert
+			trinkgeld, steuerzeilen, buchung, exportiert,
+			wechselkurs, gebuehr_prozent
 		FROM invoices
 		WHERE jahr = ? AND monat = ?
 		ORDER BY rechnungsdatum DESC, dateiname ASC
@@ -255,6 +265,8 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 		var trinkgeld sql.NullFloat64
 		var buchung sql.NullString
 		var exportiert sql.NullInt64
+		var wechselkurs sql.NullFloat64
+		var gebuehrProzent sql.NullFloat64
 		err := rows.Scan(
 			&row.Dateiname, &row.Rechnungsdatum, &row.Jahr, &row.Monat,
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
@@ -262,12 +274,15 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
 			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.VATID,
 			&trinkgeld, &steuerzeilen, &buchung, &exportiert,
+			&wechselkurs, &gebuehrProzent,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 		row.Trinkgeld = trinkgeld.Float64
 		row.Exportiert = exportiert.Int64 != 0
+		row.Wechselkurs = wechselkurs.Float64
+		row.GebuehrProzent = gebuehrProzent.Float64
 
 		row.TaxLines = core.ParseTaxLines(steuerzeilen.String)
 		if len(row.TaxLines) == 0 {
