@@ -254,5 +254,10 @@
   "backup.done": "Backup created (%d files).",
 
   "warnings.title": "Plausibility warnings",
-  "warnings.intro": "Please review — save anyway?"
+  "warnings.intro": "Please review — save anyway?",
+
+  "reconcile.title": "Reconciliation",
+  "reconcile.summary": "%d auto-linked, %d suggestions.",
+  "reconcile.confirm": "Confirm",
+  "reconcile.none": "No open suggestions."
 }

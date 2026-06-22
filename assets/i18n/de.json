@@ -254,5 +254,10 @@
   "backup.done": "Backup erstellt (%d Dateien).",
 
   "warnings.title": "Plausibilitätswarnungen",
-  "warnings.intro": "Bitte prüfen — trotzdem speichern?"
+  "warnings.intro": "Bitte prüfen — trotzdem speichern?",
+
+  "reconcile.title": "Belegabgleich",
+  "reconcile.summary": "%d automatisch verknüpft, %d Vorschläge.",
+  "reconcile.confirm": "Bestätigen",
+  "reconcile.none": "Keine offenen Vorschläge."
 }
