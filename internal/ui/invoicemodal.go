@@ -303,6 +303,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				feeEntry.SetText(fmt.Sprintf("%.2f", c.GebuehrEUR))
 			}
 			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", fmt.Sprintf("%.2f", c.GesamtEUR)))
+		} else {
+			gesamtEURLabel.SetText("") // clear stale total when the rate is removed
 		}
 	}
 	kursEntry.OnChanged = func(string) { recomputeEUR() }
