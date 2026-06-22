@@ -27,8 +27,10 @@ func (a *App) showControllingDialog() {
 			s := sums[id.Row]
 			switch id.Col {
 			case 0:
+				lbl.Alignment = fyne.TextAlignLeading // reset: Fyne recycles cell labels across columns
 				lbl.SetText(fmt.Sprintf("%d", s.Konto))
 			case 1:
+				lbl.Alignment = fyne.TextAlignLeading
 				lbl.SetText(s.Name)
 			default:
 				lbl.Alignment = fyne.TextAlignTrailing
