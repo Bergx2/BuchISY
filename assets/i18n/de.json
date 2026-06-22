@@ -266,5 +266,8 @@
   "reconcile.cashUncovered": "⚠ %d Beleg(e) nicht gedeckt",
 
   "status.cashCovered": "Bar gedeckt",
-  "status.cashUncovered": "Bar nicht gedeckt"
+  "status.cashUncovered": "Bar nicht gedeckt",
+
+  "settings.matchWindow": "Abgleich: Datumsfenster (Tage)",
+  "settings.matchTolerance": "Abgleich: Fremdwährungs-Toleranz (%)"
 }

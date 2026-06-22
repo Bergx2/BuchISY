@@ -518,6 +518,19 @@ func (a *App) showSettingsView() {
 	datevHint := newCopyableLabel(a.bundle, a.bundle.T("settings.datev.hint"))
 	datevHint.Wrapping = fyne.TextWrapWord
 
+	// Reconciliation match config
+	matchWindowEntry := widget.NewEntry()
+	if a.settings.MatchDateWindowDays > 0 {
+		matchWindowEntry.SetText(strconv.Itoa(a.settings.MatchDateWindowDays))
+	}
+	matchWindowEntry.SetPlaceHolder(strconv.Itoa(core.DefaultMatchConfig().DateWindowDays))
+
+	matchToleranceEntry := widget.NewEntry()
+	if a.settings.MatchForeignTolerancePct > 0 {
+		matchToleranceEntry.SetText(strings.Replace(fmt.Sprintf("%g", a.settings.MatchForeignTolerancePct), ".", ",", 1))
+	}
+	matchToleranceEntry.SetPlaceHolder(strings.Replace(fmt.Sprintf("%g", core.DefaultMatchConfig().ForeignTolerancePct), ".", ",", 1))
+
 	// Wipe database button
 	wipeDBBtn := widget.NewButton(a.bundle.T("settings.wipeDatabase"), func() {
 		// Show confirmation dialog
@@ -915,6 +928,13 @@ func (a *App) showSettingsView() {
 		datevHint,
 		widget.NewSeparator(),
 
+		widget.NewLabel(a.bundle.T("reconcile.title")),
+		widget.NewForm(
+			widget.NewFormItem(a.bundle.T("settings.matchWindow"), matchWindowEntry),
+			widget.NewFormItem(a.bundle.T("settings.matchTolerance"), matchToleranceEntry),
+		),
+		widget.NewSeparator(),
+
 		widget.NewLabel(a.bundle.T("settings.database")),
 		wipeDBBtn,
 		widget.NewLabel(a.bundle.T("settings.wipeDatabase.hint")),
@@ -1000,6 +1020,19 @@ func (a *App) showSettingsView() {
 		newSettings.DatevBeraterNr = strings.TrimSpace(datevBeraterEntry.Text)
 		newSettings.DatevMandantNr = strings.TrimSpace(datevMandantEntry.Text)
 		newSettings.DatevWJBeginn = strings.TrimSpace(datevWJBeginnEntry.Text)
+
+		// Reconciliation match config
+		if v, err := strconv.Atoi(strings.TrimSpace(matchWindowEntry.Text)); err == nil && v > 0 {
+			newSettings.MatchDateWindowDays = v
+		} else {
+			newSettings.MatchDateWindowDays = 0
+		}
+		if v := parseDecimal(matchToleranceEntry.Text); v > 0 {
+			newSettings.MatchForeignTolerancePct = v
+		} else {
+			newSettings.MatchForeignTolerancePct = 0
+		}
+
 		newSettings.ColumnOrder = tempColumnOrder
 		columnOrderChanged := !equalStringSlices(prevColumnOrder, newSettings.ColumnOrder)
 

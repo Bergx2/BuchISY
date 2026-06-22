@@ -266,5 +266,8 @@
   "reconcile.cashUncovered": "⚠ %d receipt(s) uncovered",
 
   "status.cashCovered": "Cash covered",
-  "status.cashUncovered": "Cash uncovered"
+  "status.cashUncovered": "Cash uncovered",
+
+  "settings.matchWindow": "Reconciliation: date window (days)",
+  "settings.matchTolerance": "Reconciliation: foreign tolerance (%)"
 }

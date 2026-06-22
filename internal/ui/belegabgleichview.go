@@ -20,6 +20,19 @@ type belegSuggestion struct {
 	fileName  string
 }
 
+// matchConfig builds a core.MatchConfig from the current settings,
+// falling back to defaults for any field left at zero.
+func (a *App) matchConfig() core.MatchConfig {
+	cfg := core.DefaultMatchConfig()
+	if a.settings.MatchDateWindowDays > 0 {
+		cfg.DateWindowDays = a.settings.MatchDateWindowDays
+	}
+	if a.settings.MatchForeignTolerancePct > 0 {
+		cfg.ForeignTolerancePct = a.settings.MatchForeignTolerancePct
+	}
+	return cfg
+}
+
 // showBelegabgleich runs the reconciliation for the current month:
 // auto-links unambiguous matches and presents the rest as a confirm-list.
 func (a *App) showBelegabgleich() {
@@ -64,7 +77,7 @@ func (a *App) showBelegabgleich() {
 				a.logger.Warn("Belegabgleich: parse statement %s: %v", name, err)
 				continue
 			}
-			kind, cands := core.MatchInvoiceToStatement(row, lines, core.DefaultMatchConfig())
+			kind, cands := core.MatchInvoiceToStatement(row, lines, a.matchConfig())
 			if kind == core.MatchNone || len(cands) == 0 {
 				continue
 			}

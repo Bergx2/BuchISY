@@ -103,7 +103,9 @@ type Settings struct {
 	CSVEncoding            string        `json:"csv_encoding"`          // CSV file encoding: "ISO-8859-1" or "UTF-8"
 	ColumnOrder            []string      `json:"column_order"`          // Order of columns in table and CSV
 	UIScale                float32       `json:"ui_scale"`              // UI zoom factor (1.0 = 100%)
-	PreviewSplitOffset     float64       `json:"preview_split_offset"`  // Divider position in the confirmation window (0..1)
+	PreviewSplitOffset         float64       `json:"preview_split_offset"`          // Divider position in the confirmation window (0..1)
+	MatchDateWindowDays        int           `json:"matchDateWindowDays,omitempty"` // Reconciliation date window in days (0 = use default)
+	MatchForeignTolerancePct   float64       `json:"matchForeignTolerancePct,omitempty"` // Reconciliation foreign-currency tolerance % (0 = use default)
 }
 
 // DefaultSettings returns the default application settings.
