@@ -51,3 +51,27 @@ func TestBuildInvoiceListPDF(t *testing.T) {
 		t.Errorf("empty list PDF errored: %v", err)
 	}
 }
+
+func TestPDFReportsPaginate(t *testing.T) {
+	var rows []CSVRow
+	for i := 0; i < 200; i++ {
+		rows = append(rows, CSVRow{Rechnungsdatum: "18.06.2026", Auftraggeber: "Firma", Rechnungsnummer: "R", BetragNetto: 1, SteuersatzBetrag: 0.19, Bruttobetrag: 1.19,
+			Buchung: Booking{Entries: []BookingEntry{{Konto: 6640, Betrag: 1, Soll: true}, {Konto: 1800, Betrag: 1, Soll: false}}}})
+	}
+	j, err := BuildBookingJournalPDF(rows, nil, "Journal")
+	if err != nil || len(j) < 1000 || string(j[:4]) != "%PDF" {
+		t.Fatalf("journal: err=%v len=%d", err, len(j))
+	}
+	l, err := BuildInvoiceListPDF(rows, "Liste")
+	if err != nil || len(l) < 1000 || string(l[:4]) != "%PDF" {
+		t.Fatalf("list: err=%v len=%d", err, len(l))
+	}
+	var sums []AccountSum
+	for i := 0; i < 200; i++ {
+		sums = append(sums, AccountSum{Konto: 6000 + i, Name: "Konto", Summe: 1})
+	}
+	c, err := BuildControllingPDF(sums, 200, "Controlling")
+	if err != nil || len(c) < 1000 || string(c[:4]) != "%PDF" {
+		t.Fatalf("controlling: err=%v len=%d", err, len(c))
+	}
+}

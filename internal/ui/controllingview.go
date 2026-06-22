@@ -70,7 +70,11 @@ func (a *App) showControllingDialog() {
 			a.showError(a.bundle.T("error.processing.title"), err.Error())
 			return
 		}
-		a.savePDF("Controlling.pdf", data)
+		period := fmt.Sprintf("%04d", a.currentYear)
+		if !yearMode {
+			period = fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+		}
+		a.savePDF("Controlling_"+period+".pdf", data)
 	})
 
 	header := widget.NewLabelWithStyle(a.bundle.T("controlling.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})

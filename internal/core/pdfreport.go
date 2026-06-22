@@ -28,6 +28,27 @@ func pdfAmount(v float64) string {
 	return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
 }
 
+// pdfTableHeader draws the bold column-header row.
+func pdfTableHeader(pdf *fpdf.Fpdf, tr func(string) string, headers []string, widths []float64) {
+	pdf.SetFont("Arial", "B", 9)
+	for i, h := range headers {
+		pdf.CellFormat(widths[i], 7, tr(h), "1", 0, "L", false, 0, "")
+	}
+	pdf.Ln(7)
+	pdf.SetFont("Arial", "", 9)
+}
+
+// pdfPageBreak adds a new page (and redraws the header) when the next row of
+// height rowH would overflow the bottom margin.
+func pdfPageBreak(pdf *fpdf.Fpdf, tr func(string) string, headers []string, widths []float64, rowH float64) {
+	_, pageH := pdf.GetPageSize()
+	_, _, _, bottom := pdf.GetMargins()
+	if pdf.GetY()+rowH > pageH-bottom {
+		pdf.AddPage()
+		pdfTableHeader(pdf, tr, headers, widths)
+	}
+}
+
 // kontoLabelPDF renders "Number" or "Number Name" for a booking account.
 func kontoLabelPDF(chart *ChartOfAccounts, konto int) string {
 	if chart != nil {
@@ -45,12 +66,7 @@ func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title string)
 
 	headers := []string{"Datum", "Beleg", "Auftraggeber", "Soll-Konto", "Haben-Konto", "Betrag"}
 	widths := []float64{20, 35, 70, 55, 55, 25}
-	pdf.SetFont("Arial", "B", 9)
-	for i, h := range headers {
-		pdf.CellFormat(widths[i], 7, tr(h), "1", 0, "L", false, 0, "")
-	}
-	pdf.Ln(7)
-	pdf.SetFont("Arial", "", 9)
+	pdfTableHeader(pdf, tr, headers, widths)
 
 	var total float64
 	for _, r := range rows {
@@ -59,6 +75,7 @@ func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title string)
 			continue
 		}
 		for _, e := range r.Buchung.DebitEntries() {
+			pdfPageBreak(pdf, tr, headers, widths, 6)
 			cells := []struct {
 				w     float64
 				txt   string
@@ -79,6 +96,7 @@ func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title string)
 		}
 	}
 
+	pdfPageBreak(pdf, tr, headers, widths, 7)
 	pdf.SetFont("Arial", "B", 9)
 	pdf.CellFormat(widths[0]+widths[1]+widths[2]+widths[3]+widths[4], 7, tr("Summe"), "1", 0, "R", false, 0, "")
 	pdf.CellFormat(widths[5], 7, tr(pdfAmount(round2(total))), "1", 0, "R", false, 0, "")
@@ -105,20 +123,17 @@ func BuildControllingPDF(sums []AccountSum, total float64, title string) ([]byte
 
 	headers := []string{"Konto", "Bezeichnung", "Summe"}
 	widths := []float64{25, 120, 35}
-	pdf.SetFont("Arial", "B", 9)
-	for i, h := range headers {
-		pdf.CellFormat(widths[i], 7, tr(h), "1", 0, "L", false, 0, "")
-	}
-	pdf.Ln(7)
-	pdf.SetFont("Arial", "", 9)
+	pdfTableHeader(pdf, tr, headers, widths)
 
 	for _, s := range sums {
+		pdfPageBreak(pdf, tr, headers, widths, 6)
 		pdf.CellFormat(widths[0], 6, tr(fmt.Sprintf("%d", s.Konto)), "1", 0, "L", false, 0, "")
 		pdf.CellFormat(widths[1], 6, tr(truncate(s.Name, 70)), "1", 0, "L", false, 0, "")
 		pdf.CellFormat(widths[2], 6, tr(pdfAmount(s.Summe)), "1", 0, "R", false, 0, "")
 		pdf.Ln(6)
 	}
 
+	pdfPageBreak(pdf, tr, headers, widths, 7)
 	pdf.SetFont("Arial", "B", 9)
 	pdf.CellFormat(widths[0]+widths[1], 7, tr("Summe"), "1", 0, "R", false, 0, "")
 	pdf.CellFormat(widths[2], 7, tr(pdfAmount(round2(total))), "1", 0, "R", false, 0, "")
@@ -137,15 +152,11 @@ func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
 
 	headers := []string{"Datum", "Auftraggeber", "Rechnungsnr.", "Netto", "MwSt", "Brutto"}
 	widths := []float64{22, 90, 45, 30, 30, 30}
-	pdf.SetFont("Arial", "B", 9)
-	for i, h := range headers {
-		pdf.CellFormat(widths[i], 7, tr(h), "1", 0, "L", false, 0, "")
-	}
-	pdf.Ln(7)
-	pdf.SetFont("Arial", "", 9)
+	pdfTableHeader(pdf, tr, headers, widths)
 
 	var totalBrutto float64
 	for _, r := range rows {
+		pdfPageBreak(pdf, tr, headers, widths, 6)
 		cells := []struct {
 			w     float64
 			txt   string
@@ -165,6 +176,7 @@ func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
 		totalBrutto += r.Bruttobetrag
 	}
 
+	pdfPageBreak(pdf, tr, headers, widths, 7)
 	pdf.SetFont("Arial", "B", 9)
 	pdf.CellFormat(widths[0]+widths[1]+widths[2]+widths[3]+widths[4], 7, tr("Summe Brutto"), "1", 0, "R", false, 0, "")
 	pdf.CellFormat(widths[5], 7, tr(pdfAmount(round2(totalBrutto))), "1", 0, "R", false, 0, "")
