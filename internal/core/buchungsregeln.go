@@ -15,6 +15,11 @@ type BookingRule struct {
 	AbziehbarProzent    float64 `json:"abziehbar_prozent,omitempty"`
 	KontoAbziehbar      int     `json:"konto_abziehbar,omitempty"`
 	KontoNichtAbziehbar int     `json:"konto_nicht_abziehbar,omitempty"`
+	RcSatz              float64 `json:"rc_satz,omitempty"`
+	KontoVStRC          int     `json:"konto_vst_rc,omitempty"`
+	KontoUStRC          int     `json:"konto_ust_rc,omitempty"`
+	Schwelle            float64 `json:"schwelle,omitempty"`
+	DefaultKonto        int     `json:"default_konto,omitempty"`
 }
 
 // BookingRules is the bundled rules base: Vorsteuer accounts keyed by integer
