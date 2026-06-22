@@ -66,3 +66,20 @@ func TestParseBuchungRef_MalformedReturnsZero(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLineAmount(t *testing.T) {
+	cases := []struct {
+		text string
+		want float64
+	}{
+		{"14.01.2026 AMAZON WEB SERVICES EMEA 78,53", 78.53},
+		{"03.01. Lastschrift Telekom -1.234,56", 1234.56},
+		{"05.01. Gutschrift Kunde 2.000,00 H", 2000.00},
+		{"no amount here", 0},
+	}
+	for _, c := range cases {
+		if got := ParseLineAmount(c.text); got != c.want {
+			t.Errorf("ParseLineAmount(%q) = %v, want %v", c.text, got, c.want)
+		}
+	}
+}

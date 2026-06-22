@@ -11,6 +11,9 @@ import (
 	"github.com/gen2brain/go-fitz"
 )
 
+// lineAmountRe matches German money amounts like "1.234,56" or "78,53".
+var lineAmountRe = regexp.MustCompile(`\d{1,3}(?:\.\d{3})*,\d{2}`)
+
 // dateLineRe matches a transaction line's leading date. Accepts both
 // "DD.MM." (Sparkasse-style short date) and full "DD.MM.YYYY".
 var dateLineRe = regexp.MustCompile(`^\s*([0-3]?\d)\.([01]?\d)\.(\d{4}|\d{2}|)`)
@@ -25,6 +28,24 @@ var (
 // tagStripRe removes any HTML tag (we don't need attributes inside the
 // visible text — just the user-facing characters).
 var tagStripRe = regexp.MustCompile(`<[^>]+>`)
+
+// ParseLineAmount returns the absolute value of the LAST money token in a
+// statement line's text (the transaction amount sits at the end of the line),
+// or 0 when none is present.
+func ParseLineAmount(text string) float64 {
+	matches := lineAmountRe.FindAllString(text, -1)
+	if len(matches) == 0 {
+		return 0
+	}
+	last := matches[len(matches)-1]
+	last = strings.ReplaceAll(last, ".", "")
+	last = strings.ReplaceAll(last, ",", ".")
+	v, err := strconv.ParseFloat(last, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
 
 // ParseStatementBookings scans every page of a bank-statement PDF and
 // returns transaction lines (lines whose visible text starts with
@@ -117,6 +138,7 @@ func bookingsFromPageHTML(pageHTML string, page int) []StatementBooking {
 			TopPt:   ln.top,
 			LeftPt:  ln.left,
 			Text:    ln.text,
+			Betrag:  ParseLineAmount(ln.text),
 		})
 	}
 	return bookings
