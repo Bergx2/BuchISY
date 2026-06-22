@@ -63,6 +63,7 @@
   "field.gross": "Betrag brutto",
   "field.currency": "Währung",
   "field.account": "Gegenkonto",
+  "field.suggestions": "Vorschläge:",
   "field.bankAccount": "Zahlungskonto",
   "field.paymentDate": "Bezahldatum",
   "field.partialPayment": "Teilzahlung",

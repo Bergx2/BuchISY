@@ -218,6 +218,28 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		})
 	})
 
+	// Suggestion chips: shown only when Claude returned account hints.
+	suggestionBox := container.NewHBox()
+	if len(meta.KontoVorschlaege) > 0 {
+		suggestionBox.Add(widget.NewLabel(a.bundle.T("field.suggestions")))
+		for _, k := range meta.KontoVorschlaege {
+			k := k
+			label := fmt.Sprintf("%d", k)
+			if acc, ok := a.chart.Find(k); ok {
+				label = accountLabel(acc)
+			}
+			btn := widget.NewButton(label, func() {
+				selectedAccount = k
+				updateAccountDisplay()
+				if recomputeBooking != nil {
+					recomputeBooking()
+				}
+			})
+			btn.Importance = widget.LowImportance
+			suggestionBox.Add(btn)
+		}
+	}
+
 	// Bank account select
 	bankAccountSelect := widget.NewSelect(a.bankAccountOptionList(), nil)
 	bankAccountSelect.OnChanged = func(string) {
@@ -564,6 +586,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 							fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 						addBankBtn, bankAccountSelect),
 				)),
+			fi("", suggestionBox),
 			fi("Ablage (Jahr/Monat)", container.NewGridWithColumns(2, yearSelect, monthSelect)),
 			fi("", partialPaymentCheck),
 			fi("", ausgangsrechnungCheck),

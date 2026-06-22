@@ -63,6 +63,7 @@
   "field.gross": "Amount Gross",
   "field.currency": "Currency",
   "field.account": "Account",
+  "field.suggestions": "Suggestions:",
   "field.bankAccount": "Payment Account",
   "field.paymentDate": "Payment Date",
   "field.partialPayment": "Partial Payment",
