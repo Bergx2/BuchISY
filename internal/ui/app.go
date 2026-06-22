@@ -237,6 +237,7 @@ func (a *App) startProfile(profile string) {
 	} else {
 		a.chart = chart
 	}
+	a.anthropicExtractor.SetAccountHints(a.chart.All())
 
 	a.bookingRulesStore = core.NewBookingRulesStore(configDir, assets.BuchungsregelnJSON)
 	if rules, err := a.bookingRulesStore.Load(); err != nil {
@@ -1021,9 +1022,13 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 			if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
 				if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 					meta.Gegenkonto = account
+				} else if len(meta.KontoVorschlaege) > 0 {
+					meta.Gegenkonto = meta.KontoVorschlaege[0]
 				} else {
 					meta.Gegenkonto = a.settings.DefaultAccount
 				}
+			} else if len(meta.KontoVorschlaege) > 0 {
+				meta.Gegenkonto = meta.KontoVorschlaege[0]
 			} else {
 				meta.Gegenkonto = a.settings.DefaultAccount
 			}
@@ -1110,9 +1115,13 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 	if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
 		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 			meta.Gegenkonto = account
+		} else if len(meta.KontoVorschlaege) > 0 {
+			meta.Gegenkonto = meta.KontoVorschlaege[0]
 		} else {
 			meta.Gegenkonto = a.settings.DefaultAccount
 		}
+	} else if len(meta.KontoVorschlaege) > 0 {
+		meta.Gegenkonto = meta.KontoVorschlaege[0]
 	} else {
 		meta.Gegenkonto = a.settings.DefaultAccount
 	}
@@ -1167,9 +1176,13 @@ func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta,
 	if a.settings.AutoSelectAccount && meta.Auftraggeber != "" {
 		if account, ok := core.SuggestAccountForCompany(a.companyMap, meta.Auftraggeber, a.settings.DefaultAccount); ok {
 			meta.Gegenkonto = account
+		} else if len(meta.KontoVorschlaege) > 0 {
+			meta.Gegenkonto = meta.KontoVorschlaege[0]
 		} else {
 			meta.Gegenkonto = a.settings.DefaultAccount
 		}
+	} else if len(meta.KontoVorschlaege) > 0 {
+		meta.Gegenkonto = meta.KontoVorschlaege[0]
 	} else {
 		meta.Gegenkonto = a.settings.DefaultAccount
 	}
