@@ -120,6 +120,21 @@ func ComputeCashReport(book CashBook, invoices []CSVRow) ([]CashEntry, float64) 
 	return entries, saldo
 }
 
+// CashCoverage runs the cash report and reports which cash-paid invoices are
+// booked while the running cash balance is negative (i.e. not covered by
+// available cash), plus the closing balance. The map key is the invoice
+// Dateiname. invoices must already be filtered to this cash account.
+func CashCoverage(book CashBook, invoices []CSVRow) (uncovered map[string]bool, closing float64) {
+	entries, closing := ComputeCashReport(book, invoices)
+	uncovered = map[string]bool{}
+	for _, e := range entries {
+		if e.Beleg != "" && e.Saldo < -0.005 {
+			uncovered[e.Beleg] = true
+		}
+	}
+	return uncovered, closing
+}
+
 // parseGermanDate parses a DD.MM.YYYY date.
 func parseGermanDate(s string) (time.Time, bool) {
 	t, err := time.Parse("02.01.2006", strings.TrimSpace(s))

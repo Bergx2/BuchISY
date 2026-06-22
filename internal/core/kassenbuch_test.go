@@ -92,3 +92,28 @@ func TestComputeCashReportUndatableSortsLast(t *testing.T) {
 		t.Errorf("undatable entry should sort last, got %q", entries[1].Beschreibung)
 	}
 }
+
+func TestCashCoverage(t *testing.T) {
+	book := CashBook{Konto: "Kasse", Anfangsbestand: 200}
+	invoices := []CSVRow{
+		{Dateiname: "mueller.pdf", Auftraggeber: "Müller", Bezahldatum: "12.06.2026", Bruttobetrag: 50},
+		{Dateiname: "baecker.pdf", Auftraggeber: "Bäcker", Bezahldatum: "14.06.2026", Bruttobetrag: 180},
+	}
+	uncovered, closing := CashCoverage(book, invoices)
+	// 200 - 50 = 150 (covered); 150 - 180 = -30 (Bäcker uncovered).
+	if uncovered["mueller.pdf"] {
+		t.Errorf("mueller should be covered")
+	}
+	if !uncovered["baecker.pdf"] {
+		t.Errorf("baecker should be uncovered (balance -30)")
+	}
+	if closing > -29.99 || closing < -30.01 {
+		t.Errorf("closing = %v, want -30", closing)
+	}
+	// A deposit that keeps the balance positive → all covered.
+	book2 := CashBook{Konto: "Kasse", Anfangsbestand: 200, Einlagen: []CashDeposit{{Datum: "13.06.2026", Beschreibung: "Einlage", Betrag: 100}}}
+	unc2, _ := CashCoverage(book2, invoices)
+	if len(unc2) != 0 {
+		t.Errorf("with deposit all covered, got %v", unc2)
+	}
+}
