@@ -31,28 +31,60 @@ func InvoiceEURAmount(row CSVRow) float64 {
 	return round2(row.Bruttobetrag)
 }
 
+// MatchConfig tunes the matcher.
+type MatchConfig struct {
+	DateWindowDays      int                 // auto-link only within this many days
+	ForeignTolerancePct float64             // amount tolerance for non-EUR invoices (percent)
+	Aliases             map[string][]string // lowercase supplier → learned statement tokens
+}
+
+// DefaultMatchConfig returns sensible defaults.
+func DefaultMatchConfig() MatchConfig {
+	return MatchConfig{DateWindowDays: 5, ForeignTolerancePct: 1.5}
+}
+
 // MatchInvoiceToStatement ranks the statement lines whose amount matches the
-// invoice (within 0.01) by date proximity + supplier-name overlap, and
-// classifies the outcome.
-func MatchInvoiceToStatement(row CSVRow, lines []StatementBooking) (MatchKind, []ScoredLine) {
+// invoice by date proximity + supplier-name overlap, and classifies the outcome.
+// cfg controls date window, foreign-currency tolerance, and alias token boosts.
+// Credit lines (IstGutschrift=true) are always excluded.
+func MatchInvoiceToStatement(row CSVRow, lines []StatementBooking, cfg MatchConfig) (MatchKind, []ScoredLine) {
 	amount := InvoiceEURAmount(row)
 	if amount <= 0 {
 		return MatchNone, nil
+	}
+	// Amount tolerance: strict for EUR; percentage band for foreign (rate drift).
+	tol := 0.01
+	if row.Waehrung != "" && row.Waehrung != "EUR" && cfg.ForeignTolerancePct > 0 {
+		if band := amount * cfg.ForeignTolerancePct / 100; band > tol {
+			tol = band
+		}
 	}
 	invDate := row.Bezahldatum
 	if invDate == "" {
 		invDate = row.Rechnungsdatum
 	}
 	nameTokens := tokenize(row.Auftraggeber)
+	aliasTokens := cfg.Aliases[strings.ToLower(strings.TrimSpace(row.Auftraggeber))]
+	window := cfg.DateWindowDays
+	if window <= 0 {
+		window = 5
+	}
 
 	var cands []ScoredLine
 	for _, l := range lines {
-		if absf(l.Betrag-amount) > 0.01 {
+		if l.IstGutschrift { // never match an expense to an incoming credit
+			continue
+		}
+		if absf(l.Betrag-amount) > tol {
 			continue
 		}
 		days := dayDistance(invDate, l.Date)
 		dateScore := 1.0 / (1.0 + float64(days)) // 0 days → 1.0, decays
-		nameScore := tokenOverlap(nameTokens, tokenize(l.Text))
+		lineTokens := tokenize(l.Text)
+		nameScore := tokenOverlap(nameTokens, lineTokens)
+		if a := tokenOverlap(aliasTokens, lineTokens); a > nameScore {
+			nameScore = a // learned alias can rescue a no-shared-word supplier
+		}
 		cands = append(cands, ScoredLine{Line: l, Score: dateScore*2 + nameScore})
 	}
 	if len(cands) == 0 {
@@ -60,8 +92,8 @@ func MatchInvoiceToStatement(row CSVRow, lines []StatementBooking) (MatchKind, [
 	}
 	sort.SliceStable(cands, func(i, j int) bool { return cands[i].Score > cands[j].Score })
 
-	// Auto: exactly one amount-match, and it is within ±5 days.
-	if len(cands) == 1 && dayDistance(invDate, cands[0].Line.Date) <= 5 {
+	// Auto: exactly one amount-match, and it is within the configured window.
+	if len(cands) == 1 && dayDistance(invDate, cands[0].Line.Date) <= window {
 		return MatchAuto, cands
 	}
 	return MatchSuggest, cands

@@ -64,7 +64,7 @@ func (a *App) showBelegabgleich() {
 				a.logger.Warn("Belegabgleich: parse statement %s: %v", name, err)
 				continue
 			}
-			kind, cands := core.MatchInvoiceToStatement(row, lines)
+			kind, cands := core.MatchInvoiceToStatement(row, lines, core.DefaultMatchConfig())
 			if kind == core.MatchNone || len(cands) == 0 {
 				continue
 			}
