@@ -30,6 +30,16 @@ func (a *App) cashAccounts() []string {
 	return names
 }
 
+// isCashAccount reports whether the named bank account has type cash.
+func (a *App) isCashAccount(name string) bool {
+	for _, ba := range a.settings.BankAccounts {
+		if ba.Name == name && ba.AccountType == core.AccountTypeCash {
+			return true
+		}
+	}
+	return false
+}
+
 // cashInvoicesForMonth returns the invoices of the given month booked to
 // the named cash account.
 func (a *App) cashInvoicesForMonth(account string, year int, month time.Month) []core.CSVRow {

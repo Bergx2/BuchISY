@@ -902,7 +902,13 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	case "Unterordner":
 		return row.Unterordner
 	case "BuchungRef":
-		return row.BuchungRef
+		if row.BuchungRef != "" {
+			return "✓ " + core.ParseBuchungRef(row.BuchungRef).Display() // linked
+		}
+		if it.app != nil && it.app.isCashAccount(row.Bankkonto) {
+			return "—" // cash: not statement-matched
+		}
+		return "○" // unlinked
 	default:
 		return ""
 	}
