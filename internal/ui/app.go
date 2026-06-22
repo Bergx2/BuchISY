@@ -1,4 +1,4 @@
-﻿// Package ui provides the Fyne-based user interface for BuchISY.
+// Package ui provides the Fyne-based user interface for BuchISY.
 package ui
 
 import (

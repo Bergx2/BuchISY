@@ -2,6 +2,7 @@
 package i18n
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -57,7 +58,7 @@ func Load(assetsDir, lang string) (*Bundle, error) {
 // back to the embedded translations shipped with the binary.
 func (b *Bundle) loadFile(path string, target map[string]string) error {
 	if data, err := os.ReadFile(path); err == nil {
-		return json.Unmarshal(data, &target)
+		return json.Unmarshal(stripBOM(data), &target)
 	}
 
 	// Fallback to embedded assets: derive the relative path from the
@@ -67,7 +68,14 @@ func (b *Bundle) loadFile(path string, target map[string]string) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, &target)
+	return json.Unmarshal(stripBOM(data), &target)
+}
+
+// stripBOM removes a leading UTF-8 byte-order mark, which encoding/json rejects.
+// A BOM can sneak into a translation file via a Windows editor; tolerating it
+// here keeps the whole UI from falling back to raw keys.
+func stripBOM(data []byte) []byte {
+	return bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 }
 
 // embeddedPathFromDisk converts a disk path of the form
