@@ -136,3 +136,62 @@ func TestBookingManuellRoundTrip(t *testing.T) {
 		t.Error("non-manual booking should stay false")
 	}
 }
+
+func TestBuildBookingNewCategories(t *testing.T) {
+	rules, _ := ParseBookingRules([]byte(`{"vorsteuer_konten":{"19":1406,"7":1401},"regeln":[
+		{"kategorie":"standard","name":"S"},
+		{"kategorie":"reverse_charge","name":"RC","rc_satz":19,"konto_vst_rc":1407,"konto_ust_rc":3837},
+		{"kategorie":"geschenke","name":"G","schwelle":35,"konto_abziehbar":6610,"konto_nicht_abziehbar":6620},
+		{"kategorie":"reisekosten","name":"R","default_konto":6650}]}`))
+
+	// reverse_charge: net 100 → expense 100, VSt§13b 19, USt§13b 19, payment 100; balanced.
+	rc, err := BuildBooking(rules, "reverse_charge", []TaxLine{{Netto: 100, SatzProzent: 0, MwStBetrag: 0}}, 0, 6300, 1800)
+	if err != nil || !rc.Balanced() {
+		t.Fatalf("rc not balanced: %+v err=%v", rc, err)
+	}
+	got := sollByKonto(rc)
+	if !almost(got[6300], 100) || !almost(got[1407], 19) {
+		t.Errorf("rc soll: %+v", got)
+	}
+	if !almost(habenByKonto(rc)[3837], 19) || !almost(habenByKonto(rc)[1800], 100) {
+		t.Errorf("rc haben: %+v", habenByKonto(rc))
+	}
+
+	// geschenke ≤ 35: net 20, VAT 3.80 → 6610=20, 1406=3.80, payment 23.80.
+	g1, _ := BuildBooking(rules, "geschenke", []TaxLine{{Netto: 20, SatzProzent: 19, MwStBetrag: 3.80}}, 0, 0, 1800)
+	if !g1.Balanced() || !almost(sollByKonto(g1)[6610], 20) || !almost(sollByKonto(g1)[1406], 3.80) {
+		t.Errorf("geschenke≤35: %+v", g1)
+	}
+
+	// geschenke > 35: net 40, VAT 7.60 → 6620 = 47.60 (gross), no Vorsteuer, payment 47.60.
+	g2, _ := BuildBooking(rules, "geschenke", []TaxLine{{Netto: 40, SatzProzent: 19, MwStBetrag: 7.60}}, 0, 0, 1800)
+	if !g2.Balanced() || !almost(sollByKonto(g2)[6620], 47.60) || sollByKonto(g2)[1406] != 0 {
+		t.Errorf("geschenke>35: %+v", g2)
+	}
+
+	// reisekosten: net 100, VAT 19 → 6650=100, 1406=19, payment 119 (ignores passed expenseAccount).
+	r, _ := BuildBooking(rules, "reisekosten", []TaxLine{{Netto: 100, SatzProzent: 19, MwStBetrag: 19}}, 0, 9999, 1800)
+	if !r.Balanced() || !almost(sollByKonto(r)[6650], 100) || sollByKonto(r)[9999] != 0 {
+		t.Errorf("reisekosten: %+v", r)
+	}
+}
+
+func sollByKonto(b Booking) map[int]float64 {
+	m := map[int]float64{}
+	for _, e := range b.Entries {
+		if e.Soll {
+			m[e.Konto] += e.Betrag
+		}
+	}
+	return m
+}
+
+func habenByKonto(b Booking) map[int]float64 {
+	m := map[int]float64{}
+	for _, e := range b.Entries {
+		if !e.Soll {
+			m[e.Konto] += e.Betrag
+		}
+	}
+	return m
+}

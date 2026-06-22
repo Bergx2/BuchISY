@@ -129,6 +129,24 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 	var entries []BookingEntry
 
 	switch kategorie {
+	case "reverse_charge":
+		net := round2(SumNetto(lines) + trinkgeld)
+		vat := round2(net * rule.RcSatz / 100)
+		return Booking{Entries: []BookingEntry{
+			{Konto: expenseAccount, Betrag: net, Soll: true},
+			{Konto: rule.KontoVStRC, Betrag: vat, Soll: true},
+			{Konto: rule.KontoUStRC, Betrag: vat, Soll: false},
+			{Konto: paymentAccount, Betrag: net, Soll: false},
+		}}, nil
+	case "geschenke":
+		if netTotal > rule.Schwelle {
+			gross := round2(netTotal + SumMwSt(lines))
+			return Booking{Entries: []BookingEntry{
+				{Konto: rule.KontoNichtAbziehbar, Betrag: gross, Soll: true},
+				{Konto: paymentAccount, Betrag: gross, Soll: false},
+			}}, nil
+		}
+		entries = append(entries, BookingEntry{Konto: rule.KontoAbziehbar, Betrag: netTotal, Soll: true})
 	case "bewirtung":
 		abz := round2(netTotal * rule.AbziehbarProzent / 100)
 		nicht := round2(netTotal - abz)
@@ -136,15 +154,15 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 			BookingEntry{Konto: rule.KontoAbziehbar, Betrag: abz, Soll: true},
 			BookingEntry{Konto: rule.KontoNichtAbziehbar, Betrag: nicht, Soll: true},
 		)
+	case "reisekosten", "kfz":
+		entries = append(entries, BookingEntry{Konto: rule.DefaultKonto, Betrag: netTotal, Soll: true})
 	case "standard":
 		entries = append(entries, BookingEntry{Konto: expenseAccount, Betrag: netTotal, Soll: true})
 	default:
-		// A category present in the rules base but without booking logic must
-		// fail loudly rather than silently book as a standard expense.
 		return Booking{}, fmt.Errorf("Buchungskategorie ohne Buchungslogik: %s", kategorie)
 	}
 
-	// Vorsteuer per rate (Soll).
+	// Vorsteuer per rate (Soll), for the categories that fall through here.
 	for _, l := range lines {
 		if l.MwStBetrag == 0 {
 			continue
@@ -154,12 +172,11 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 		}
 	}
 
-	// Payment (Haben) = sum of all Soll entries, ensuring Σ Soll == Σ Haben by construction.
+	// Payment (Haben) = Σ Soll, so the booking always balances.
 	var sollSum float64
 	for _, e := range entries {
 		sollSum += e.Betrag
 	}
 	entries = append(entries, BookingEntry{Konto: paymentAccount, Betrag: round2(sollSum), Soll: false})
-
 	return Booking{Entries: entries}, nil
 }
