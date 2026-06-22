@@ -60,3 +60,38 @@ func TestBookingRulesStoreCorruptFileFallsBackToBundled(t *testing.T) {
 		t.Error("fallback should expose the bundled standard rule")
 	}
 }
+
+func TestBookingRulesStoreMergesNewBundledCategories(t *testing.T) {
+	dir := t.TempDir()
+	// A previously-saved profile (Boomstraat-style): custom Vorsteuer 19→1576,
+	// only the "standard" rule, none of the newer bundled categories.
+	saved := `{"vorsteuer_konten":{"19":1576},"regeln":[{"kategorie":"standard","name":"Standard"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "buchungsregeln.json"), []byte(saved), 0644); err != nil {
+		t.Fatal(err)
+	}
+	bundled := []byte(`{"vorsteuer_konten":{"19":1406,"7":1401},"regeln":[` +
+		`{"kategorie":"standard","name":"S"},` +
+		`{"kategorie":"geschenke","name":"G","schwelle":35,"konto_abziehbar":6610,"konto_nicht_abziehbar":6620}]}`)
+	r, err := NewBookingRulesStore(dir, bundled).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k, _ := r.VorsteuerKonto(19); k != 1576 {
+		t.Errorf("saved override VSt 19%% = %d, want 1576", k)
+	}
+	if k, _ := r.VorsteuerKonto(7); k != 1401 {
+		t.Errorf("bundled-only VSt 7%% not merged: got %d, want 1401", k)
+	}
+	if g, ok := r.Rule("geschenke"); !ok || g.KontoAbziehbar != 6610 {
+		t.Errorf("new bundled category 'geschenke' not merged: %+v ok=%v", g, ok)
+	}
+	n := 0
+	for _, x := range r.Regeln {
+		if x.Kategorie == "standard" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("standard rule duplicated: %d copies", n)
+	}
+}

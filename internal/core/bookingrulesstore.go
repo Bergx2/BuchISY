@@ -24,16 +24,46 @@ func NewBookingRulesStore(configDir string, bundled []byte) *BookingRulesStore {
 }
 
 // Load returns the profile's rules (its buchungsregeln.json) if present,
-// otherwise the bundled defaults.
+// otherwise the bundled defaults. A saved file's values win, but categories /
+// Vorsteuer rates introduced in a newer bundled base are merged in, so an
+// existing profile still gains new booking categories without losing its
+// overrides.
 func (s *BookingRulesStore) Load() (*BookingRules, error) {
+	bundled, berr := ParseBookingRules(s.bundled)
 	if data, err := os.ReadFile(s.path); err == nil {
-		if r, perr := ParseBookingRules(data); perr == nil {
-			return r, nil
+		if saved, perr := ParseBookingRules(data); perr == nil {
+			if berr == nil {
+				return mergeBundledIntoSaved(saved, bundled), nil
+			}
+			return saved, nil
 		}
 		// A corrupt profile file must not break all auto-bookings — fall back
 		// to the bundled defaults rather than returning empty rules.
 	}
-	return ParseBookingRules(s.bundled)
+	return bundled, berr
+}
+
+// mergeBundledIntoSaved keeps every value from saved and fills in only what the
+// bundled base adds: Vorsteuer rates and category rules the saved file lacks.
+func mergeBundledIntoSaved(saved, bundled *BookingRules) *BookingRules {
+	if saved.VorsteuerKonten == nil {
+		saved.VorsteuerKonten = map[string]int{}
+	}
+	for satz, konto := range bundled.VorsteuerKonten {
+		if _, ok := saved.VorsteuerKonten[satz]; !ok {
+			saved.VorsteuerKonten[satz] = konto
+		}
+	}
+	have := map[string]bool{}
+	for _, r := range saved.Regeln {
+		have[r.Kategorie] = true
+	}
+	for _, r := range bundled.Regeln {
+		if !have[r.Kategorie] {
+			saved.Regeln = append(saved.Regeln, r)
+		}
+	}
+	return saved
 }
 
 // Save writes the rules to the profile's buchungsregeln.json.
