@@ -23,7 +23,11 @@ type belegSuggestion struct {
 // showBelegabgleich runs the reconciliation for the current month:
 // auto-links unambiguous matches and presents the rest as a confirm-list.
 func (a *App) showBelegabgleich() {
-	rows := a.collectInvoiceRows(a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth))
+	rows, err := a.dbRepo.List(fmt.Sprintf("%04d", a.currentYear), fmt.Sprintf("%02d", int(a.currentMonth)))
+	if err != nil {
+		a.showError("Belegabgleich", err.Error())
+		return
+	}
 
 	accountType := func(name string) string {
 		for _, ba := range a.settings.BankAccounts {
@@ -51,6 +55,7 @@ func (a *App) showBelegabgleich() {
 		bestKind := core.MatchNone
 		var bestCandidate core.ScoredLine
 		bestFile := ""
+		autoCount := 0
 
 		for _, name := range a.listStatements(row.Bankkonto) {
 			fullPath := filepath.Join(a.statementFolder(row.Bankkonto), name)
@@ -64,6 +69,10 @@ func (a *App) showBelegabgleich() {
 				continue
 			}
 			top := cands[0]
+
+			if kind == core.MatchAuto {
+				autoCount++
+			}
 
 			// Prefer MatchAuto with a single candidate; else best MatchSuggest by top score.
 			switch {
@@ -87,6 +96,12 @@ func (a *App) showBelegabgleich() {
 					bestFile = name
 				}
 			}
+		}
+
+		// Two+ statement files each produced an unambiguous match for the same
+		// invoice — that is ambiguous across files; never silently auto-link.
+		if bestKind == core.MatchAuto && autoCount >= 2 {
+			bestKind = core.MatchSuggest
 		}
 
 		switch bestKind {
