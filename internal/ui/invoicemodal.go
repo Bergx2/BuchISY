@@ -262,13 +262,13 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Currency conversion fields (shown only for non-default currency)
 	netEUREntry := widget.NewEntry()
 	if meta.BetragNetto_EUR > 0 {
-		netEUREntry.SetText(fmt.Sprintf("%.2f", meta.BetragNetto_EUR))
+		netEUREntry.SetText(formatDecimal(meta.BetragNetto_EUR, a.settings.DecimalSeparator))
 	}
 	netEUREntry.SetPlaceHolder(a.bundle.T("field.net_eur"))
 
 	feeEntry := widget.NewEntry()
 	if meta.Gebuehr > 0 {
-		feeEntry.SetText(fmt.Sprintf("%.2f", meta.Gebuehr))
+		feeEntry.SetText(formatDecimal(meta.Gebuehr, a.settings.DecimalSeparator))
 	}
 	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
 
@@ -298,9 +298,9 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		}
 		c := core.ConvertForeignPayment(brutto, netto, kurs, pct)
 		if kurs > 0 {
-			netEUREntry.SetText(fmt.Sprintf("%.2f", c.NettoEUR))
+			netEUREntry.SetText(formatDecimal(c.NettoEUR, a.settings.DecimalSeparator))
 			if pct > 0 {
-				feeEntry.SetText(fmt.Sprintf("%.2f", c.GebuehrEUR))
+				feeEntry.SetText(formatDecimal(c.GebuehrEUR, a.settings.DecimalSeparator))
 			}
 			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", fmt.Sprintf("%.2f", c.GesamtEUR)))
 		} else {
