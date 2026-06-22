@@ -35,6 +35,33 @@ type stmtLine struct {
 	Line core.StatementBooking
 }
 
+// fileLineGroup holds one statement file's lines for per-file matching.
+type fileLineGroup struct {
+	file  string
+	lines []core.StatementBooking
+}
+
+// unclaimedByFile groups a per-account cache's not-yet-claimed lines by source
+// file (preserving encounter order), so per-file matching keeps each line's
+// file unambiguous — a (page,lineIdx) pair repeats across statement files.
+func unclaimedByFile(cache []stmtLine, claimed map[string]bool, refKey func(string, int, int) string) []fileLineGroup {
+	idxOf := map[string]int{}
+	var out []fileLineGroup
+	for _, sl := range cache {
+		if claimed[refKey(sl.File, sl.Line.Page, sl.Line.LineIdx)] {
+			continue
+		}
+		idx, seen := idxOf[sl.File]
+		if !seen {
+			idx = len(out)
+			idxOf[sl.File] = idx
+			out = append(out, fileLineGroup{file: sl.File})
+		}
+		out[idx].lines = append(out[idx].lines, sl.Line)
+	}
+	return out
+}
+
 // matchConfig builds a core.MatchConfig from the current settings,
 // falling back to defaults for any field left at zero.
 func (a *App) matchConfig() core.MatchConfig {
@@ -339,26 +366,17 @@ func (a *App) showBelegabgleich() {
 		}
 
 		// Partial payment suggestions for this invoice (Teilzahlung=true).
+		// Match per file so each candidate's source file is unambiguous (a
+		// (page,lineIdx) pair repeats across statement files).
 		if row.Teilzahlung {
-			var allLines []core.StatementBooking
-			for _, sl := range stmtCache[row.Bankkonto] {
-				k := refKey(sl.File, sl.Line.Page, sl.Line.LineIdx)
-				if !claimed[k] {
-					allLines = append(allLines, sl.Line)
+			var swf []scoredWithFile
+			for _, sl := range unclaimedByFile(stmtCache[row.Bankkonto], claimed, refKey) {
+				for _, c := range core.PartialPaymentLines(row, sl.lines) {
+					swf = append(swf, scoredWithFile{scored: c, file: sl.file})
 				}
 			}
-			if cands := core.PartialPaymentLines(row, allLines); len(cands) > 0 {
-				// Build scoredWithFile candidates — need file per line.
-				lineToFile := map[string]string{} // "page:lineIdx" → file
-				for _, sl := range stmtCache[row.Bankkonto] {
-					lkey := fmt.Sprintf("%d:%d", sl.Line.Page, sl.Line.LineIdx)
-					lineToFile[lkey] = sl.File
-				}
-				swf := make([]scoredWithFile, 0, len(cands))
-				for _, c := range cands {
-					lkey := fmt.Sprintf("%d:%d", c.Line.Page, c.Line.LineIdx)
-					swf = append(swf, scoredWithFile{scored: c, file: lineToFile[lkey]})
-				}
+			if len(swf) > 0 {
+				sort.SliceStable(swf, func(i, j int) bool { return swf[i].scored.Score > swf[j].scored.Score })
 				partialSuggestions = append(partialSuggestions, partialSuggestion{row: row, candidates: swf})
 			}
 		}
@@ -366,15 +384,6 @@ func (a *App) showBelegabgleich() {
 		// Group detection per account (run once per account).
 		if !groupProcessedAcct[row.Bankkonto] {
 			groupProcessedAcct[row.Bankkonto] = true
-
-			// Unclaimed lines for this account.
-			var unclaimedLines []core.StatementBooking
-			for _, sl := range stmtCache[row.Bankkonto] {
-				k := refKey(sl.File, sl.Line.Page, sl.Line.LineIdx)
-				if !claimed[k] {
-					unclaimedLines = append(unclaimedLines, sl.Line)
-				}
-			}
 
 			// Unmatched invoices for this account.
 			var unmatchedInvoices []core.CSVRow
@@ -392,19 +401,23 @@ func (a *App) showBelegabgleich() {
 				unmatchedInvoices = append(unmatchedInvoices, r2)
 			}
 
-			groups := core.FindGroupedPayments(unmatchedInvoices, unclaimedLines, a.matchConfig())
-			for gi := range groups {
-				// Fill File from the stmt cache.
-				g := groups[gi]
-				lineKey := fmt.Sprintf("%d:%d", g.Line.Page, g.Line.LineIdx)
-				for _, sl := range stmtCache[row.Bankkonto] {
-					k := fmt.Sprintf("%d:%d", sl.Line.Page, sl.Line.LineIdx)
-					if k == lineKey {
-						g.File = sl.File
-						break
+			// Detect groups PER FILE so each group's source file is unambiguous,
+			// and don't reuse an invoice across files' groups.
+			groupedInvoices := map[string]bool{}
+			for _, sl := range unclaimedByFile(stmtCache[row.Bankkonto], claimed, refKey) {
+				var avail []core.CSVRow
+				for _, inv := range unmatchedInvoices {
+					if !groupedInvoices[inv.Dateiname] {
+						avail = append(avail, inv)
 					}
 				}
-				groupSuggestions = append(groupSuggestions, groupSuggestion{group: g})
+				for _, g := range core.FindGroupedPayments(avail, sl.lines, a.matchConfig()) {
+					g.File = sl.file
+					for _, dn := range g.Dateinamen {
+						groupedInvoices[dn] = true
+					}
+					groupSuggestions = append(groupSuggestions, groupSuggestion{group: g})
+				}
 			}
 		}
 	}

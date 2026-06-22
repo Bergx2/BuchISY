@@ -111,3 +111,17 @@ func TestMatchConfigForeignToleranceAndCredit(t *testing.T) {
 		t.Errorf("alias match failed: %v", k)
 	}
 }
+
+func TestFindGroupedPaymentsTriple(t *testing.T) {
+	cfg := DefaultMatchConfig()
+	invoices := []CSVRow{
+		{Dateiname: "a.pdf", Bezahldatum: "10.01.2026", Bruttobetrag: 20, Waehrung: "EUR"},
+		{Dateiname: "b.pdf", Bezahldatum: "10.01.2026", Bruttobetrag: 30, Waehrung: "EUR"},
+		{Dateiname: "c.pdf", Bezahldatum: "10.01.2026", Bruttobetrag: 50, Waehrung: "EUR"},
+	}
+	lines := []StatementBooking{{Page: 0, LineIdx: 1, Date: "10.01.2026", Text: "Sammel 100,00", Betrag: 100}}
+	groups := FindGroupedPayments(invoices, lines, cfg)
+	if len(groups) != 1 || len(groups[0].Dateinamen) != 3 {
+		t.Fatalf("expected one 3-invoice group summing to 100, got %+v", groups)
+	}
+}
