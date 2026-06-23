@@ -244,6 +244,7 @@
   "settings.rules.kfz": "Kfz-Konto",
 
   "report.pdf": "PDF",
+  "report.xml": "XML",
 
   "controlling.title": "Controlling",
   "controlling.heading": "Gebuchte Summen je Konto",

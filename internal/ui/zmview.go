@@ -95,12 +95,28 @@ func (a *App) showZMDialog() {
 		a.savePDF("ZM_"+periodStr+".pdf", data)
 	})
 
+	xmlBtn := widget.NewButton(a.bundle.T("report.xml"), func() {
+		periodStr := fmt.Sprintf("%04d", a.currentYear)
+		switch period {
+		case 0:
+			periodStr = fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+		case 1:
+			periodStr = fmt.Sprintf("%04d-Q%d", a.currentYear, (int(a.currentMonth)-1)/3+1)
+		}
+		data, err := core.BuildZMXML(zm, periodStr, a.settings.OwnVATID)
+		if err != nil {
+			a.showError(a.bundle.T("error.processing.title"), err.Error())
+			return
+		}
+		a.savePDF("ZM_"+periodStr+".xml", data)
+	})
+
 	headingLabel := widget.NewLabelWithStyle(a.bundle.T("zm.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	headerItems := []fyne.CanvasObject{headingLabel}
 	if a.settings.OwnVATID != "" {
 		headerItems = append(headerItems, widget.NewLabel("USt-IdNr: "+a.settings.OwnVATID))
 	}
-	headerItems = append(headerItems, container.NewBorder(nil, nil, nil, pdfBtn, toggle))
+	headerItems = append(headerItems, container.NewBorder(nil, nil, nil, container.NewHBox(xmlBtn, pdfBtn), toggle))
 	header := container.NewVBox(headerItems...)
 
 	content := container.NewBorder(header, nil, nil, nil, scroll)

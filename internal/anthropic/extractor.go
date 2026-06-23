@@ -33,7 +33,7 @@ Regeln:
 
 - Antworte nur mit JSON, ohne Prosa.
 - Wenn unsicher: Feld auf null setzen, nicht raten.
-- auftraggeber: Verwende den Aussteller (Vendor), nicht den Rechnungsempfänger.
+- auftraggeber: Verwende immer den GESCHÄFTSPARTNER, nicht den App-Nutzer selbst. Bei einer Eingangsrechnung ist das der Aussteller (Vendor/Lieferant). Bei einer Ausgangsrechnung (siehe ausgangsrechnung=true, der Nutzer ist Aussteller) ist es der RechnungsEMPFÄNGER (Kunde) — nicht der Aussteller.
 - rechnungsnummer: Suche auf dem gesamten Beleg (auch Folgeseiten). Auch als "Belegnummer", "Beleg-Nr.", "Quittungsnummer", "Bon-Nr.", "Receipt No." oder "Transaktionsnummer" gekennzeichnete Nummern zählen als rechnungsnummer.
 - rechnungsdatum: Bevorzuge das Feld nahe "Rechnung/Rechnungsdatum/Datum". Normalisiere nach dd.MM.yyyy (deutsches Format).
 - steuerzeilen: je MwSt.-Satz eine Zeile (satz %, netto, mwst). Bei nur einem Satz genau eine Zeile. trinkgeld: separat ohne MwSt., 0 wenn keins.
