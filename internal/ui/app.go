@@ -671,8 +671,11 @@ func (a *App) buildUI() fyne.CanvasObject {
 
 	// Header (top bar + filter + chip row) so the search input lives at
 	// window-level instead of nested above the table.
+	// The "?" legend button sits to the right of the filter entry so users
+	// can look up the ✓/⚠/○ symbol meanings without leaving the view.
 	filterRow := container.NewBorder(nil, nil,
-		a.invoiceTable.ChipRow(), nil,
+		a.invoiceTable.ChipRow(),
+		a.invoiceTable.LegendButton(),
 		a.invoiceTable.FilterEntry())
 
 	// Config-hint banners: one slim dismissible row per unmet precondition.

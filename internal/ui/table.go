@@ -34,6 +34,7 @@ type hoverLabel struct {
 	tooltipShown   bool
 	lastTooltipPos fyne.Position
 	onTap          func()
+	alwaysTooltip  bool
 }
 
 func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLabel {
@@ -50,9 +51,9 @@ func (hl *hoverLabel) MouseIn(_ *desktop.MouseEvent) {
 	if hl.tooltip == "" || hl.onHover == nil || hl.tooltipShown {
 		return
 	}
-	// Only surface the tooltip when the cell's text actually got
-	// truncated — pointless (and visually noisy) when everything fits.
-	if !hl.isTruncated() {
+	// Show when the text is truncated, or when the cell has opted in to
+	// an always-on enriched tooltip (e.g. Gegenkonto shows account name+type).
+	if !hl.alwaysTooltip && !hl.isTruncated() {
 		return
 	}
 	// Anchor the tooltip just below the label rather than at the cursor:
@@ -262,6 +263,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			case 0:
 				// Edit: pencil icon, tooltip "Bearbeiten", opens edit dialog.
 				hoverLabel.Alignment = fyne.TextAlignCenter
+				hoverLabel.alwaysTooltip = false // recycled cell may carry a status flag
 				hoverLabel.SetText("✏️")
 				hoverLabel.tooltip = "Bearbeiten"
 				dataRow := id.Row
@@ -276,6 +278,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				// default app (outside BuchISY). Every other cell still
 				// opens the edit/preview dialog.
 				hoverLabel.Alignment = fyne.TextAlignCenter
+				hoverLabel.alwaysTooltip = false // recycled cell may carry a status flag
 				ext := strings.ToUpper(strings.TrimPrefix(
 					filepath.Ext(it.filtered[id.Row].Dateiname), "."))
 				hoverLabel.SetText(ext)
@@ -295,10 +298,14 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 					hoverLabel.Alignment = fyne.TextAlignLeading
 					hoverLabel.SetText("")
 					hoverLabel.tooltip = ""
+					hoverLabel.alwaysTooltip = false
 					hoverLabel.onTap = nil
 					return
 				}
 				colID := it.columnOrder[colIndex]
+
+				// Reset the always-on flag so recycled cells don't leak it.
+				hoverLabel.alwaysTooltip = false
 
 				if numericColumns[colID] {
 					hoverLabel.Alignment = fyne.TextAlignTrailing
@@ -313,6 +320,62 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				// only shows it when the text is actually truncated
 				// (see hoverLabel.MouseIn / isTruncated).
 				hoverLabel.tooltip = cellValue
+
+				// Gegenkonto: enrich tooltip with account name+type (always shown).
+				// getCellValue already returns the "Nummer — Name" display text.
+				if colID == "Gegenkonto" && it.app != nil && it.app.chart != nil {
+					row := it.filtered[id.Row]
+					if row.Gegenkonto != 0 {
+						if acc, ok := it.app.chart.Find(row.Gegenkonto); ok {
+							hoverLabel.tooltip = core.AccountTooltip(acc)
+							hoverLabel.alwaysTooltip = true
+						}
+					}
+				}
+
+				// Status columns: Klartext tooltip always shown (alwaysTooltip).
+				// Symbol set in use: ✓ linked/confirmed/yes · ⚠ uncovered · ○ open/unset.
+				if id.Row < len(it.filtered) {
+					row := it.filtered[id.Row]
+					switch colID {
+					case "BuchungRef":
+						switch {
+						case row.BuchungRef == core.CashConfirmedRef:
+							hoverLabel.tooltip = it.bundle.T("status.cashConfirmed")
+							hoverLabel.alwaysTooltip = true
+						case row.BuchungRef != "":
+							ref := core.ParseBuchungRef(row.BuchungRef)
+							hoverLabel.tooltip = it.bundle.T("status.linked") + " — " + ref.Display()
+							hoverLabel.alwaysTooltip = true
+						case it.app != nil && it.app.isCashAccount(row.Bankkonto):
+							if it.app.cashUncovered[row.Dateiname] {
+								hoverLabel.tooltip = it.bundle.T("status.cashUncovered")
+							} else {
+								hoverLabel.tooltip = it.bundle.T("status.cashCovered")
+							}
+							hoverLabel.alwaysTooltip = true
+						default:
+							// "○" — open / not reconciled
+							hoverLabel.tooltip = it.bundle.T("status.open")
+							hoverLabel.alwaysTooltip = true
+						}
+					case "Teilzahlung":
+						if row.Teilzahlung {
+							hoverLabel.tooltip = it.bundle.T("status.partial")
+							hoverLabel.alwaysTooltip = true
+						}
+					case "Ausgangsrechnung":
+						if row.Ausgangsrechnung {
+							hoverLabel.tooltip = it.bundle.T("status.outgoing")
+							hoverLabel.alwaysTooltip = true
+						}
+					case "HatAnhaenge":
+						if row.HatAnhaenge {
+							hoverLabel.tooltip = it.bundle.T("status.attachment")
+							hoverLabel.alwaysTooltip = true
+						}
+					}
+				}
 
 				// Every data cell is click-to-edit. Captured `dataRow` so
 				// the closure stays valid when Fyne recycles the cell widget.
@@ -431,6 +494,51 @@ func (it *InvoiceTable) FilterEntry() *widget.Entry { return it.filterEntry }
 
 // ChipRow exposes the chip strip for the same reason.
 func (it *InvoiceTable) ChipRow() *fyne.Container { return it.chipRow }
+
+// LegendButton returns a small "?"-button that opens a symbol-legend
+// popup. Place it in the filter row (top bar) so users can always
+// look up what ✓ / ⚠ / ○ mean.
+func (it *InvoiceTable) LegendButton() *widget.Button {
+	return widget.NewButton("?", func() {
+		if it.window == nil {
+			return
+		}
+		title := widget.NewLabelWithStyle(
+			it.bundle.T("legend.title"),
+			fyne.TextAlignLeading,
+			fyne.TextStyle{Bold: true},
+		)
+		// Each row: symbol label + meaning label side by side.
+		row := func(sym, key string) *fyne.Container {
+			symLbl := widget.NewLabelWithStyle(sym, fyne.TextAlignCenter, fyne.TextStyle{})
+			symLbl.Wrapping = fyne.TextWrapOff
+			meanLbl := widget.NewLabel(it.bundle.T(key))
+			meanLbl.Wrapping = fyne.TextWrapWord
+			return container.NewBorder(nil, nil, symLbl, nil, meanLbl)
+		}
+		rows := container.NewVBox(
+			title,
+			widget.NewSeparator(),
+			row("✓", "legend.linked"),
+			row("✓", "legend.cashConfirmed"),
+			row("✓", "legend.cashCovered"),
+			row("⚠", "legend.uncovered"),
+			row("○", "legend.open"),
+			row("✓", "legend.partial"),
+			row("✓", "legend.outgoing"),
+			row("✓", "legend.attachment"),
+		)
+		var popup *widget.PopUp
+		closeBtn := widget.NewButton(it.bundle.T("common.close"), func() {
+			if popup != nil {
+				popup.Hide()
+			}
+		})
+		content := container.NewVBox(rows, widget.NewSeparator(), container.NewCenter(closeBtn))
+		popup = widget.NewModalPopUp(container.NewPadded(content), it.window.Canvas())
+		popup.Show()
+	})
+}
 
 // refreshChips rebuilds the chip row so the active chip is shown
 // HighImportance and the others LowImportance.
@@ -885,6 +993,11 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		if row.Gegenkonto == 0 {
 			return ""
 		}
+		if it.app != nil && it.app.chart != nil {
+			if acc, ok := it.app.chart.Find(row.Gegenkonto); ok {
+				return core.AccountDisplay(acc)
+			}
+		}
 		return fmt.Sprintf("%d", row.Gegenkonto)
 	case "Bankkonto":
 		return row.Bankkonto
@@ -913,8 +1026,11 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		}
 		return ""
 	case "HatAnhaenge":
+		// Symbol set: ✓ (yes/linked/confirmed) · ⚠ (warning/uncovered) · ○ (open/none)
+		// HatAnhaenge uses ✓ for consistency; colour-emoji like 📎 are avoided
+		// because the Fyne system font may not render them reliably.
 		if row.HatAnhaenge {
-			return "📎"
+			return "✓"
 		}
 		return ""
 	case "AnzahlAnhaenge":
