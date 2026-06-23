@@ -53,6 +53,31 @@ func TestDATEVBelegnummerFields(t *testing.T) {
 	}
 }
 
+func TestDATEVRevenueRow(t *testing.T) {
+	rows := []CSVRow{{
+		Rechnungsdatum: "10.12.2025", Belegnummer: "2025-0002", Auftraggeber: "Symeo",
+		Ausgangsrechnung: true,
+		Buchung: Booking{Entries: []BookingEntry{
+			{Konto: 1200, Betrag: 7735, Soll: true},
+			{Konto: 8400, Betrag: 6500, Soll: false},
+			{Konto: 1776, Betrag: 1235, Soll: false},
+		}},
+	}}
+	data, exported, skipped := BuildDATEVStapel(DATEVHeader{WJBeginn: "20250101"}, rows)
+	if exported != 2 || skipped != 0 {
+		t.Fatalf("exported=%d skipped=%d (want 2,0)", exported, skipped)
+	}
+	s := string(data)
+	// Erlös line: 6500 credited (H) on 8400 against base 1200.
+	if !strings.Contains(s, `6500,00;"H";"EUR";;;;8400;1200;;1012;"2025-0002"`) {
+		t.Errorf("revenue Erlös row missing:\n%s", s)
+	}
+	// USt line: 1235 credited (H) on 1776 against 1200.
+	if !strings.Contains(s, `1235,00;"H";"EUR";;;;1776;1200;;1012;"2025-0002"`) {
+		t.Errorf("revenue USt row missing:\n%s", s)
+	}
+}
+
 func TestDatevCleanRuneSafe(t *testing.T) {
 	// 40 'ü' runes (80 bytes); truncating to 36 runes must stay valid UTF-8.
 	in := strings.Repeat("ü", 40)
