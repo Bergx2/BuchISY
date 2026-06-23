@@ -117,27 +117,45 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// BuildControllingPDF renders per-account summed amounts as a portrait table.
-func BuildControllingPDF(sums []AccountSum, total float64, title string) ([]byte, error) {
+// BuildControllingPDF renders a Controlling report with two sections
+// (Einnahmen and Ausgaben), each listing per-account sums plus a section
+// total, followed by a bold Saldo line.
+func BuildControllingPDF(c Controlling, title string) ([]byte, error) {
 	pdf, tr := newReportPDF(title, "P")
 
 	headers := []string{"Konto", "Bezeichnung", "Summe"}
 	widths := []float64{25, 120, 35}
-	pdfTableHeader(pdf, tr, headers, widths)
 
-	for _, s := range sums {
-		pdfPageBreak(pdf, tr, headers, widths, 6)
-		pdf.CellFormat(widths[0], 6, tr(fmt.Sprintf("%d", s.Konto)), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(widths[1], 6, tr(truncate(s.Name, 70)), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(widths[2], 6, tr(pdfAmount(s.Summe)), "1", 0, "R", false, 0, "")
-		pdf.Ln(6)
+	renderSection := func(heading string, sums []AccountSum, total float64) {
+		pdf.SetFont("Arial", "B", 10)
+		pdf.CellFormat(0, 8, tr(heading), "", 1, "L", false, 0, "")
+		pdf.SetFont("Arial", "", 9)
+		pdfTableHeader(pdf, tr, headers, widths)
+		for _, s := range sums {
+			pdfPageBreak(pdf, tr, headers, widths, 6)
+			pdf.CellFormat(widths[0], 6, tr(fmt.Sprintf("%d", s.Konto)), "1", 0, "L", false, 0, "")
+			pdf.CellFormat(widths[1], 6, tr(truncate(s.Name, 70)), "1", 0, "L", false, 0, "")
+			pdf.CellFormat(widths[2], 6, tr(pdfAmount(s.Summe)), "1", 0, "R", false, 0, "")
+			pdf.Ln(6)
+		}
+		pdfPageBreak(pdf, tr, headers, widths, 7)
+		pdf.SetFont("Arial", "B", 9)
+		pdf.CellFormat(widths[0]+widths[1], 7, tr("Summe"), "1", 0, "R", false, 0, "")
+		pdf.CellFormat(widths[2], 7, tr(pdfAmount(round2(total))), "1", 0, "R", false, 0, "")
+		pdf.Ln(7)
+		pdf.SetFont("Arial", "", 9)
+		pdf.Ln(3)
 	}
 
-	pdfPageBreak(pdf, tr, headers, widths, 7)
-	pdf.SetFont("Arial", "B", 9)
-	pdf.CellFormat(widths[0]+widths[1], 7, tr("Summe"), "1", 0, "R", false, 0, "")
-	pdf.CellFormat(widths[2], 7, tr(pdfAmount(round2(total))), "1", 0, "R", false, 0, "")
-	pdf.Ln(7)
+	renderSection("Einnahmen", c.Einnahmen, c.EinnahmenGesamt)
+	renderSection("Ausgaben", c.Ausgaben, c.AusgabenGesamt)
+
+	// Bold Saldo line.
+	pdfPageBreak(pdf, tr, headers, widths, 8)
+	pdf.SetFont("Arial", "B", 10)
+	pdf.CellFormat(widths[0]+widths[1], 8, tr("Saldo"), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[2], 8, tr(pdfAmount(c.Saldo)), "1", 0, "R", false, 0, "")
+	pdf.Ln(8)
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

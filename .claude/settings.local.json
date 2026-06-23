@@ -9,7 +9,15 @@
       "Bash(git add:*)",
       "WebFetch(domain:github.com)",
       "Bash(/opt/homebrew/bin/go get:*)",
-      "WebSearch"
+      "WebSearch",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\istok\\\\Desktop\\\\Dev\\\\BuchISY\\\\.claude\\\\worktrees\\\\agent-aa47fb6d37d36713f\\\\internal\\\\core\\\\\" | Select-Object -First 30 | ForEach-Object { $_.Name })",
+      "PowerShell(New-Item *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\istok\\\\Desktop\\\\Dev\\\\BuchISY\\\\.claude\\\\worktrees\\\\agent-aa47fb6d37d36713f\\\\\" -Hidden | ForEach-Object { $_.Name })",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\istok\\\\Desktop\\\\Dev\\\\BuchISY\\\\internal\\\\ui\\\\belegabgleichview.go\" | Select-Object -Index \\(96..105\\))",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\istok\\\\Desktop\\\\Dev\\\\BuchISY\\\\internal\\\\ui\\\\belegabgleichview.go\" | Select-Object -Index \\(188..230\\))",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\istok\\\\Desktop\\\\Dev\\\\BuchISY\\\\internal\\\\ui\\\\belegabgleichview.go\" | Select-Object -Index \\(540..560\\))",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\istok\\\\Desktop\\\\Dev\\\\BuchISY\\\\internal\\\\ui\\\\belegabgleichview.go\" | Select-Object -Index \\(644..674\\))",
+      "PowerShell(Get-Content \"C:\\\\Users\\\\istok\\\\Desktop\\\\Dev\\\\BuchISY\\\\internal\\\\ui\\\\belegabgleichview.go\" | Select-Object -Index \\(713..737\\))"
     ],
     "deny": [],
     "ask": []

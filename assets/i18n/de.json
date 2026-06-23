@@ -248,6 +248,9 @@
   "controlling.title": "Controlling",
   "controlling.heading": "Gebuchte Summen je Konto",
   "controlling.total": "Summe: %s €",
+  "controlling.einnahmen": "Einnahmen",
+  "controlling.ausgaben": "Ausgaben",
+  "controlling.saldo": "Saldo: %s €",
 
   "ustva.title": "USt-Voranmeldung",
   "ustva.heading": "Umsatzsteuer-Voranmeldung",
@@ -285,5 +288,12 @@
 
   "reconcile.lineTaken": "Auszugsposition bereits verknüpft",
 
-  "modal.erloeskonto": "Erlöskonto"
+  "modal.erloeskonto": "Erlöskonto",
+
+  "zm.title": "Zusammenfassende Meldung",
+  "zm.heading": "Zusammenfassende Meldung",
+  "zm.kontrollsumme": "Kontrollsumme: %s €",
+  "zm.art.sonstige": "Sonstige Leistung",
+  "zm.quarter": "Quartal",
+  "zm.empty": "Keine EU-Umsätze im Zeitraum"
 }
