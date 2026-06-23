@@ -78,6 +78,10 @@ type App struct {
 	theme        *buchisyTheme
 	assetsDir    string
 	profile      string
+
+	// Zoom feedback overlay (Task 1)
+	scalePopup  *widget.PopUp
+	scaleTimer  *time.Timer
 }
 
 // New creates the BuchISY application and shows the profile picker.
@@ -482,6 +486,55 @@ func isOverObject(absPos fyne.Position, obj fyne.CanvasObject) bool {
 		absPos.Y >= pos.Y && absPos.Y < pos.Y+size.Height
 }
 
+// showScaleOverlay displays a brief "125 %" centered popup that auto-hides
+// after ~900 ms. Rapid zooming reuses a single PopUp and replaces the timer
+// so only the most-recent timer dismisses it.
+func (a *App) showScaleOverlay() {
+	if a.window == nil {
+		return
+	}
+	txt := fmt.Sprintf("%.0f %%", a.theme.Scale()*100)
+	canvas := a.window.Canvas()
+
+	lbl := widget.NewLabel(txt)
+	lbl.TextStyle = fyne.TextStyle{Bold: true}
+
+	if a.scalePopup == nil {
+		padded := container.NewPadded(lbl)
+		a.scalePopup = widget.NewPopUp(padded, canvas)
+	} else {
+		// Reuse popup — update the label text in-place.
+		if padded, ok := a.scalePopup.Content.(*fyne.Container); ok {
+			if existing, ok2 := padded.Objects[0].(*widget.Label); ok2 {
+				existing.SetText(txt)
+			}
+		}
+		a.scalePopup.Show()
+	}
+
+	// Center the popup on the canvas.
+	canvasSize := canvas.Size()
+	popupSize := a.scalePopup.MinSize()
+	a.scalePopup.Move(fyne.NewPos(
+		(canvasSize.Width-popupSize.Width)/2,
+		(canvasSize.Height-popupSize.Height)/2,
+	))
+	a.scalePopup.Show()
+
+	// Cancel any previous timer so a stale hide cannot close a freshly shown popup.
+	if a.scaleTimer != nil {
+		a.scaleTimer.Stop()
+	}
+	popup := a.scalePopup
+	a.scaleTimer = time.AfterFunc(900*time.Millisecond, func() {
+		fyne.Do(func() {
+			if a.scalePopup == popup {
+				a.scalePopup.Hide()
+			}
+		})
+	})
+}
+
 // setUIScale applies the given zoom factor, persists it, and refreshes
 // the UI. The scale is saved app-wide via Fyne preferences (so the
 // profile picker opens at the last zoom) and, when a profile is
@@ -508,6 +561,8 @@ func (a *App) setUIScale(scale float32) {
 	} else if a.logger != nil {
 		a.logger.Debug("UI scale set to %.2f", a.settings.UIScale)
 	}
+
+	a.showScaleOverlay()
 }
 
 // Run starts the application.
