@@ -43,6 +43,7 @@ type Meta struct {
 	BuchungRef string
 	Buchung    Booking // double-entry booking for this invoice
 	Exportiert bool    // true once this invoice has been included in a booking export
+	Quelle     string  // transient: extraction source label (e.g., "E-Rechnung", "Claude (Text)", "Lokal", "Vision"); not persisted
 }
 
 // Account represents a user-defined account (Gegenkonto).

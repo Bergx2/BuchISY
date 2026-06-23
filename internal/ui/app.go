@@ -1136,6 +1136,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 				meta.Gegenkonto = a.settings.DefaultAccount
 			}
 
+			meta.Quelle = "E-Rechnung"
 			return meta, nil
 		}
 		a.logger.Warn("E-invoice extraction failed: %v, falling back to text extraction", err)
@@ -1229,6 +1230,11 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 		meta.Gegenkonto = a.settings.DefaultAccount
 	}
 
+	if a.settings.ProcessingMode == "claude" {
+		meta.Quelle = "Claude (Text)"
+	} else {
+		meta.Quelle = "Lokal"
+	}
 	return meta, nil
 }
 
@@ -1290,6 +1296,7 @@ func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta,
 		meta.Gegenkonto = a.settings.DefaultAccount
 	}
 
+	meta.Quelle = "Vision"
 	return meta, nil
 }
 
@@ -1337,6 +1344,7 @@ func (a *App) extractImageData(ctx context.Context, path string) (core.Meta, err
 	if meta.Waehrung == "" {
 		meta.Waehrung = a.settings.CurrencyDefault
 	}
+	meta.Quelle = "Vision"
 	return meta, nil
 }
 
