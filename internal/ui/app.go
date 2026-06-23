@@ -513,10 +513,9 @@ func (a *App) showScaleOverlay() {
 	txt := fmt.Sprintf("%.0f %%", a.theme.Scale()*100)
 	canvas := a.window.Canvas()
 
-	lbl := widget.NewLabel(txt)
-	lbl.TextStyle = fyne.TextStyle{Bold: true}
-
 	if a.scalePopup == nil {
+		lbl := widget.NewLabel(txt)
+		lbl.TextStyle = fyne.TextStyle{Bold: true}
 		padded := container.NewPadded(lbl)
 		a.scalePopup = widget.NewPopUp(padded, canvas)
 	} else {
@@ -725,6 +724,7 @@ func (a *App) buildUI() fyne.CanvasObject {
 
 	// centerWrapper holds either the table or the empty-state; swapped in loadInvoices.
 	a.centerWrapper = container.NewStack(a.invoiceTable.Container())
+	a.refreshCenterContent() // apply the correct table/empty-state for the initial render
 
 	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.centerWrapper)
 	return a.mainContent
