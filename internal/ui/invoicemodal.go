@@ -194,10 +194,16 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		currencySelect.SetSelected(core.CurrencyOptionForCode(code))
 	}
 
-	// Account picker (SKR04-based)
+	// Account picker (SKR04-based). For a new supplier (no company→account
+	// memory, Gegenkonto==0), try a keyword-based suggestion before falling
+	// back to the placeholder default account.
 	selectedAccount := meta.Gegenkonto
 	if selectedAccount == 0 {
-		selectedAccount = a.settings.DefaultAccount
+		if k, ok := a.bookingRules.SuggestKonto(meta.Auftraggeber + " " + meta.Verwendungszweck); ok {
+			selectedAccount = k
+		} else {
+			selectedAccount = a.settings.DefaultAccount
+		}
 	}
 	accountManuallyPicked := false
 	accountDisplay := widget.NewEntry()
