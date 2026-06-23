@@ -92,6 +92,10 @@ type App struct {
 	// the empty-state; swapped after every loadInvoices() call.
 	centerWrapper *fyne.Container
 	emptyState    fyne.CanvasObject
+
+	// stepInProgress guards stepMonth from being double-triggered by the
+	// yearSelect/monthSelect OnChanged callbacks firing during SetSelected.
+	stepInProgress bool
 }
 
 // New creates the BuchISY application and shows the profile picker.
@@ -357,6 +361,16 @@ func (a *App) registerZoomShortcuts() {
 	canvas.AddShortcut(
 		&desktop.CustomShortcut{KeyName: fyne.Key0, Modifier: fyne.KeyModifierControl},
 		func(fyne.Shortcut) { a.setUIScale(1.0) },
+	)
+
+	// Month navigation: Ctrl+Left / Ctrl+Right
+	canvas.AddShortcut(
+		&desktop.CustomShortcut{KeyName: fyne.KeyLeft, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.stepMonth(-1) },
+	)
+	canvas.AddShortcut(
+		&desktop.CustomShortcut{KeyName: fyne.KeyRight, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.stepMonth(1) },
 	)
 }
 
@@ -819,6 +833,9 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	years := generateYearOptions()
 	currentYearStr := fmt.Sprintf("%d", a.currentYear)
 	a.yearSelect = newHighlightedSelect(years, nowYearStr, func(selected string) {
+		if a.stepInProgress {
+			return
+		}
 		var year int
 		_, _ = fmt.Sscanf(selected, "%d", &year)
 		a.currentYear = year
@@ -835,6 +852,9 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	currentMonthStr := fmt.Sprintf("%02d - %-12s", a.currentMonth, monthName)
 
 	a.monthSelect = newHighlightedSelect(months, nowMonthStr, func(selected string) {
+		if a.stepInProgress {
+			return
+		}
 		if selected == wholeYearOption {
 			a.viewWholeYear = true
 			a.onMonthChanged()
@@ -919,10 +939,21 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), e.AbsolutePosition)
 	})
 
+	prevMonthBtn := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
+		a.stepMonth(-1)
+	})
+	prevMonthBtn.Importance = widget.LowImportance
+	nextMonthBtn := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {
+		a.stepMonth(1)
+	})
+	nextMonthBtn.Importance = widget.LowImportance
+
 	rightControls := container.NewHBox(
 		yearWrap,
 		widget.NewLabel("-"),
+		prevMonthBtn,
 		monthContainer,
+		nextMonthBtn,
 		widget.NewSeparator(),
 		overflowBtn,
 		settingsBtn,
@@ -1056,6 +1087,54 @@ func (l fixedWidthLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 
 // buildRightPanel is no longer needed - table is created in buildUI
 // Kept for reference if needed later
+
+// stepMonth advances the current month by delta (+1 or -1), rolling over
+// year boundaries and clamping to the year range offered by yearSelect.
+// The stepInProgress guard prevents the yearSelect/monthSelect OnChanged
+// callbacks from triggering a second onMonthChanged call during SetSelected.
+func (a *App) stepMonth(delta int) {
+	if a.yearSelect == nil || a.monthSelect == nil {
+		return
+	}
+
+	newMonth := int(a.currentMonth) + delta
+	newYear := a.currentYear
+
+	// Roll over year boundaries.
+	if newMonth < 1 {
+		newMonth = 12
+		newYear--
+	} else if newMonth > 12 {
+		newMonth = 1
+		newYear++
+	}
+
+	// Clamp to the available year range.
+	yearOptions := generateYearOptions()
+	if len(yearOptions) == 0 {
+		return
+	}
+	var minYear, maxYear int
+	fmt.Sscanf(yearOptions[0], "%d", &minYear)
+	fmt.Sscanf(yearOptions[len(yearOptions)-1], "%d", &maxYear)
+	if newYear < minYear || newYear > maxYear {
+		return // at the edge — no-op
+	}
+
+	a.currentYear = newYear
+	a.currentMonth = time.Month(newMonth)
+	a.viewWholeYear = false
+
+	// Update selects without triggering their OnChanged (guard is set).
+	a.stepInProgress = true
+	a.yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+	monthKey := fmt.Sprintf("month.%02d", a.currentMonth)
+	monthName := a.bundle.T(monthKey)
+	a.monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth), monthName))
+	a.stepInProgress = false
+
+	a.onMonthChanged()
+}
 
 // onMonthChanged is called when the year or month selection changes.
 func (a *App) onMonthChanged() {
