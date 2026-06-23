@@ -78,15 +78,29 @@ type App struct {
 	theme        *buchisyTheme
 	assetsDir    string
 	profile      string
+
+	// Zoom feedback overlay (Task 1)
+	scalePopup  *widget.PopUp
+	scaleTimer  *time.Timer
+
+	// Dismissed config-hint banners (Task 2): keyed by hint i18n key.
+	// Hints dismissed with ✕ stay hidden for the session.
+	dismissedHints map[string]bool
+
+	// Empty-state widgets (Task 3): centerWrapper holds either the table or
+	// the empty-state; swapped after every loadInvoices() call.
+	centerWrapper *fyne.Container
+	emptyState    fyne.CanvasObject
 }
 
 // New creates the BuchISY application and shows the profile picker.
 func New(assetsDir string) (*App, error) {
 	fyneApp := app.NewWithID("com.bergx2.buchisy")
 	a := &App{
-		app:       fyneApp,
-		assetsDir: assetsDir,
-		window:    fyneApp.NewWindow("BuchISY"),
+		app:            fyneApp,
+		assetsDir:      assetsDir,
+		window:         fyneApp.NewWindow("BuchISY"),
+		dismissedHints: make(map[string]bool),
 	}
 	// Create the theme up-front and wire Ctrl+scroll / Ctrl+plus zoom
 	// keyboard handlers before any window is shown, so the profile
@@ -287,6 +301,13 @@ func (a *App) keyringAccount() string {
 	return a.profile + "-" + a.settings.AnthropicAPIKeyRef
 }
 
+// hasAPIKey reports whether a non-empty Claude API key is stored in the
+// OS keyring for the active profile.
+func (a *App) hasAPIKey() bool {
+	val, err := keyring.Get("BuchISY", a.keyringAccount())
+	return err == nil && val != ""
+}
+
 // ownVATIDList parses Settings.OwnVATID into a slice of VAT-IDs.
 // The setting accepts a comma- (or newline-) separated list so that
 // users with multiple companies (e.g. Bergx2 + Boomstraat) can exclude
@@ -482,6 +503,54 @@ func isOverObject(absPos fyne.Position, obj fyne.CanvasObject) bool {
 		absPos.Y >= pos.Y && absPos.Y < pos.Y+size.Height
 }
 
+// showScaleOverlay displays a brief "125 %" centered popup that auto-hides
+// after ~900 ms. Rapid zooming reuses a single PopUp and replaces the timer
+// so only the most-recent timer dismisses it.
+func (a *App) showScaleOverlay() {
+	if a.window == nil {
+		return
+	}
+	txt := fmt.Sprintf("%.0f %%", a.theme.Scale()*100)
+	canvas := a.window.Canvas()
+
+	if a.scalePopup == nil {
+		lbl := widget.NewLabel(txt)
+		lbl.TextStyle = fyne.TextStyle{Bold: true}
+		padded := container.NewPadded(lbl)
+		a.scalePopup = widget.NewPopUp(padded, canvas)
+	} else {
+		// Reuse popup — update the label text in-place.
+		if padded, ok := a.scalePopup.Content.(*fyne.Container); ok {
+			if existing, ok2 := padded.Objects[0].(*widget.Label); ok2 {
+				existing.SetText(txt)
+			}
+		}
+		a.scalePopup.Show()
+	}
+
+	// Center the popup on the canvas.
+	canvasSize := canvas.Size()
+	popupSize := a.scalePopup.MinSize()
+	a.scalePopup.Move(fyne.NewPos(
+		(canvasSize.Width-popupSize.Width)/2,
+		(canvasSize.Height-popupSize.Height)/2,
+	))
+	a.scalePopup.Show()
+
+	// Cancel any previous timer so a stale hide cannot close a freshly shown popup.
+	if a.scaleTimer != nil {
+		a.scaleTimer.Stop()
+	}
+	popup := a.scalePopup
+	a.scaleTimer = time.AfterFunc(900*time.Millisecond, func() {
+		fyne.Do(func() {
+			if a.scalePopup == popup {
+				a.scalePopup.Hide()
+			}
+		})
+	})
+}
+
 // setUIScale applies the given zoom factor, persists it, and refreshes
 // the UI. The scale is saved app-wide via Fyne preferences (so the
 // profile picker opens at the last zoom) and, when a profile is
@@ -508,6 +577,8 @@ func (a *App) setUIScale(scale float32) {
 	} else if a.logger != nil {
 		a.logger.Debug("UI scale set to %.2f", a.settings.UIScale)
 	}
+
+	a.showScaleOverlay()
 }
 
 // Run starts the application.
@@ -603,9 +674,59 @@ func (a *App) buildUI() fyne.CanvasObject {
 	filterRow := container.NewBorder(nil, nil,
 		a.invoiceTable.ChipRow(), nil,
 		a.invoiceTable.FilterEntry())
-	header := container.NewVBox(topBar, filterRow)
 
-	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.invoiceTable.Container())
+	// Config-hint banners: one slim dismissible row per unmet precondition.
+	headerObjects := []fyne.CanvasObject{}
+	for _, hintKey := range core.MissingConfigHints(a.settings, a.hasAPIKey()) {
+		hintKey := hintKey // capture
+		if a.dismissedHints[hintKey] {
+			continue
+		}
+		lbl := widget.NewLabel(a.bundle.T(hintKey))
+		lbl.Wrapping = fyne.TextWrapWord
+		settingsBtn := widget.NewButton(a.bundle.T("menu.settings"), func() {
+			a.showSettingsView()
+		})
+		settingsBtn.Importance = widget.MediumImportance
+		dismissBtn := widget.NewButton("✕ "+a.bundle.T("hint.dismiss"), func() {
+			a.dismissedHints[hintKey] = true
+			a.showMainView()
+		})
+		dismissBtn.Importance = widget.LowImportance
+		row := container.NewBorder(nil, nil,
+			widget.NewIcon(theme.WarningIcon()),
+			container.NewHBox(settingsBtn, dismissBtn),
+			lbl,
+		)
+		headerObjects = append(headerObjects, row, widget.NewSeparator())
+	}
+	headerObjects = append(headerObjects, topBar, filterRow)
+	header := container.NewVBox(headerObjects...)
+
+	// Empty-state shown when the selected month has zero invoices.
+	emptyTitle := widget.NewLabelWithStyle(
+		a.bundle.T("empty.title"),
+		fyne.TextAlignCenter,
+		fyne.TextStyle{Bold: true},
+	)
+	emptyHint := widget.NewLabelWithStyle(
+		a.bundle.T("empty.hint"),
+		fyne.TextAlignCenter,
+		fyne.TextStyle{},
+	)
+	emptyBtn := widget.NewButtonWithIcon(
+		a.bundle.T("empty.add"),
+		theme.ContentAddIcon(),
+		func() { a.showCustomFilePicker() },
+	)
+	emptyBtn.Importance = widget.HighImportance
+	a.emptyState = container.NewCenter(container.NewVBox(emptyTitle, emptyHint, emptyBtn))
+
+	// centerWrapper holds either the table or the empty-state; swapped in loadInvoices.
+	a.centerWrapper = container.NewStack(a.invoiceTable.Container())
+	a.refreshCenterContent() // apply the correct table/empty-state for the initial render
+
+	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.centerWrapper)
 	return a.mainContent
 }
 
@@ -1009,6 +1130,7 @@ func (a *App) loadInvoices() {
 			}
 		}
 		a.invoiceTable.SetData(all)
+		a.refreshCenterContent()
 		return
 	}
 
@@ -1018,6 +1140,7 @@ func (a *App) loadInvoices() {
 	if err != nil {
 		a.logger.Error("Failed to load invoices from database: %v", err)
 		a.invoiceTable.SetData([]core.CSVRow{})
+		a.refreshCenterContent()
 		return
 	}
 
@@ -1039,6 +1162,23 @@ func (a *App) loadInvoices() {
 		}
 	}
 	a.invoiceTable.SetData(rows)
+	a.refreshCenterContent()
+}
+
+// refreshCenterContent swaps the centerWrapper between the invoice table
+// and the empty-state depending on how many rows the table currently has.
+// Called after every loadInvoices() so month/year changes and add/delete
+// operations all get the correct view.
+func (a *App) refreshCenterContent() {
+	if a.centerWrapper == nil || a.emptyState == nil || a.invoiceTable == nil {
+		return
+	}
+	if a.invoiceTable.RowCount() == 0 {
+		a.centerWrapper.Objects = []fyne.CanvasObject{a.emptyState}
+	} else {
+		a.centerWrapper.Objects = []fyne.CanvasObject{a.invoiceTable.Container()}
+	}
+	a.centerWrapper.Refresh()
 }
 
 // annotateAttachments fills each row's AnzahlAnhaenge/HatAnhaenge from the

@@ -320,5 +320,13 @@
   "erloesabgleich.autolinked": "%d auto-linked",
   "erloesabgleich.summary": "Please confirm each match — %d suggestion(s).",
   "erloesabgleich.none": "No open outgoing invoices with a matching credit",
-  "erloesabgleich.confirm": "Link"
+  "erloesabgleich.confirm": "Link",
+
+  "hint.no_api_key": "No Claude API key set — add one in Settings to use AI extraction.",
+  "hint.no_storage": "No storage folder set — choose one in Settings.",
+  "hint.dismiss": "Dismiss",
+
+  "empty.title": "No receipts in this month yet",
+  "empty.hint": "Drag PDFs here or add a receipt",
+  "empty.add": "Add receipt"
 }
