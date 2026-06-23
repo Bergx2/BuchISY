@@ -278,5 +278,7 @@
   "settings.matchWindow": "Reconciliation: date window (days)",
   "settings.matchTolerance": "Reconciliation: foreign tolerance (%)",
 
-  "reconcile.lineTaken": "Statement line already linked"
+  "reconcile.lineTaken": "Statement line already linked",
+
+  "modal.erloeskonto": "Revenue account"
 }

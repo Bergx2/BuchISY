@@ -371,22 +371,35 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			bookingPrev.set(*manualBooking, manualBooking.Balanced(), a.bundle.T("booking.manual.hint"))
 			return
 		}
-		b, bookable, reason := a.computeInvoiceBooking(
-			catKeyByLabel[categorySelect.Selected],
-			ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+		var b core.Booking
+		var bookable bool
+		var reason string
+		if ausgangsrechnungCheck.Checked {
+			b, bookable, reason = a.computeRevenueBooking(
+				ed.Lines(), selectedAccount, bankAccountSelect.Selected)
+		} else {
+			b, bookable, reason = a.computeInvoiceBooking(
+				catKeyByLabel[categorySelect.Selected],
+				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+		}
 		bookingPrev.set(b, bookable, reason)
 	}
 	categorySelect.OnChanged = func(string) { recomputeBooking() }
+	ausgangsrechnungCheck.OnChanged = func(bool) { recomputeBooking() }
 
 	editBookingBtn := widget.NewButton(a.bundle.T("booking.manual.adjust"), func() {
 		var seed core.Booking
 		if manualBooking != nil {
 			seed = *manualBooking
 		} else {
-			b, _, _ := a.computeInvoiceBooking(
-				catKeyByLabel[categorySelect.Selected],
-				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
-			seed = b
+			if ausgangsrechnungCheck.Checked {
+				seed, _, _ = a.computeRevenueBooking(
+					ed.Lines(), selectedAccount, bankAccountSelect.Selected)
+			} else {
+				seed, _, _ = a.computeInvoiceBooking(
+					catKeyByLabel[categorySelect.Selected],
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+			}
 		}
 		a.showBookingEditor(seed, func(edited core.Booking) {
 			manualBooking = &edited
@@ -576,18 +589,25 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 				targetMonth = time.Month(m)
 			}
 		}
-		// Compute the final booking, branching on manual override.
+		// Compute the final booking, branching on manual override and invoice type.
 		var finalBooking core.Booking
 		learn := false
 		if manualBooking != nil {
 			finalBooking = *manualBooking
 		} else {
-			b, bookable, _ := a.computeInvoiceBooking(
-				catKeyByLabel[categorySelect.Selected],
-				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+			var b core.Booking
+			var bookable bool
+			if ausgangsrechnungCheck.Checked {
+				b, bookable, _ = a.computeRevenueBooking(
+					ed.Lines(), selectedAccount, bankAccountSelect.Selected)
+			} else {
+				b, bookable, _ = a.computeInvoiceBooking(
+					catKeyByLabel[categorySelect.Selected],
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+				learn = bookable
+			}
 			if bookable {
 				finalBooking = b
-				learn = true
 			}
 		}
 		err := a.updateInvoice(
@@ -721,6 +741,7 @@ func (a *App) updateInvoice(
 		Wechselkurs:       wechselkurs,
 		GebuehrProzent:    gebuehrProzent,
 		HatAnhaenge:       willHaveAttachments,
+		Ausgangsrechnung:  originalRow.Ausgangsrechnung,
 	}
 	parts := strings.Split(invoiceDate, ".")
 	if len(parts) == 3 {
