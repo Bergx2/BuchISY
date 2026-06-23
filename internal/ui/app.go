@@ -647,6 +647,11 @@ func (a *App) buildUI() fyne.CanvasObject {
 	a.invoiceTable.SetColumnOrder(a.settings.ColumnOrder)
 	a.invoiceTable.SetDecimalSeparator(a.settings.DecimalSeparator)
 	a.invoiceTable.SetWindow(a.window)
+	// Table keyboard navigation: ↑/↓ move selection, Enter opens edit,
+	// Del deletes with the existing confirm dialog. Wired on the main
+	// window canvas; dialog windows own separate canvases, so this never
+	// conflicts with dialog Escape handlers.
+	a.invoiceTable.RegisterKeyHandler(a.window.Canvas())
 
 	// Top bar (this may trigger callbacks when setting initial values).
 	// It hosts the upload drop field on the left and all other controls

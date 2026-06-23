@@ -145,6 +145,10 @@ type InvoiceTable struct {
 	// the special sentinel "__typ__" for the file-type column.
 	sortColumn    string
 	sortAscending bool
+
+	// selectedRow is updated by OnSelected and used by keyboard navigation
+	// (↑/↓/Enter/Del). -1 means nothing is selected.
+	selectedRow int
 }
 
 const typSortKey = "__typ__"
@@ -191,6 +195,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 		app:              app,
 		lastSelectedRow:  -1,
 		lastSelectedCol:  -1,
+		selectedRow:      -1,
 		columnOrder:      sanitizeColumnOrder(nil),
 		decimalSeparator: ",", // Default
 	}
@@ -446,10 +451,11 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 
 	it.applyColumnWidths()
 
-	// Track selected cell for the right-click context menu.
+	// Track selected cell for the right-click context menu and keyboard nav.
 	it.table.OnSelected = func(id widget.TableCellID) {
 		if id.Row >= 0 && id.Row < len(it.filtered) {
 			it.lastSelectedRow = id.Row
+			it.selectedRow = id.Row
 			colIdx := id.Col - 2 // cols 0 (edit) and 1 (filetype) are actions
 			if colIdx >= 0 && colIdx < len(it.columnOrder) {
 				it.lastSelectedCol = colIdx
@@ -1103,4 +1109,66 @@ func (it *InvoiceTable) SelectByDateiname(name string) {
 			return
 		}
 	}
+}
+
+// RegisterKeyHandler wires ↑/↓/Enter/Del keyboard navigation onto the
+// given canvas (expected: the main window canvas). The handler is a no-op
+// when a text entry widget has focus so that search/filter typing is
+// unaffected. Dialog windows use their own separate canvases, so this
+// handler never fires while an edit or delete dialog is open.
+func (it *InvoiceTable) RegisterKeyHandler(cv fyne.Canvas) {
+	cv.SetOnTypedKey(func(ev *fyne.KeyEvent) {
+		// Guard: if any text-entry widget has keyboard focus, let it
+		// handle all keys — don't steal from the search/filter box.
+		if _, isEntry := cv.Focused().(*widget.Entry); isEntry {
+			return
+		}
+
+		switch ev.Name {
+		case fyne.KeyUp:
+			it.moveSelection(-1)
+		case fyne.KeyDown:
+			it.moveSelection(1)
+		case fyne.KeyReturn, fyne.KeyEnter:
+			it.openSelected()
+		case fyne.KeyDelete, fyne.KeyBackspace:
+			it.deleteSelected()
+		}
+	})
+}
+
+// moveSelection shifts the selected row by delta, clamped to valid range.
+func (it *InvoiceTable) moveSelection(delta int) {
+	count := it.RowCount()
+	if count == 0 {
+		return
+	}
+	next := it.selectedRow + delta
+	if next < 0 {
+		next = 0
+	}
+	if next >= count {
+		next = count - 1
+	}
+	it.selectedRow = next
+	id := widget.TableCellID{Row: next, Col: 0}
+	it.table.Select(id)
+	it.table.ScrollTo(id)
+}
+
+// openSelected opens the edit dialog for the currently selected row.
+func (it *InvoiceTable) openSelected() {
+	if it.selectedRow < 0 || it.selectedRow >= len(it.filtered) || it.app == nil {
+		return
+	}
+	it.app.showEditDialog(it.filtered[it.selectedRow], nil)
+}
+
+// deleteSelected triggers the existing delete-confirmation flow for the
+// currently selected row — identical to the right-click "Löschen" path.
+func (it *InvoiceTable) deleteSelected() {
+	if it.selectedRow < 0 || it.selectedRow >= len(it.filtered) || it.app == nil {
+		return
+	}
+	it.app.showDeleteConfirmation(it.filtered[it.selectedRow])
 }
