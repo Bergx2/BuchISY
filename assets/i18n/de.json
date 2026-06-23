@@ -346,5 +346,14 @@
   "empty.add": "Beleg hinzufügen",
 
   "search.results": "%d Treffer",
-  "search.none": "Keine Treffer"
+  "search.none": "Keine Treffer",
+
+  "overview.title": "Übersicht %d",
+  "overview.col.month": "Monat",
+  "overview.col.count": "Anzahl",
+  "overview.col.brutto": "Brutto",
+  "overview.col.open": "#offen",
+  "overview.col.warnings": "#Warn.",
+  "overview.total": "Gesamt",
+  "overview.close": "Schließen"
 }

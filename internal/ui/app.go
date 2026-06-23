@@ -892,6 +892,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
 			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
+			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Rechnungsausgangsbuch (PDF)", func() { a.showSalesJournalPDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
@@ -1021,6 +1022,152 @@ func (a *App) showBelegListePDF() {
 		return
 	}
 	a.savePDF("Belegliste_"+period+".pdf", data)
+}
+
+// showYearOverviewDialog shows a per-month KPI summary for the current year.
+// Columns: Monat · Anzahl · Brutto · #offen · #Warnungen.
+// Clicking a month row jumps to that month using the same stepInProgress guard
+// as stepMonth, then closes the dialog.
+func (a *App) showYearOverviewDialog() {
+	year := a.currentYear
+
+	type monthRow struct {
+		label string
+		m     int
+		kpi   core.OverviewKPI
+	}
+
+	var rows []monthRow
+	var total core.OverviewKPI
+	for m := 1; m <= 12; m++ {
+		mRows := a.collectInvoiceRows(year, m, year, m)
+		kpi := core.OverviewKPIs(mRows)
+		monthKey := fmt.Sprintf("month.%02d", m)
+		label := fmt.Sprintf("%02d - %s", m, a.bundle.T(monthKey))
+		rows = append(rows, monthRow{label: label, m: m, kpi: kpi})
+		total.Count += kpi.Count
+		total.Brutto += kpi.Brutto
+		total.OpenReconcile += kpi.OpenReconcile
+		total.Warnings += kpi.Warnings
+	}
+
+	// +1 for the totals row
+	numRows := len(rows) + 1
+
+	headers := []string{
+		a.bundle.T("overview.col.month"),
+		a.bundle.T("overview.col.count"),
+		a.bundle.T("overview.col.brutto"),
+		a.bundle.T("overview.col.open"),
+		a.bundle.T("overview.col.warnings"),
+	}
+
+	var dlg *dialog.CustomDialog
+
+	fmtBrutto := func(v float64) string {
+		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+	}
+
+	tbl := widget.NewTable(
+		func() (int, int) { return numRows + 1, 5 }, // +1 for header row
+		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func(id widget.TableCellID, o fyne.CanvasObject) {
+			lbl := o.(*widget.Label)
+			lbl.TextStyle = fyne.TextStyle{}
+			lbl.Alignment = fyne.TextAlignLeading
+
+			// Header row
+			if id.Row == 0 {
+				lbl.TextStyle = fyne.TextStyle{Bold: true}
+				if id.Col < len(headers) {
+					lbl.SetText(headers[id.Col])
+				}
+				return
+			}
+
+			dataIdx := id.Row - 1
+
+			// Totals row
+			if dataIdx == len(rows) {
+				lbl.TextStyle = fyne.TextStyle{Bold: true}
+				switch id.Col {
+				case 0:
+					lbl.SetText(a.bundle.T("overview.total"))
+				case 1:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmt.Sprintf("%d", total.Count))
+				case 2:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmtBrutto(total.Brutto))
+				case 3:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmt.Sprintf("%d", total.OpenReconcile))
+				case 4:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmt.Sprintf("%d", total.Warnings))
+				}
+				return
+			}
+
+			r := rows[dataIdx]
+			switch id.Col {
+			case 0:
+				lbl.SetText(r.label)
+			case 1:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmt.Sprintf("%d", r.kpi.Count))
+			case 2:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmtBrutto(r.kpi.Brutto))
+			case 3:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmt.Sprintf("%d", r.kpi.OpenReconcile))
+			case 4:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmt.Sprintf("%d", r.kpi.Warnings))
+			}
+		},
+	)
+	tbl.SetColumnWidth(0, 180)
+	tbl.SetColumnWidth(1, 70)
+	tbl.SetColumnWidth(2, 110)
+	tbl.SetColumnWidth(3, 70)
+	tbl.SetColumnWidth(4, 70)
+
+	// Row tap: jump to that month (skip header row and totals row).
+	tbl.OnSelected = func(id widget.TableCellID) {
+		tbl.Unselect(id)
+		if id.Row == 0 {
+			return // header
+		}
+		dataIdx := id.Row - 1
+		if dataIdx >= len(rows) {
+			return // totals row
+		}
+		r := rows[dataIdx]
+		// Jump to month using the same stepInProgress guard as stepMonth.
+		a.currentYear = year
+		a.currentMonth = time.Month(r.m)
+		a.viewWholeYear = false
+		a.stepInProgress = true
+		a.yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+		monthKey := fmt.Sprintf("month.%02d", a.currentMonth)
+		monthName := a.bundle.T(monthKey)
+		a.monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth), monthName))
+		a.stepInProgress = false
+		a.onMonthChanged()
+		if dlg != nil {
+			dlg.Hide()
+		}
+	}
+
+	scroll := container.NewVScroll(tbl)
+	scroll.SetMinSize(fyne.NewSize(520, 380))
+
+	title := fmt.Sprintf(a.bundle.T("overview.title"), year)
+	dlg = dialog.NewCustom(title, a.bundle.T("overview.close"), scroll, a.window)
+	dlg.Resize(fyne.NewSize(540, 460))
+	dlg.Show()
 }
 
 // showSalesJournalPDF exports the Rechnungsausgangsbuch — a monthly list of all

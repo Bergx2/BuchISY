@@ -346,5 +346,14 @@
   "empty.add": "Add receipt",
 
   "search.results": "%d results",
-  "search.none": "No results"
+  "search.none": "No results",
+
+  "overview.title": "Overview %d",
+  "overview.col.month": "Month",
+  "overview.col.count": "Count",
+  "overview.col.brutto": "Gross",
+  "overview.col.open": "#open",
+  "overview.col.warnings": "#warn.",
+  "overview.total": "Total",
+  "overview.close": "Close"
 }
