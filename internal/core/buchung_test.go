@@ -249,3 +249,38 @@ func habenByKonto(b Booking) map[int]float64 {
 	}
 	return m
 }
+
+func TestBuildRevenueBookingWithForderung(t *testing.T) {
+	rules := &BookingRules{UmsatzsteuerKonten: map[string]int{"19": 1776}, ForderungsKonto: 1400}
+	lines := []TaxLine{{Netto: 6500, SatzProzent: 19, MwStBetrag: 1235}}
+	b, err := BuildRevenueBooking(rules, lines, 8400, 1200) // paymentAccount 1200 ignored when Forderung set
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, _, ok := b.PaymentAndCounters(true) // single Soll
+	if !ok || base.Konto != 1400 || base.Betrag != 7735 {
+		t.Fatalf("Soll = %+v, want 1400 / 7735", base)
+	}
+	if !b.Balanced() {
+		t.Fatal("not balanced")
+	}
+	// settle: switch Soll 1400 → 1200 (paid)
+	s := b.WithSettlementAccount(1200)
+	sb, _, _ := s.PaymentAndCounters(true)
+	if sb.Konto != 1200 || sb.Betrag != 7735 {
+		t.Errorf("settled Soll = %+v, want 1200 / 7735", sb)
+	}
+	// Haben side (Erlös + USt) unchanged after settlement.
+	if !s.Balanced() {
+		t.Error("settled booking not balanced")
+	}
+}
+
+func TestBuildRevenueBookingCashBasisFallback(t *testing.T) {
+	rules := &BookingRules{UmsatzsteuerKonten: map[string]int{"19": 1776}} // no ForderungsKonto
+	b, _ := BuildRevenueBooking(rules, []TaxLine{{Netto: 100, SatzProzent: 19, MwStBetrag: 19}}, 8400, 1200)
+	base, _, _ := b.PaymentAndCounters(true)
+	if base.Konto != 1200 {
+		t.Errorf("cash-basis Soll = %d, want 1200 (paymentAccount)", base.Konto)
+	}
+}
