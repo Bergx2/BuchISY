@@ -283,7 +283,7 @@
   "warnings.intro": "Bitte prüfen — trotzdem speichern?",
 
   "reconcile.title": "Belegabgleich",
-  "reconcile.summary": "%d automatisch verknüpft, %d Vorschläge.",
+  "reconcile.summary": "Bitte jede Zuordnung bestätigen — %d Vorschlag/Vorschläge.",
   "reconcile.confirm": "Bestätigen",
   "reconcile.none": "Keine offenen Vorschläge.",
   "reconcile.cashHeading": "Barkasse",

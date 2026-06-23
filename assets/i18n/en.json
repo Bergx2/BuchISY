@@ -283,7 +283,7 @@
   "warnings.intro": "Please review — save anyway?",
 
   "reconcile.title": "Reconciliation",
-  "reconcile.summary": "%d auto-linked, %d suggestions.",
+  "reconcile.summary": "Please confirm each match — %d suggestion(s).",
   "reconcile.confirm": "Confirm",
   "reconcile.none": "No open suggestions.",
   "reconcile.cashHeading": "Cash",

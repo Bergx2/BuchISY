@@ -24,9 +24,12 @@ type scoredWithFile struct {
 
 // belegSuggestion is a single MatchSuggest entry collected during reconciliation.
 // candidates is ranked best-first; candidates[0] is the default selection.
+// highConfidence is true for former MatchAuto entries (unambiguous single match)
+// that are now routed to the confirm list instead of being silently linked.
 type belegSuggestion struct {
-	row        core.CSVRow
-	candidates []scoredWithFile
+	row            core.CSVRow
+	candidates     []scoredWithFile
+	highConfidence bool
 }
 
 // stmtLine pairs a parsed StatementBooking with its source file (base name).
@@ -258,56 +261,39 @@ func (a *App) showBelegabgleich() {
 		return autoResults[i].candidates[0].scored.Score > autoResults[j].candidates[0].scored.Score
 	})
 
-	autoLinked := 0
+	// E18.1: No silent auto-linking. Every match (auto or ambiguous) is routed
+	// into the confirm list so the user approves each one explicitly.
+	// High-confidence (former MatchAuto) entries are flagged and sorted to the top.
 	var suggestions []belegSuggestion
 
+	// Route former-auto results as high-confidence suggestions (no claiming here).
 	for _, r := range autoResults {
-		top := r.candidates[0]
-		key := refKey(top.file, top.scored.Line.Page, top.scored.Line.LineIdx)
-		if claimed[key] {
-			// Line already taken by a higher-scored invoice — demote to suggestion.
-			suggestResults = append(suggestResults, matchResult{
-				row:        r.row,
-				kind:       core.MatchSuggest,
-				candidates: r.candidates,
-			})
-			continue
-		}
-		r.row.BuchungRef = core.BuchungRef{
-			StatementFilename: top.file,
-			Page:              top.scored.Line.Page,
-			LineIdx:           top.scored.Line.LineIdx,
-		}.String()
-		if err := a.dbRepo.Update(r.row.Jahr, r.row.Monat, r.row.Dateiname, r.row); err != nil {
-			a.logger.Warn("Belegabgleich auto-link Update %s: %v", r.row.Dateiname, err)
-		}
-		if a.statementAliases != nil {
-			a.statementAliases.Learn(r.row.Auftraggeber, top.scored.Line.Text)
-			if err := a.statementAliases.Save(); err != nil {
-				a.logger.Warn("Belegabgleich auto-link: save aliases: %v", err)
-			}
-		}
-		claimed[key] = true
-		autoLinked++
+		suggestions = append(suggestions, belegSuggestion{
+			row:            r.row,
+			candidates:     r.candidates,
+			highConfidence: true,
+		})
 	}
 
-	// Build suggestions: filter out already-claimed candidates; skip if none remain.
+	// Build suggestions for ambiguous/suggest results; no claimed lines to filter yet.
 	for _, r := range suggestResults {
-		var remaining []scoredWithFile
-		for _, c := range r.candidates {
-			k := refKey(c.file, c.scored.Line.Page, c.scored.Line.LineIdx)
-			if !claimed[k] {
-				remaining = append(remaining, c)
-			}
-		}
-		if len(remaining) == 0 {
+		if len(r.candidates) == 0 {
 			continue
 		}
 		suggestions = append(suggestions, belegSuggestion{
-			row:        r.row,
-			candidates: remaining,
+			row:            r.row,
+			candidates:     r.candidates,
+			highConfidence: false,
 		})
 	}
+
+	// Sort: high-confidence (★) entries first, then by top-candidate score descending.
+	sort.SliceStable(suggestions, func(i, j int) bool {
+		if suggestions[i].highConfidence != suggestions[j].highConfidence {
+			return suggestions[i].highConfidence
+		}
+		return suggestions[i].candidates[0].scored.Score > suggestions[j].candidates[0].scored.Score
+	})
 
 	// ── Step 4: Claude ranking for close-call ambiguous suggestions ────────
 	// For each suggestion with ≥2 candidates whose top-two scores are within
@@ -356,17 +342,10 @@ func (a *App) showBelegabgleich() {
 	// parse-once cache and the still-unmatched invoices; run group + partial
 	// detection. Results are rendered in the dialog below.
 
-	// Collect unmatched invoice rows (no BuchungRef and not auto-linked this run).
+	// E18.1: Nothing is auto-linked any more — autoLinkedSet is always empty.
+	// The group/partial detection loop uses it to skip already-linked invoices;
+	// with no silent linking, every invoice with BuchungRef=="" is a candidate.
 	autoLinkedSet := map[string]bool{}
-	for _, r := range autoResults {
-		// We only care about those that were actually linked (not demoted).
-		top := r.candidates[0]
-		key := refKey(top.file, top.scored.Line.Page, top.scored.Line.LineIdx)
-		if !claimed[key] { // demoted: key was NOT claimed (claimed would be set), skip
-			continue
-		}
-		autoLinkedSet[r.row.Dateiname] = true
-	}
 
 	type groupSuggestion struct {
 		group core.GroupMatch
@@ -449,7 +428,7 @@ func (a *App) showBelegabgleich() {
 		}
 	}
 
-	// Refresh table so auto-linked rows show their new BuchungRef.
+	// Refresh table (in case any rows changed state before the dialog opens).
 	a.loadInvoices()
 
 	// Build Barkasse summary block (informational only).
@@ -481,7 +460,7 @@ func (a *App) showBelegabgleich() {
 	// Build dialog content.
 	var content fyne.CanvasObject
 
-	if autoLinked == 0 && len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 {
+	if len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 {
 		vbox := container.NewVBox(widget.NewLabel(a.bundle.T("reconcile.none")))
 		if cashBox != nil {
 			heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
@@ -491,7 +470,7 @@ func (a *App) showBelegabgleich() {
 		}
 		content = container.NewVScroll(vbox)
 	} else {
-		headerText := a.bundle.T("reconcile.summary", autoLinked, len(suggestions))
+		headerText := a.bundle.T("reconcile.summary", len(suggestions))
 		header := widget.NewLabel(headerText)
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -523,8 +502,14 @@ func (a *App) showBelegabgleich() {
 			baseName := filepath.Base(top.file)
 
 			// Label format:
-			// <Auftraggeber>  <invEUR> €  →  S.<p> Z.<l> · <date> · <betrag> € · <text>  (<file>)
-			rowLabel := fmt.Sprintf("%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+			// [★ ]<Auftraggeber>  <invEUR> €  →  S.<p> Z.<l> · <date> · <betrag> € · <text>  (<file>)
+			// ★ prefix indicates a high-confidence (formerly auto-linked) match.
+			prefix := ""
+			if sug.highConfidence {
+				prefix = "★ "
+			}
+			rowLabel := fmt.Sprintf("%s%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+				prefix,
 				sug.row.Auftraggeber,
 				invAmtStr,
 				top.scored.Line.Page+1,
