@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1182,6 +1183,116 @@ func (a *App) refreshCenterContent() {
 		a.centerWrapper.Objects = []fyne.CanvasObject{a.invoiceTable.Container()}
 	}
 	a.centerWrapper.Refresh()
+}
+
+// showGlobalSearch runs a global DB search and shows a modal popup with
+// results. Pressing Enter in the filter box triggers this (via
+// InvoiceTable.filterEntry.OnSubmitted). Clicking a result switches the
+// app to the invoice's month/year and selects it in the table.
+func (a *App) showGlobalSearch(query string) {
+	if a.dbRepo == nil || a.window == nil {
+		return
+	}
+	results, err := a.dbRepo.SearchInvoices(query)
+	if err != nil {
+		a.showError(a.bundle.T("error.processing.title"), err.Error())
+		return
+	}
+
+	var popup *widget.PopUp
+
+	var headerText string
+	if len(results) == 0 {
+		headerText = a.bundle.T("search.none")
+	} else {
+		headerText = fmt.Sprintf(a.bundle.T("search.results"), len(results))
+	}
+	header := widget.NewLabelWithStyle(headerText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+
+	closeBtn := widget.NewButton(a.bundle.T("common.close"), func() {
+		if popup != nil {
+			popup.Hide()
+		}
+	})
+
+	var list *widget.List
+	list = widget.NewList(
+		func() int { return len(results) },
+		func() fyne.CanvasObject {
+			return widget.NewLabel("")
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			lbl := obj.(*widget.Label)
+			r := results[id]
+			sep := ","
+			if a.settings.DecimalSeparator != "" {
+				sep = a.settings.DecimalSeparator
+			}
+			brutto := fmt.Sprintf("%.2f", r.Bruttobetrag)
+			if sep == "," {
+				brutto = strings.Replace(brutto, ".", ",", 1)
+			}
+			lbl.SetText(fmt.Sprintf("%s · %s · %s · %s %s",
+				r.Belegnummer, r.Rechnungsdatum, r.Auftraggeber, brutto, r.Waehrung))
+		},
+	)
+	list.OnSelected = func(id widget.ListItemID) {
+		if id < 0 || id >= len(results) {
+			return
+		}
+		row := results[id]
+		if popup != nil {
+			popup.Hide()
+		}
+
+		// Parse year and month from the result row.
+		year, errY := strconv.Atoi(row.Jahr)
+		monthNum, errM := strconv.Atoi(row.Monat)
+		if errY != nil || errM != nil || monthNum < 1 || monthNum > 12 {
+			return
+		}
+		a.currentYear = year
+		a.currentMonth = time.Month(monthNum)
+		a.viewWholeYear = false
+
+		// Update selectors using the same label formats as buildTopBar.
+		yearStr := fmt.Sprintf("%d", year)
+		a.yearSelect.SetSelected(yearStr)
+
+		monthKey := fmt.Sprintf("month.%02d", monthNum)
+		monthName := a.bundle.T(monthKey)
+		monthStr := fmt.Sprintf("%02d - %-12s", monthNum, monthName)
+		a.monthSelect.SetSelected(monthStr)
+
+		a.onMonthChanged()
+
+		// After reload, select the specific invoice by filename.
+		if a.invoiceTable != nil {
+			a.invoiceTable.SelectByDateiname(row.Dateiname)
+		}
+	}
+
+	var content fyne.CanvasObject
+	if len(results) == 0 {
+		content = container.NewVBox(
+			header,
+			widget.NewSeparator(),
+			container.NewCenter(closeBtn),
+		)
+	} else {
+		scrollList := container.NewScroll(list)
+		scrollList.SetMinSize(fyne.NewSize(600, 300))
+		content = container.NewVBox(
+			header,
+			widget.NewSeparator(),
+			scrollList,
+			widget.NewSeparator(),
+			container.NewCenter(closeBtn),
+		)
+	}
+
+	popup = widget.NewModalPopUp(container.NewPadded(content), a.window.Canvas())
+	popup.Show()
 }
 
 // annotateAttachments fills each row's AnzahlAnhaenge/HatAnhaenge from the

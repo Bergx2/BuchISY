@@ -207,6 +207,11 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 	it.filterEntry.OnChanged = func(query string) {
 		it.applyFilter(query)
 	}
+	it.filterEntry.OnSubmitted = func(q string) {
+		if strings.TrimSpace(q) != "" && it.app != nil {
+			it.app.showGlobalSearch(q)
+		}
+	}
 
 	// Tooltip show/hide callbacks
 	showTooltip := func(text string, pos fyne.Position) {
@@ -1085,4 +1090,17 @@ func sanitizeColumnOrder(order []string) []string {
 // joinRowValues joins cell values with a tab, for clipboard copy of a row.
 func joinRowValues(values []string) string {
 	return strings.Join(values, "\t")
+}
+
+// SelectByDateiname selects and scrolls to the row whose Dateiname
+// matches name. No-op if not found.
+func (it *InvoiceTable) SelectByDateiname(name string) {
+	for i, row := range it.filtered {
+		if row.Dateiname == name {
+			id := widget.TableCellID{Row: i, Col: 0}
+			it.table.Select(id)
+			it.table.ScrollTo(id)
+			return
+		}
+	}
 }
