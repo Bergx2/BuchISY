@@ -214,6 +214,9 @@ func (a *App) showErloesAbgleich() {
 			Page:              top.scored.Line.Page,
 			LineIdx:           top.scored.Line.LineIdx,
 		}.String()
+		if pay, ok := a.settings.PaymentAccountSKR04(r.row.Bankkonto); ok {
+			r.row.Buchung = r.row.Buchung.WithSettlementAccount(pay)
+		}
 		if err := a.dbRepo.Update(r.row.Jahr, r.row.Monat, r.row.Dateiname, r.row); err != nil {
 			a.logger.Warn("ErloesAbgleich auto-link Update %s: %v", r.row.Dateiname, err)
 		}
@@ -311,6 +314,9 @@ func (a *App) showErloesAbgleich() {
 					Page:              chosen.scored.Line.Page,
 					LineIdx:           chosen.scored.Line.LineIdx,
 				}.String()
+				if pay, ok := a.settings.PaymentAccountSKR04(sug.row.Bankkonto); ok {
+					sug.row.Buchung = sug.row.Buchung.WithSettlementAccount(pay)
+				}
 				if err := a.dbRepo.Update(sug.row.Jahr, sug.row.Monat, sug.row.Dateiname, sug.row); err != nil {
 					a.logger.Warn("ErloesAbgleich confirm Update %s: %v", sug.row.Dateiname, err)
 				}

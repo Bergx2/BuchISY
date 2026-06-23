@@ -28,6 +28,7 @@ type BookingRules struct {
 	VorsteuerKonten    map[string]int `json:"vorsteuer_konten"`
 	UmsatzsteuerKonten map[string]int `json:"umsatzsteuer_konten,omitempty"`
 	ErloesKonten       map[string]int `json:"erloes_konten,omitempty"`
+	ForderungsKonto    int            `json:"forderungskonto,omitempty"`
 	Regeln             []BookingRule  `json:"regeln"`
 }
 

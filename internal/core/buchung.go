@@ -128,6 +128,30 @@ func (b Booking) PaymentAndCounters(isRevenue bool) (BookingEntry, []BookingEntr
 	return base, counters, true
 }
 
+// WithSettlementAccount returns a copy of a revenue booking with its single Soll
+// (receivable) entry's account changed to bankKonto — used when the incoming
+// payment of an outgoing invoice is reconciled (Forderung → Bank). No-op unless
+// there is exactly one Soll entry.
+func (b Booking) WithSettlementAccount(bankKonto int) Booking {
+	sollCount := 0
+	for _, e := range b.Entries {
+		if e.Soll {
+			sollCount++
+		}
+	}
+	if sollCount != 1 {
+		return b
+	}
+	out := Booking{Info: b.Info, Manuell: b.Manuell, Entries: make([]BookingEntry, len(b.Entries))}
+	copy(out.Entries, b.Entries)
+	for i := range out.Entries {
+		if out.Entries[i].Soll {
+			out.Entries[i].Konto = bankKonto
+		}
+	}
+	return out
+}
+
 // DebitEntries returns the Soll (debit) entries — the expense/Vorsteuer lines.
 func (b Booking) DebitEntries() []BookingEntry {
 	out := make([]BookingEntry, 0, len(b.Entries))
@@ -230,6 +254,11 @@ func BuildRevenueBooking(rules *BookingRules, lines []TaxLine, revenueAccount, p
 		habenSum += e.Betrag
 	}
 	// Payment (Soll) = Σ Haben, prepended so it reads payment-first.
-	entries = append([]BookingEntry{{Konto: paymentAccount, Betrag: round2(habenSum), Soll: true}}, entries...)
+	// Use ForderungsKonto (receivable) for Soll-Besteuerung if set, else paymentAccount (cash-basis fallback).
+	sollKonto := paymentAccount
+	if rules.ForderungsKonto != 0 {
+		sollKonto = rules.ForderungsKonto
+	}
+	entries = append([]BookingEntry{{Konto: sollKonto, Betrag: round2(habenSum), Soll: true}}, entries...)
 	return Booking{Entries: entries}, nil
 }
