@@ -288,5 +288,12 @@
 
   "reconcile.lineTaken": "Auszugsposition bereits verknüpft",
 
-  "modal.erloeskonto": "Erlöskonto"
+  "modal.erloeskonto": "Erlöskonto",
+
+  "zm.title": "Zusammenfassende Meldung",
+  "zm.heading": "Zusammenfassende Meldung",
+  "zm.kontrollsumme": "Kontrollsumme: %s €",
+  "zm.art.sonstige": "Sonstige Leistung",
+  "zm.quarter": "Quartal",
+  "zm.empty": "Keine EU-Umsätze im Zeitraum"
 }

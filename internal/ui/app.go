@@ -728,6 +728,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
+			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
 			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),

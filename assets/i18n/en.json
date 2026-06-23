@@ -288,5 +288,12 @@
 
   "reconcile.lineTaken": "Statement line already linked",
 
-  "modal.erloeskonto": "Revenue account"
+  "modal.erloeskonto": "Revenue account",
+
+  "zm.title": "EC Sales List",
+  "zm.heading": "EC Sales List",
+  "zm.kontrollsumme": "Control total: %s €",
+  "zm.art.sonstige": "Services",
+  "zm.quarter": "Quarter",
+  "zm.empty": "No intra-EU sales in this period"
 }
