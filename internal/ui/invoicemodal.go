@@ -122,8 +122,13 @@ func (a *App) invoiceSubfolder(bankAccount string, ausgangsrechnung bool) string
 		return "Ausgangsrechnungen"
 	}
 	for _, ba := range a.settings.BankAccounts {
-		if ba.Name == bankAccount && ba.AccountType == core.AccountTypeCash {
-			return "Bar"
+		if ba.Name == bankAccount {
+			switch ba.AccountType {
+			case core.AccountTypeCash:
+				return "Bar"
+			case core.AccountTypePayroll:
+				return "Lohnerstattung"
+			}
 		}
 	}
 	return ""

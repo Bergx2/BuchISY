@@ -13,6 +13,7 @@ func TestNormalizeBankAccounts(t *testing.T) {
 		{Name: "C", AccountType: AccountTypeCash}, // valid -> kept
 		{Name: "D", AccountType: "weird"},         // unknown -> bank
 		{Name: "E", AccountType: AccountTypeCreditCard, IsCreditCard: true}, // valid kept
+		{Name: "F", AccountType: AccountTypePayroll},                        // valid -> kept
 	}
 	want := []string{
 		AccountTypeCreditCard,
@@ -20,6 +21,7 @@ func TestNormalizeBankAccounts(t *testing.T) {
 		AccountTypeCash,
 		AccountTypeBank,
 		AccountTypeCreditCard,
+		AccountTypePayroll,
 	}
 
 	got := normalizeBankAccounts(in)
@@ -82,6 +84,8 @@ func TestPaymentAccountSKR04(t *testing.T) {
 		{Name: "Sparkasse", AccountType: AccountTypeBank, SKR04Konto: 1800},
 		{Name: "Barkasse", AccountType: AccountTypeCash},        // no explicit → fallback 1600
 		{Name: "Visa", AccountType: AccountTypeCreditCard},      // no mapping → (0,false)
+		{Name: "Gehaltserstattung", AccountType: AccountTypePayroll, SKR04Konto: 1755}, // payroll liability
+		{Name: "Lohn ohne Konto", AccountType: AccountTypePayroll},                     // payroll, no account
 	}}
 	if k, ok := s.PaymentAccountSKR04("Sparkasse"); !ok || k != 1800 {
 		t.Errorf("Sparkasse = %d,%v", k, ok)
@@ -91,6 +95,12 @@ func TestPaymentAccountSKR04(t *testing.T) {
 	}
 	if _, ok := s.PaymentAccountSKR04("Visa"); ok {
 		t.Error("Visa without mapping should be (0,false)")
+	}
+	if k, ok := s.PaymentAccountSKR04("Gehaltserstattung"); !ok || k != 1755 {
+		t.Errorf("payroll with explicit liability account = %d,%v, want 1755,true", k, ok)
+	}
+	if _, ok := s.PaymentAccountSKR04("Lohn ohne Konto"); ok {
+		t.Error("payroll without explicit account should be (0,false)")
 	}
 	if _, ok := s.PaymentAccountSKR04("Unbekannt"); ok {
 		t.Error("unknown account name should be (0,false)")

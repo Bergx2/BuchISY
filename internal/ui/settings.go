@@ -340,12 +340,14 @@ func (a *App) showSettingsView() {
 				settlementSelect.Disable()
 			}
 
-			typeSelect := widget.NewSelect([]string{"Bank", "Kreditkarte", "Barkasse"}, nil)
+			typeSelect := widget.NewSelect([]string{"Bank", "Kreditkarte", "Barkasse", "Lohnerstattung"}, nil)
 			switch tempBankAccounts[currentIdx].AccountType {
 			case core.AccountTypeCreditCard:
 				typeSelect.SetSelected("Kreditkarte")
 			case core.AccountTypeCash:
 				typeSelect.SetSelected("Barkasse")
+			case core.AccountTypePayroll:
+				typeSelect.SetSelected("Lohnerstattung")
 			default:
 				typeSelect.SetSelected("Bank")
 			}
@@ -389,6 +391,10 @@ func (a *App) showSettingsView() {
 					showSettlement(true)
 				case "Barkasse":
 					tempBankAccounts[currentIdx].AccountType = core.AccountTypeCash
+					settlementSelect.Disable()
+					showSettlement(false)
+				case "Lohnerstattung":
+					tempBankAccounts[currentIdx].AccountType = core.AccountTypePayroll
 					settlementSelect.Disable()
 					showSettlement(false)
 				default:

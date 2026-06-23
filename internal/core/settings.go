@@ -132,7 +132,7 @@ func GetDocumentsDir() (string, error) {
 func normalizeBankAccounts(accounts []BankAccount) []BankAccount {
 	for i := range accounts {
 		switch accounts[i].AccountType {
-		case AccountTypeBank, AccountTypeCreditCard, AccountTypeCash:
+		case AccountTypeBank, AccountTypeCreditCard, AccountTypeCash, AccountTypePayroll:
 			// already a valid type
 		default:
 			if accounts[i].IsCreditCard {
