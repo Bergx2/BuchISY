@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // BookingRule describes how a booking category posts a receipt's net amounts.
@@ -29,6 +30,7 @@ type BookingRules struct {
 	UmsatzsteuerKonten map[string]int `json:"umsatzsteuer_konten,omitempty"`
 	ErloesKonten       map[string]int `json:"erloes_konten,omitempty"`
 	ForderungsKonto    int            `json:"forderungskonto,omitempty"`
+	KontoStichwoerter  map[string]int `json:"konto_stichwoerter,omitempty"`
 	Regeln             []BookingRule  `json:"regeln"`
 }
 
@@ -76,4 +78,29 @@ func (r *BookingRules) ErloesKonto(vatID string, mwst float64) (int, bool) {
 	}
 	k, ok := r.ErloesKonten[key]
 	return k, ok
+}
+
+// SuggestKonto proposes a Gegenkonto for a new supplier by scanning text
+// (supplier name + Verwendungszweck) for configured keywords. Case-insensitive
+// substring match; the longest matching keyword wins (most specific). Returns
+// (0,false) when nothing matches or no keywords are configured.
+func (r *BookingRules) SuggestKonto(text string) (int, bool) {
+	if len(r.KontoStichwoerter) == 0 || strings.TrimSpace(text) == "" {
+		return 0, false
+	}
+	lower := strings.ToLower(text)
+	bestKw, bestKonto := "", 0
+	for kw, konto := range r.KontoStichwoerter {
+		k := strings.ToLower(strings.TrimSpace(kw))
+		if k == "" {
+			continue
+		}
+		if strings.Contains(lower, k) && len(k) > len(bestKw) {
+			bestKw, bestKonto = k, konto
+		}
+	}
+	if bestKw == "" {
+		return 0, false
+	}
+	return bestKonto, true
 }
