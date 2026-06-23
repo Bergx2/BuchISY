@@ -12,7 +12,7 @@ type Meta struct {
 	Auftraggeber      string     // Company name (previously Firmenname)
 	Verwendungszweck  string     // Purpose/description (previously Kurzbezeichnung)
 	Rechnungsnummer   string     // Invoice number
-	VATID             string     // VAT-ID Nr. of the SENDER (e.g. DE123456789)
+	VATID             string     // counterparty VAT-ID: supplier (incoming) or customer (Ausgangsrechnung); used for the ZM
 	BetragNetto       float64    // Net amount
 	SteuersatzProzent float64    // Tax rate in percent
 	SteuersatzBetrag  float64    // Tax amount
@@ -180,7 +180,7 @@ type CSVRow struct {
 	Auftraggeber      string
 	Verwendungszweck  string
 	Rechnungsnummer   string
-	VATID             string // VAT-ID Nr. of the sender
+	VATID             string // counterparty VAT-ID: supplier (incoming) or customer (Ausgangsrechnung)
 	BetragNetto       float64
 	SteuersatzProzent float64
 	SteuersatzBetrag  float64
