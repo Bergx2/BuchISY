@@ -244,6 +244,7 @@
   "settings.rules.kfz": "Vehicle costs account",
 
   "report.pdf": "PDF",
+  "report.xml": "XML",
 
   "controlling.title": "Controlling",
   "controlling.heading": "Booked sums per account",

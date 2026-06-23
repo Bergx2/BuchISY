@@ -87,6 +87,23 @@ func TestBuildZMPDF(t *testing.T) {
 	}
 }
 
+func TestBuildSalesJournalPDF(t *testing.T) {
+	rows := []CSVRow{
+		{Ausgangsrechnung: true, Belegnummer: "2025-0002", Rechnungsnummer: "RA-1", Rechnungsdatum: "10.12.2025", Auftraggeber: "Symeo GmbH", Gegenkonto: 8400, BetragNetto: 6500, SteuersatzBetrag: 1235, Bruttobetrag: 7735},
+		{Ausgangsrechnung: false, Auftraggeber: "Lieferant"}, // incoming → excluded
+	}
+	data, err := BuildSalesJournalPDF(rows, nil, "Rechnungsausgangsbuch Dezember 2025")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 100 || string(data[:4]) != "%PDF" {
+		t.Fatalf("not a PDF (%d bytes)", len(data))
+	}
+	if _, err := BuildSalesJournalPDF(nil, nil, "Leer"); err != nil {
+		t.Errorf("empty sales journal errored: %v", err)
+	}
+}
+
 func TestPDFReportsPaginate(t *testing.T) {
 	var rows []CSVRow
 	for i := 0; i < 200; i++ {

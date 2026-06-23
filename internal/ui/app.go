@@ -730,6 +730,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
 			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
+			fyne.NewMenuItem("Rechnungsausgangsbuch (PDF)", func() { a.showSalesJournalPDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
 			fyne.NewMenuItem("Erlös-Abgleich", func() { a.showErloesAbgleich() }),
 			fyne.NewMenuItem("Belegnummern neu vergeben", func() { a.renumberBelegnummern() }),
@@ -846,6 +847,19 @@ func (a *App) showBelegListePDF() {
 		return
 	}
 	a.savePDF("Belegliste_"+period+".pdf", data)
+}
+
+// showSalesJournalPDF exports the Rechnungsausgangsbuch — a monthly list of all
+// outgoing invoices (Ausgangsrechnungen) with per-invoice net/VAT/gross + totals.
+func (a *App) showSalesJournalPDF() {
+	period := fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+	rows := a.collectInvoiceRows(a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth))
+	data, err := core.BuildSalesJournalPDF(rows, a.chart, "Rechnungsausgangsbuch "+period)
+	if err != nil {
+		a.showError(a.bundle.T("error.processing.title"), err.Error())
+		return
+	}
+	a.savePDF("Rechnungsausgangsbuch_"+period+".pdf", data)
 }
 
 // contextMenuWrap wraps any CanvasObject and forwards right-clicks to

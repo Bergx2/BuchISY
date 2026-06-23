@@ -163,8 +163,24 @@ func (a *App) showUStVADialog() {
 		a.savePDF("UStVA_"+periodStr+".pdf", data)
 	})
 
+	xmlBtn := widget.NewButton(a.bundle.T("report.xml"), func() {
+		periodStr := fmt.Sprintf("%04d", a.currentYear)
+		switch period {
+		case 0:
+			periodStr = fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+		case 1:
+			periodStr = fmt.Sprintf("%04d-Q%d", a.currentYear, (int(a.currentMonth)-1)/3+1)
+		}
+		data, err := core.BuildUStVAXML(u, periodStr, a.settings.OwnVATID)
+		if err != nil {
+			a.showError(a.bundle.T("error.processing.title"), err.Error())
+			return
+		}
+		a.savePDF("UStVA_"+periodStr+".xml", data)
+	})
+
 	header := widget.NewLabelWithStyle(a.bundle.T("ustva.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	topBar := container.NewBorder(nil, nil, nil, pdfBtn, toggle)
+	topBar := container.NewBorder(nil, nil, nil, container.NewHBox(xmlBtn, pdfBtn), toggle)
 	content := container.NewBorder(container.NewVBox(header, topBar), nil, nil, nil, scroll)
 	d := dialog.NewCustom(a.bundle.T("ustva.title"), a.bundle.T("common.close"), content, a.window)
 	d.Resize(fyne.NewSize(520, 520))
