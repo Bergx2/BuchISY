@@ -68,15 +68,15 @@ func ComputeUStVA(rows []CSVRow, rules *BookingRules) UStVA {
 		}
 	}
 
+	// Totals sum the RAW per-account values and are rounded once, so a section
+	// total never drifts ±0.01 from the (independently rounded) displayed lines.
 	var u UStVA
 	for konto, s := range ustSum {
-		s = round2(s)
-		u.Umsatzsteuer = append(u.Umsatzsteuer, UStVAZeile{Satz: ustRate[konto], Konto: konto, Betrag: s})
+		u.Umsatzsteuer = append(u.Umsatzsteuer, UStVAZeile{Satz: ustRate[konto], Konto: konto, Betrag: round2(s)})
 		u.UmsatzsteuerGesamt += s
 	}
 	for konto, s := range vstSum {
-		s = round2(s)
-		u.Vorsteuer = append(u.Vorsteuer, UStVAZeile{Satz: vstRate[konto], Konto: konto, Betrag: s})
+		u.Vorsteuer = append(u.Vorsteuer, UStVAZeile{Satz: vstRate[konto], Konto: konto, Betrag: round2(s)})
 		u.VorsteuerGesamt += s
 	}
 	sortZeilen(u.Umsatzsteuer)
