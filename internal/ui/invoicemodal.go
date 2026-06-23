@@ -822,6 +822,9 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		refreshWarnings()
 	}
 
+	// VAT-ID edits affect the format/ZM warnings; refresh the live strip.
+	vatIDEntry.OnChanged = func(string) { refreshWarnings() }
+
 	// Initial warnings evaluation.
 	refreshWarnings()
 
@@ -875,6 +878,13 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			if ausgangsrechnungCheck.Checked {
 				b, bookable, _ = a.computeRevenueBooking(
 					ed.Lines(), selectedAccount, bankAccountSelect.Selected)
+				// #6: a paid outgoing invoice settles to the bank already at
+				// entry — keep the persisted booking in sync with the preview.
+				if bookable && strings.TrimSpace(paymentDateEntry.Text) != "" {
+					if pay, ok := a.settings.PaymentAccountSKR04(bankAccountSelect.Selected); ok {
+						b = b.WithSettlementAccount(pay)
+					}
+				}
 			} else {
 				b, bookable, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
@@ -966,19 +976,10 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		},
 		func() { confirmWin.Close() },
 	)
-	// #8 Keyboard: Escape = cancel (always safe). Return/Enter is intentionally
-	// NOT wired to save because the modal contains multi-line text entries
-	// (commentEntry) where Enter is a normal editing key and we cannot reliably
-	// detect which widget has focus in Fyne without hooking every entry — that
-	// would be fragile. Ctrl+S (wired by addDialogShortcuts) is the keyboard
-	// save shortcut. We override SetOnTypedKey here to keep Escape working; the
-	// previous SetOnTypedKey from addDialogShortcuts is replaced by this one.
-	// E17.4
-	confirmWin.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
-		if ev.Name == fyne.KeyEscape {
-			confirmWin.Close()
-		}
-	})
+	// #8 Keyboard: Escape = cancel and Ctrl+S = save are both wired by
+	// addDialogShortcuts above. Return/Enter is intentionally NOT bound to save
+	// because the modal has multi-line entries (commentEntry) where Enter is a
+	// normal editing key and Fyne can't reliably tell which widget has focus.
 	split := container.NewHSplit(scrollForm, preview)
 	splitOffset := a.settings.PreviewSplitOffset
 	// Clamp away from the edges so a previously dragged-too-far divider
