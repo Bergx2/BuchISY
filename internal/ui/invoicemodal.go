@@ -845,6 +845,9 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			Gegenkonto:       selectedAccount,
 			Waehrung:         core.CurrencyCodeFromOption(currencySelect.Selected),
 			Wechselkurs:      parseDecimal(kursEntry.Text),
+			Rechnungsdatum:   dateEntry.Text,
+			VATID:            vatIDEntry.Text,
+			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
 		})
 		if len(warnings) > 0 {
 			msg := a.bundle.T("warnings.intro") + "\n• " + strings.Join(warnings, "\n• ")
