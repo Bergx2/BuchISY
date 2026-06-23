@@ -349,3 +349,79 @@ func TestFindDuplicate(t *testing.T) {
 		t.Errorf("expected fallback Dateiname 'invoice2.pdf', got '%s'", labelFallback)
 	}
 }
+
+// TestSearchInvoicesGlobal verifies that SearchInvoices finds rows across all
+// months and that an empty query returns nil without error.
+func TestSearchInvoicesGlobal(t *testing.T) {
+	repo := newTestRepo(t)
+
+	// Insert "Müller GmbH" invoice in 2026/01
+	mueller := core.CSVRow{
+		Dateiname:       "mueller.pdf",
+		Jahr:            "2026",
+		Monat:           "01",
+		Auftraggeber:    "Müller GmbH",
+		Rechnungsnummer: "R-77",
+		Rechnungsdatum:  "15.01.2026",
+		Bruttobetrag:    119,
+	}
+	if _, err := repo.Insert(mueller); err != nil {
+		t.Fatalf("Insert mueller: %v", err)
+	}
+
+	// Insert a second invoice in a different month
+	other := core.CSVRow{
+		Dateiname:       "other.pdf",
+		Jahr:            "2025",
+		Monat:           "12",
+		Auftraggeber:    "Sonstige AG",
+		Rechnungsnummer: "X-999",
+		Rechnungsdatum:  "01.12.2025",
+		Bruttobetrag:    50,
+	}
+	if _, err := repo.Insert(other); err != nil {
+		t.Fatalf("Insert other: %v", err)
+	}
+
+	// Empty query → nil, nil
+	results, err := repo.SearchInvoices("")
+	if err != nil {
+		t.Fatalf("SearchInvoices empty: %v", err)
+	}
+	if results != nil {
+		t.Errorf("empty query should return nil, got %v", results)
+	}
+
+	// Search by Auftraggeber (case-insensitive, lowercase query)
+	results, err = repo.SearchInvoices("müller")
+	if err != nil {
+		t.Fatalf("SearchInvoices 'müller': %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for 'müller', got %d", len(results))
+	}
+	if results[0].Dateiname != "mueller.pdf" {
+		t.Errorf("expected mueller.pdf, got %s", results[0].Dateiname)
+	}
+
+	// Search by Rechnungsnummer
+	results, err = repo.SearchInvoices("R-77")
+	if err != nil {
+		t.Fatalf("SearchInvoices 'R-77': %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for 'R-77', got %d", len(results))
+	}
+	if results[0].Rechnungsnummer != "R-77" {
+		t.Errorf("expected R-77, got %s", results[0].Rechnungsnummer)
+	}
+
+	// Search that matches nothing
+	results, err = repo.SearchInvoices("zzzz")
+	if err != nil {
+		t.Fatalf("SearchInvoices 'zzzz': %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for 'zzzz', got %d", len(results))
+	}
+}

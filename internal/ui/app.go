@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -91,6 +92,10 @@ type App struct {
 	// the empty-state; swapped after every loadInvoices() call.
 	centerWrapper *fyne.Container
 	emptyState    fyne.CanvasObject
+
+	// stepInProgress guards stepMonth from being double-triggered by the
+	// yearSelect/monthSelect OnChanged callbacks firing during SetSelected.
+	stepInProgress bool
 }
 
 // New creates the BuchISY application and shows the profile picker.
@@ -356,6 +361,16 @@ func (a *App) registerZoomShortcuts() {
 	canvas.AddShortcut(
 		&desktop.CustomShortcut{KeyName: fyne.Key0, Modifier: fyne.KeyModifierControl},
 		func(fyne.Shortcut) { a.setUIScale(1.0) },
+	)
+
+	// Month navigation: Ctrl+Left / Ctrl+Right
+	canvas.AddShortcut(
+		&desktop.CustomShortcut{KeyName: fyne.KeyLeft, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.stepMonth(-1) },
+	)
+	canvas.AddShortcut(
+		&desktop.CustomShortcut{KeyName: fyne.KeyRight, Modifier: fyne.KeyModifierControl},
+		func(fyne.Shortcut) { a.stepMonth(1) },
 	)
 }
 
@@ -632,6 +647,11 @@ func (a *App) buildUI() fyne.CanvasObject {
 	a.invoiceTable.SetColumnOrder(a.settings.ColumnOrder)
 	a.invoiceTable.SetDecimalSeparator(a.settings.DecimalSeparator)
 	a.invoiceTable.SetWindow(a.window)
+	// Table keyboard navigation: ↑/↓ move selection, Enter opens edit,
+	// Del deletes with the existing confirm dialog. Wired on the main
+	// window canvas; dialog windows own separate canvases, so this never
+	// conflicts with dialog Escape handlers.
+	a.invoiceTable.RegisterKeyHandler(a.window.Canvas())
 
 	// Top bar (this may trigger callbacks when setting initial values).
 	// It hosts the upload drop field on the left and all other controls
@@ -818,6 +838,9 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	years := generateYearOptions()
 	currentYearStr := fmt.Sprintf("%d", a.currentYear)
 	a.yearSelect = newHighlightedSelect(years, nowYearStr, func(selected string) {
+		if a.stepInProgress {
+			return
+		}
 		var year int
 		_, _ = fmt.Sscanf(selected, "%d", &year)
 		a.currentYear = year
@@ -834,6 +857,9 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	currentMonthStr := fmt.Sprintf("%02d - %-12s", a.currentMonth, monthName)
 
 	a.monthSelect = newHighlightedSelect(months, nowMonthStr, func(selected string) {
+		if a.stepInProgress {
+			return
+		}
 		if selected == wholeYearOption {
 			a.viewWholeYear = true
 			a.onMonthChanged()
@@ -871,6 +897,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
 			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
+			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Rechnungsausgangsbuch (PDF)", func() { a.showSalesJournalPDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
@@ -918,10 +945,21 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), e.AbsolutePosition)
 	})
 
+	prevMonthBtn := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
+		a.stepMonth(-1)
+	})
+	prevMonthBtn.Importance = widget.LowImportance
+	nextMonthBtn := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {
+		a.stepMonth(1)
+	})
+	nextMonthBtn.Importance = widget.LowImportance
+
 	rightControls := container.NewHBox(
 		yearWrap,
 		widget.NewLabel("-"),
+		prevMonthBtn,
 		monthContainer,
+		nextMonthBtn,
 		widget.NewSeparator(),
 		overflowBtn,
 		settingsBtn,
@@ -991,6 +1029,152 @@ func (a *App) showBelegListePDF() {
 	a.savePDF("Belegliste_"+period+".pdf", data)
 }
 
+// showYearOverviewDialog shows a per-month KPI summary for the current year.
+// Columns: Monat · Anzahl · Brutto · #offen · #Warnungen.
+// Clicking a month row jumps to that month using the same stepInProgress guard
+// as stepMonth, then closes the dialog.
+func (a *App) showYearOverviewDialog() {
+	year := a.currentYear
+
+	type monthRow struct {
+		label string
+		m     int
+		kpi   core.OverviewKPI
+	}
+
+	var rows []monthRow
+	var total core.OverviewKPI
+	for m := 1; m <= 12; m++ {
+		mRows := a.collectInvoiceRows(year, m, year, m)
+		kpi := core.OverviewKPIs(mRows)
+		monthKey := fmt.Sprintf("month.%02d", m)
+		label := fmt.Sprintf("%02d - %s", m, a.bundle.T(monthKey))
+		rows = append(rows, monthRow{label: label, m: m, kpi: kpi})
+		total.Count += kpi.Count
+		total.Brutto += kpi.Brutto
+		total.OpenReconcile += kpi.OpenReconcile
+		total.Warnings += kpi.Warnings
+	}
+
+	// +1 for the totals row
+	numRows := len(rows) + 1
+
+	headers := []string{
+		a.bundle.T("overview.col.month"),
+		a.bundle.T("overview.col.count"),
+		a.bundle.T("overview.col.brutto"),
+		a.bundle.T("overview.col.open"),
+		a.bundle.T("overview.col.warnings"),
+	}
+
+	var dlg *dialog.CustomDialog
+
+	fmtBrutto := func(v float64) string {
+		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+	}
+
+	tbl := widget.NewTable(
+		func() (int, int) { return numRows + 1, 5 }, // +1 for header row
+		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func(id widget.TableCellID, o fyne.CanvasObject) {
+			lbl := o.(*widget.Label)
+			lbl.TextStyle = fyne.TextStyle{}
+			lbl.Alignment = fyne.TextAlignLeading
+
+			// Header row
+			if id.Row == 0 {
+				lbl.TextStyle = fyne.TextStyle{Bold: true}
+				if id.Col < len(headers) {
+					lbl.SetText(headers[id.Col])
+				}
+				return
+			}
+
+			dataIdx := id.Row - 1
+
+			// Totals row
+			if dataIdx == len(rows) {
+				lbl.TextStyle = fyne.TextStyle{Bold: true}
+				switch id.Col {
+				case 0:
+					lbl.SetText(a.bundle.T("overview.total"))
+				case 1:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmt.Sprintf("%d", total.Count))
+				case 2:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmtBrutto(total.Brutto))
+				case 3:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmt.Sprintf("%d", total.OpenReconcile))
+				case 4:
+					lbl.Alignment = fyne.TextAlignTrailing
+					lbl.SetText(fmt.Sprintf("%d", total.Warnings))
+				}
+				return
+			}
+
+			r := rows[dataIdx]
+			switch id.Col {
+			case 0:
+				lbl.SetText(r.label)
+			case 1:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmt.Sprintf("%d", r.kpi.Count))
+			case 2:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmtBrutto(r.kpi.Brutto))
+			case 3:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmt.Sprintf("%d", r.kpi.OpenReconcile))
+			case 4:
+				lbl.Alignment = fyne.TextAlignTrailing
+				lbl.SetText(fmt.Sprintf("%d", r.kpi.Warnings))
+			}
+		},
+	)
+	tbl.SetColumnWidth(0, 180)
+	tbl.SetColumnWidth(1, 70)
+	tbl.SetColumnWidth(2, 110)
+	tbl.SetColumnWidth(3, 70)
+	tbl.SetColumnWidth(4, 70)
+
+	// Row tap: jump to that month (skip header row and totals row).
+	tbl.OnSelected = func(id widget.TableCellID) {
+		tbl.Unselect(id)
+		if id.Row == 0 {
+			return // header
+		}
+		dataIdx := id.Row - 1
+		if dataIdx >= len(rows) {
+			return // totals row
+		}
+		r := rows[dataIdx]
+		// Jump to month using the same stepInProgress guard as stepMonth.
+		a.currentYear = year
+		a.currentMonth = time.Month(r.m)
+		a.viewWholeYear = false
+		a.stepInProgress = true
+		a.yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+		monthKey := fmt.Sprintf("month.%02d", a.currentMonth)
+		monthName := a.bundle.T(monthKey)
+		a.monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth), monthName))
+		a.stepInProgress = false
+		a.onMonthChanged()
+		if dlg != nil {
+			dlg.Hide()
+		}
+	}
+
+	scroll := container.NewVScroll(tbl)
+	scroll.SetMinSize(fyne.NewSize(520, 380))
+
+	title := fmt.Sprintf(a.bundle.T("overview.title"), year)
+	dlg = dialog.NewCustom(title, a.bundle.T("overview.close"), scroll, a.window)
+	dlg.Resize(fyne.NewSize(540, 460))
+	dlg.Show()
+}
+
 // showSalesJournalPDF exports the Rechnungsausgangsbuch — a monthly list of all
 // outgoing invoices (Ausgangsrechnungen) with per-invoice net/VAT/gross + totals.
 func (a *App) showSalesJournalPDF() {
@@ -1055,6 +1239,54 @@ func (l fixedWidthLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 
 // buildRightPanel is no longer needed - table is created in buildUI
 // Kept for reference if needed later
+
+// stepMonth advances the current month by delta (+1 or -1), rolling over
+// year boundaries and clamping to the year range offered by yearSelect.
+// The stepInProgress guard prevents the yearSelect/monthSelect OnChanged
+// callbacks from triggering a second onMonthChanged call during SetSelected.
+func (a *App) stepMonth(delta int) {
+	if a.yearSelect == nil || a.monthSelect == nil {
+		return
+	}
+
+	newMonth := int(a.currentMonth) + delta
+	newYear := a.currentYear
+
+	// Roll over year boundaries.
+	if newMonth < 1 {
+		newMonth = 12
+		newYear--
+	} else if newMonth > 12 {
+		newMonth = 1
+		newYear++
+	}
+
+	// Clamp to the available year range.
+	yearOptions := generateYearOptions()
+	if len(yearOptions) == 0 {
+		return
+	}
+	var minYear, maxYear int
+	fmt.Sscanf(yearOptions[0], "%d", &minYear)
+	fmt.Sscanf(yearOptions[len(yearOptions)-1], "%d", &maxYear)
+	if newYear < minYear || newYear > maxYear {
+		return // at the edge — no-op
+	}
+
+	a.currentYear = newYear
+	a.currentMonth = time.Month(newMonth)
+	a.viewWholeYear = false
+
+	// Update selects without triggering their OnChanged (guard is set).
+	a.stepInProgress = true
+	a.yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+	monthKey := fmt.Sprintf("month.%02d", a.currentMonth)
+	monthName := a.bundle.T(monthKey)
+	a.monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth), monthName))
+	a.stepInProgress = false
+
+	a.onMonthChanged()
+}
 
 // onMonthChanged is called when the year or month selection changes.
 func (a *App) onMonthChanged() {
@@ -1182,6 +1414,126 @@ func (a *App) refreshCenterContent() {
 		a.centerWrapper.Objects = []fyne.CanvasObject{a.invoiceTable.Container()}
 	}
 	a.centerWrapper.Refresh()
+}
+
+// showGlobalSearch runs a global DB search and shows a modal popup with
+// results. Pressing Enter in the filter box triggers this (via
+// InvoiceTable.filterEntry.OnSubmitted). Clicking a result switches the
+// app to the invoice's month/year and selects it in the table.
+func (a *App) showGlobalSearch(query string) {
+	if a.dbRepo == nil || a.window == nil {
+		return
+	}
+	results, err := a.dbRepo.SearchInvoices(query)
+	if err != nil {
+		a.showError(a.bundle.T("error.processing.title"), err.Error())
+		return
+	}
+
+	var popup *widget.PopUp
+
+	var headerText string
+	if len(results) == 0 {
+		headerText = a.bundle.T("search.none")
+	} else {
+		headerText = fmt.Sprintf(a.bundle.T("search.results"), len(results))
+	}
+	header := widget.NewLabelWithStyle(headerText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+
+	closeBtn := widget.NewButton(a.bundle.T("common.close"), func() {
+		if popup != nil {
+			popup.Hide()
+		}
+	})
+
+	var list *widget.List
+	list = widget.NewList(
+		func() int { return len(results) },
+		func() fyne.CanvasObject {
+			return widget.NewLabel("")
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			lbl := obj.(*widget.Label)
+			r := results[id]
+			sep := ","
+			if a.settings.DecimalSeparator != "" {
+				sep = a.settings.DecimalSeparator
+			}
+			brutto := fmt.Sprintf("%.2f", r.Bruttobetrag)
+			if sep == "," {
+				brutto = strings.Replace(brutto, ".", ",", 1)
+			}
+			lbl.SetText(fmt.Sprintf("%s · %s · %s · %s %s",
+				r.Belegnummer, r.Rechnungsdatum, r.Auftraggeber, brutto, r.Waehrung))
+		},
+	)
+	list.OnSelected = func(id widget.ListItemID) {
+		if id < 0 || id >= len(results) {
+			return
+		}
+		row := results[id]
+		if popup != nil {
+			popup.Hide()
+		}
+
+		// Parse year and month from the result row.
+		year, errY := strconv.Atoi(row.Jahr)
+		monthNum, errM := strconv.Atoi(row.Monat)
+		if errY != nil || errM != nil || monthNum < 1 || monthNum > 12 {
+			return
+		}
+		a.currentYear = year
+		a.currentMonth = time.Month(monthNum)
+		a.viewWholeYear = false
+
+		// Clear any active filter so the reloaded table is unfiltered and
+		// SelectByDateiname can find the row.
+		if a.invoiceTable != nil {
+			a.invoiceTable.FilterEntry().SetText("")
+		}
+
+		// Update selectors using the same label formats as buildTopBar.
+		// Guard with stepInProgress so the OnChanged callbacks don't fire
+		// a second onMonthChanged while SetSelected is running.
+		yearStr := fmt.Sprintf("%d", year)
+		a.stepInProgress = true
+		a.yearSelect.SetSelected(yearStr)
+
+		monthKey := fmt.Sprintf("month.%02d", monthNum)
+		monthName := a.bundle.T(monthKey)
+		monthStr := fmt.Sprintf("%02d - %-12s", monthNum, monthName)
+		a.monthSelect.SetSelected(monthStr)
+		a.stepInProgress = false
+
+		a.onMonthChanged()
+
+		// After reload, select the specific invoice by filename.
+		if a.invoiceTable != nil {
+			a.invoiceTable.SelectByDateiname(row.Dateiname)
+		}
+	}
+
+	var content fyne.CanvasObject
+	if len(results) == 0 {
+		content = container.NewVBox(
+			header,
+			widget.NewSeparator(),
+			container.NewCenter(closeBtn),
+		)
+	} else {
+		scrollList := container.NewScroll(list)
+		scrollList.SetMinSize(fyne.NewSize(600, 300))
+		content = container.NewVBox(
+			header,
+			widget.NewSeparator(),
+			scrollList,
+			widget.NewSeparator(),
+			container.NewCenter(closeBtn),
+		)
+	}
+
+	popup = widget.NewModalPopUp(container.NewPadded(content), a.window.Canvas())
+	popup.Show()
 }
 
 // annotateAttachments fills each row's AnzahlAnhaenge/HatAnhaenge from the

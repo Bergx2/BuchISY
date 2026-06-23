@@ -343,5 +343,17 @@
 
   "empty.title": "No receipts in this month yet",
   "empty.hint": "Drag PDFs here or add a receipt",
-  "empty.add": "Add receipt"
+  "empty.add": "Add receipt",
+
+  "search.results": "%d results",
+  "search.none": "No results",
+
+  "overview.title": "Overview %d",
+  "overview.col.month": "Month",
+  "overview.col.count": "Count",
+  "overview.col.brutto": "Gross",
+  "overview.col.open": "#open",
+  "overview.col.warnings": "#warn.",
+  "overview.total": "Total",
+  "overview.close": "Close"
 }
