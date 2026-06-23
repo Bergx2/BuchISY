@@ -181,7 +181,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	partialPaymentCheck.SetChecked(meta.Teilzahlung)
 
 	ausgangsrechnungCheck := widget.NewCheck("Ausgangsrechnung", nil)
-	ausgangsrechnungCheck.SetChecked(row.Unterordner == "Ausgangsrechnungen")
+	ausgangsrechnungCheck.SetChecked(row.Ausgangsrechnung || row.Unterordner == "Ausgangsrechnungen")
 
 	// Comment field (multiline)
 	commentEntry := widget.NewMultiLineEntry()
@@ -741,7 +741,7 @@ func (a *App) updateInvoice(
 		Wechselkurs:       wechselkurs,
 		GebuehrProzent:    gebuehrProzent,
 		HatAnhaenge:       willHaveAttachments,
-		Ausgangsrechnung:  originalRow.Ausgangsrechnung,
+		Ausgangsrechnung:  ausgangsrechnung,
 	}
 	parts := strings.Split(invoiceDate, ".")
 	if len(parts) == 3 {

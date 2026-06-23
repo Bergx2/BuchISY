@@ -279,6 +279,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 
 	// Ausgangsrechnung checkbox
 	ausgangsrechnungCheck := widget.NewCheck("Ausgangsrechnung", nil)
+	ausgangsrechnungCheck.SetChecked(meta.Ausgangsrechnung)
 
 	// Comment field (multiline)
 	commentEntry := widget.NewMultiLineEntry()

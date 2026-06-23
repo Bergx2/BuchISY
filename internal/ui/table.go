@@ -480,7 +480,7 @@ func (it *InvoiceTable) matchesChip(row core.CSVRow) bool {
 	case "teilzahlung":
 		return row.Teilzahlung
 	case "ausgang":
-		return row.Unterordner == "Ausgangsrechnungen"
+		return row.Ausgangsrechnung || row.Unterordner == "Ausgangsrechnungen"
 	case "obuchung":
 		return !row.Buchung.Balanced()
 	}

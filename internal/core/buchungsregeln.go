@@ -25,9 +25,9 @@ type BookingRule struct {
 // BookingRules is the bundled rules base: Vorsteuer accounts keyed by integer
 // percent ("19","7") and the list of category rules.
 type BookingRules struct {
-	VorsteuerKonten   map[string]int `json:"vorsteuer_konten"`
+	VorsteuerKonten    map[string]int `json:"vorsteuer_konten"`
 	UmsatzsteuerKonten map[string]int `json:"umsatzsteuer_konten,omitempty"`
-	Regeln            []BookingRule  `json:"regeln"`
+	Regeln             []BookingRule  `json:"regeln"`
 }
 
 // ParseBookingRules decodes the rules base JSON.
