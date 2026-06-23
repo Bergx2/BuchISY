@@ -176,6 +176,32 @@ func TestBuildBookingNewCategories(t *testing.T) {
 	}
 }
 
+func TestBuildRevenueBooking(t *testing.T) {
+	rules := &BookingRules{UmsatzsteuerKonten: map[string]int{"19": 1776}}
+	lines := []TaxLine{{Netto: 6500, SatzProzent: 19, MwStBetrag: 1235}}
+	b, err := BuildRevenueBooking(rules, lines, 8400, 1200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Balanced() {
+		t.Fatalf("not balanced: %+v", b.Entries)
+	}
+	// Soll payment = gross 7735; Haben Erlös 6500 + USt 1235.
+	want := map[int]struct {
+		betrag float64
+		soll   bool
+	}{1200: {7735, true}, 8400: {6500, false}, 1776: {1235, false}}
+	if len(b.Entries) != 3 {
+		t.Fatalf("got %d entries, want 3: %+v", len(b.Entries), b.Entries)
+	}
+	for _, e := range b.Entries {
+		w, ok := want[e.Konto]
+		if !ok || e.Betrag != w.betrag || e.Soll != w.soll {
+			t.Errorf("entry %+v unexpected", e)
+		}
+	}
+}
+
 func sollByKonto(b Booking) map[int]float64 {
 	m := map[int]float64{}
 	for _, e := range b.Entries {

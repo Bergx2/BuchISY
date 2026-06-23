@@ -180,3 +180,32 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 	entries = append(entries, BookingEntry{Konto: paymentAccount, Betrag: round2(sollSum), Soll: false})
 	return Booking{Entries: entries}, nil
 }
+
+// BuildRevenueBooking turns an outgoing invoice's tax lines into a balanced
+// revenue Booking: Soll paymentAccount (gross received), Haben revenueAccount
+// (net) + Umsatzsteuer per rate. The mirror of BuildBooking. paymentAccount is
+// computed as the sum of the Haben side, so the booking always balances even if
+// a rate's Umsatzsteuer account is unconfigured.
+func BuildRevenueBooking(rules *BookingRules, lines []TaxLine, revenueAccount, paymentAccount int) (Booking, error) {
+	if len(lines) == 0 {
+		return Booking{}, fmt.Errorf("keine Steuerzeilen für Erlösbuchung")
+	}
+	entries := []BookingEntry{
+		{Konto: revenueAccount, Betrag: round2(SumNetto(lines)), Soll: false},
+	}
+	for _, l := range lines {
+		if l.MwStBetrag == 0 {
+			continue
+		}
+		if konto, ok := rules.UmsatzsteuerKonto(l.SatzProzent); ok {
+			entries = append(entries, BookingEntry{Konto: konto, Betrag: round2(l.MwStBetrag), Soll: false})
+		}
+	}
+	var habenSum float64
+	for _, e := range entries {
+		habenSum += e.Betrag
+	}
+	// Payment (Soll) = Σ Haben, prepended so it reads payment-first.
+	entries = append([]BookingEntry{{Konto: paymentAccount, Betrag: round2(habenSum), Soll: true}}, entries...)
+	return Booking{Entries: entries}, nil
+}
