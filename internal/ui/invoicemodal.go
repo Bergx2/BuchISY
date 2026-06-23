@@ -199,6 +199,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	if selectedAccount == 0 {
 		selectedAccount = a.settings.DefaultAccount
 	}
+	accountManuallyPicked := false
 	accountDisplay := widget.NewEntry()
 	accountDisplay.Disable()
 	updateAccountDisplay := func() {
@@ -215,6 +216,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	updateAccountDisplay()
 	chooseAccountBtn := widget.NewButton(a.bundle.T("picker.account.choose"), func() {
 		a.showAccountSearch(selectedAccount, func(n int) {
+			accountManuallyPicked = true
 			selectedAccount = n
 			updateAccountDisplay()
 			if recomputeBooking != nil {
@@ -489,8 +491,29 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		}
 		bookingPrev.set(b, bookable, reason)
 	}
+	// suggestErloeskonto sets the Gegenkonto to the appropriate revenue account
+	// when the Ausgangsrechnung box is checked — only when the user has not
+	// already manually picked an account for this dialog session.
+	suggestErloeskonto := func() {
+		if !ausgangsrechnungCheck.Checked || accountManuallyPicked {
+			return
+		}
+		if k, ok := a.bookingRules.ErloesKonto(meta.VATID, core.SumMwSt(ed.Lines())); ok {
+			selectedAccount = k
+			updateAccountDisplay()
+			if recomputeBooking != nil {
+				recomputeBooking()
+			}
+		}
+	}
+
 	categorySelect.OnChanged = func(string) { recomputeBooking() }
-	ausgangsrechnungCheck.OnChanged = func(bool) { recomputeBooking() }
+	ausgangsrechnungCheck.OnChanged = func(checked bool) {
+		if checked {
+			suggestErloeskonto()
+		}
+		recomputeBooking()
+	}
 
 	editBookingBtn := widget.NewButton(a.bundle.T("booking.manual.adjust"), func() {
 		var seed core.Booking
@@ -519,6 +542,10 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Initial preview - call after all widgets are set up
 	updateFilenamePreview()
 	recomputeBooking()
+	// If the invoice was already classified as an Ausgangsrechnung by the
+	// extractor, pre-suggest the matching revenue account (unless the user
+	// already has a manually chosen account from a prior session).
+	suggestErloeskonto()
 
 	// Attachments — mutable copy of the initial list so the "+ Anhang"-
 	// button can append more sources before the user saves. saveBtn's
