@@ -34,6 +34,7 @@ type hoverLabel struct {
 	tooltipShown   bool
 	lastTooltipPos fyne.Position
 	onTap          func()
+	alwaysTooltip  bool
 }
 
 func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLabel {
@@ -50,9 +51,9 @@ func (hl *hoverLabel) MouseIn(_ *desktop.MouseEvent) {
 	if hl.tooltip == "" || hl.onHover == nil || hl.tooltipShown {
 		return
 	}
-	// Only surface the tooltip when the cell's text actually got
-	// truncated — pointless (and visually noisy) when everything fits.
-	if !hl.isTruncated() {
+	// Show when the text is truncated, or when the cell has opted in to
+	// an always-on enriched tooltip (e.g. Gegenkonto shows account name+type).
+	if !hl.alwaysTooltip && !hl.isTruncated() {
 		return
 	}
 	// Anchor the tooltip just below the label rather than at the cursor:
@@ -295,10 +296,14 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 					hoverLabel.Alignment = fyne.TextAlignLeading
 					hoverLabel.SetText("")
 					hoverLabel.tooltip = ""
+					hoverLabel.alwaysTooltip = false
 					hoverLabel.onTap = nil
 					return
 				}
 				colID := it.columnOrder[colIndex]
+
+				// Reset the always-on flag so recycled cells don't leak it.
+				hoverLabel.alwaysTooltip = false
 
 				if numericColumns[colID] {
 					hoverLabel.Alignment = fyne.TextAlignTrailing
@@ -313,6 +318,18 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				// only shows it when the text is actually truncated
 				// (see hoverLabel.MouseIn / isTruncated).
 				hoverLabel.tooltip = cellValue
+
+				// Gegenkonto: enrich tooltip with account name+type (always shown).
+				// getCellValue already returns the "Nummer — Name" display text.
+				if colID == "Gegenkonto" && it.app != nil && it.app.chart != nil {
+					row := it.filtered[id.Row]
+					if row.Gegenkonto != 0 {
+						if acc, ok := it.app.chart.Find(row.Gegenkonto); ok {
+							hoverLabel.tooltip = core.AccountTooltip(acc)
+							hoverLabel.alwaysTooltip = true
+						}
+					}
+				}
 
 				// Every data cell is click-to-edit. Captured `dataRow` so
 				// the closure stays valid when Fyne recycles the cell widget.
@@ -884,6 +901,11 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	case "Gegenkonto":
 		if row.Gegenkonto == 0 {
 			return ""
+		}
+		if it.app != nil && it.app.chart != nil {
+			if acc, ok := it.app.chart.Find(row.Gegenkonto); ok {
+				return core.AccountDisplay(acc)
+			}
 		}
 		return fmt.Sprintf("%d", row.Gegenkonto)
 	case "Bankkonto":
