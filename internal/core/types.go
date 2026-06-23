@@ -28,6 +28,7 @@ type Meta struct {
 	Bankkonto         string     // Bank account
 	Bezahldatum       string     // Payment date DD.MM.YYYY
 	Teilzahlung       bool       // Partial payment flag
+	Ausgangsrechnung  bool       // true = outgoing/revenue invoice (Erlös)
 	Dateiname         string     // Final filename
 	Kommentar         string     // Comment/note for this invoice
 	BetragNetto_EUR   float64    // Net amount in default currency (EUR) for foreign currency invoices
@@ -191,6 +192,7 @@ type CSVRow struct {
 	Bankkonto         string
 	Bezahldatum       string
 	Teilzahlung       bool
+	Ausgangsrechnung  bool
 	Kommentar         string
 	BetragNetto_EUR   float64
 	Gebuehr           float64
@@ -233,6 +235,7 @@ func (m Meta) ToCSVRow() CSVRow {
 		Bankkonto:         m.Bankkonto,
 		Bezahldatum:       m.Bezahldatum,
 		Teilzahlung:       m.Teilzahlung,
+		Ausgangsrechnung:  m.Ausgangsrechnung,
 		Kommentar:         m.Kommentar,
 		BetragNetto_EUR:   m.BetragNetto_EUR,
 		Gebuehr:           m.Gebuehr,
@@ -268,6 +271,7 @@ func (r CSVRow) ToMeta() Meta {
 		Bankkonto:         r.Bankkonto,
 		Bezahldatum:       r.Bezahldatum,
 		Teilzahlung:       r.Teilzahlung,
+		Ausgangsrechnung:  r.Ausgangsrechnung,
 		Kommentar:         r.Kommentar,
 		BetragNetto_EUR:   r.BetragNetto_EUR,
 		Gebuehr:           r.Gebuehr,
