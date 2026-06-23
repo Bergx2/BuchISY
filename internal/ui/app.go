@@ -82,15 +82,20 @@ type App struct {
 	// Zoom feedback overlay (Task 1)
 	scalePopup  *widget.PopUp
 	scaleTimer  *time.Timer
+
+	// Dismissed config-hint banners (Task 2): keyed by hint i18n key.
+	// Hints dismissed with ✕ stay hidden for the session.
+	dismissedHints map[string]bool
 }
 
 // New creates the BuchISY application and shows the profile picker.
 func New(assetsDir string) (*App, error) {
 	fyneApp := app.NewWithID("com.bergx2.buchisy")
 	a := &App{
-		app:       fyneApp,
-		assetsDir: assetsDir,
-		window:    fyneApp.NewWindow("BuchISY"),
+		app:            fyneApp,
+		assetsDir:      assetsDir,
+		window:         fyneApp.NewWindow("BuchISY"),
+		dismissedHints: make(map[string]bool),
 	}
 	// Create the theme up-front and wire Ctrl+scroll / Ctrl+plus zoom
 	// keyboard handlers before any window is shown, so the profile
@@ -289,6 +294,13 @@ func (a *App) startProfile(profile string) {
 // profile's API key, e.g. "Bergx2-claude".
 func (a *App) keyringAccount() string {
 	return a.profile + "-" + a.settings.AnthropicAPIKeyRef
+}
+
+// hasAPIKey reports whether a non-empty Claude API key is stored in the
+// OS keyring for the active profile.
+func (a *App) hasAPIKey() bool {
+	val, err := keyring.Get("BuchISY", a.keyringAccount())
+	return err == nil && val != ""
 }
 
 // ownVATIDList parses Settings.OwnVATID into a slice of VAT-IDs.
@@ -658,7 +670,34 @@ func (a *App) buildUI() fyne.CanvasObject {
 	filterRow := container.NewBorder(nil, nil,
 		a.invoiceTable.ChipRow(), nil,
 		a.invoiceTable.FilterEntry())
-	header := container.NewVBox(topBar, filterRow)
+
+	// Config-hint banners: one slim dismissible row per unmet precondition.
+	headerObjects := []fyne.CanvasObject{}
+	for _, hintKey := range core.MissingConfigHints(a.settings, a.hasAPIKey()) {
+		hintKey := hintKey // capture
+		if a.dismissedHints[hintKey] {
+			continue
+		}
+		lbl := widget.NewLabel(a.bundle.T(hintKey))
+		lbl.Wrapping = fyne.TextWrapWord
+		settingsBtn := widget.NewButton(a.bundle.T("menu.settings"), func() {
+			a.showSettingsView()
+		})
+		settingsBtn.Importance = widget.MediumImportance
+		dismissBtn := widget.NewButton("✕ "+a.bundle.T("hint.dismiss"), func() {
+			a.dismissedHints[hintKey] = true
+			a.showMainView()
+		})
+		dismissBtn.Importance = widget.LowImportance
+		row := container.NewBorder(nil, nil,
+			widget.NewIcon(theme.WarningIcon()),
+			container.NewHBox(settingsBtn, dismissBtn),
+			lbl,
+		)
+		headerObjects = append(headerObjects, row, widget.NewSeparator())
+	}
+	headerObjects = append(headerObjects, topBar, filterRow)
+	header := container.NewVBox(headerObjects...)
 
 	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.invoiceTable.Container())
 	return a.mainContent
