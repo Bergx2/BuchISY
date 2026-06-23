@@ -296,35 +296,17 @@ func (r *Repository) Delete(jahr, monat, dateiname string) error {
 	return nil
 }
 
-// List retrieves all invoices for a specific month.
-func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
-	query := `
-		SELECT
-			dateiname, rechnungsdatum, jahr, monat,
-			auftraggeber, verwendungszweck, rechnungsnummer,
-			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
-			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
-			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
-			trinkgeld, steuerzeilen, buchung, exportiert,
-			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
-		FROM invoices
-		WHERE jahr = ? AND monat = ?
-		ORDER BY rechnungsdatum DESC, dateiname ASC
-	`
-
-	rows, err := r.db.Query(query, jahr, monat)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query invoices: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
+// scanInvoiceRows reads all rows from a *sql.Rows result set produced by the
+// standard SELECT column list (dateiname … ausgangsrechnung) and assembles the
+// corresponding []core.CSVRow slice. The caller is responsible for closing rows.
+func scanInvoiceRows(rows *sql.Rows) ([]core.CSVRow, error) {
 	var results []core.CSVRow
 
 	for rows.Next() {
 		var row core.CSVRow
 		// trinkgeld/steuerzeilen/buchung/exportiert are NULL for rows created before
 		// those columns were added by the ALTER-TABLE migration, so read them
-		// NULL-safely (NULL → 0 / "") instead of failing the whole List.
+		// NULL-safely (NULL → 0 / "") instead of failing the whole scan.
 		var steuerzeilen sql.NullString
 		var trinkgeld sql.NullFloat64
 		var buchung sql.NullString
@@ -369,6 +351,69 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 	}
 
 	return results, nil
+}
+
+// List retrieves all invoices for a specific month.
+func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
+	query := `
+		SELECT
+			dateiname, rechnungsdatum, jahr, monat,
+			auftraggeber, verwendungszweck, rechnungsnummer,
+			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
+			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
+			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
+			trinkgeld, steuerzeilen, buchung, exportiert,
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
+		FROM invoices
+		WHERE jahr = ? AND monat = ?
+		ORDER BY rechnungsdatum DESC, dateiname ASC
+	`
+
+	rows, err := r.db.Query(query, jahr, monat)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query invoices: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanInvoiceRows(rows)
+}
+
+// SearchInvoices searches invoices across ALL months for a given query string.
+// It matches (case-insensitively) against auftraggeber, verwendungszweck,
+// rechnungsnummer, and belegnummer. Results are ordered by rechnungsdatum DESC,
+// limited to 200 rows. An empty query returns nil, nil.
+func (r *Repository) SearchInvoices(query string) ([]core.CSVRow, error) {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return nil, nil
+	}
+	like := "%" + q + "%"
+
+	sqlQuery := `
+		SELECT
+			dateiname, rechnungsdatum, jahr, monat,
+			auftraggeber, verwendungszweck, rechnungsnummer,
+			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
+			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
+			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
+			trinkgeld, steuerzeilen, buchung, exportiert,
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
+		FROM invoices
+		WHERE LOWER(auftraggeber) LIKE ?
+		   OR LOWER(verwendungszweck) LIKE ?
+		   OR LOWER(rechnungsnummer) LIKE ?
+		   OR LOWER(belegnummer) LIKE ?
+		ORDER BY rechnungsdatum DESC
+		LIMIT 200
+	`
+
+	rows, err := r.db.Query(sqlQuery, like, like, like, like)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search invoices: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanInvoiceRows(rows)
 }
 
 // IsDuplicate checks if an invoice already exists with the same key fields.
