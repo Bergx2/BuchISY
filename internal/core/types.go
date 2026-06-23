@@ -54,6 +54,12 @@ const (
 	AccountTypeBank       = "bank"
 	AccountTypeCreditCard = "creditcard"
 	AccountTypeCash       = "cash"
+	// AccountTypePayroll is a receipt advanced by an employee and reimbursed
+	// via payroll: the Haben side posts to a liability/clearing account
+	// (BankAccount.SKR04Konto, e.g. "Verrechnungskonto Lohn u. Gehalt")
+	// instead of a bank/cash account. Such receipts are excluded from bank
+	// statement reconciliation (they never appear on a bank statement).
+	AccountTypePayroll = "payroll"
 )
 
 // BankAccount represents a user-defined payment account (Zahlungskonto):
@@ -289,7 +295,8 @@ func (mc MonthContext) FolderName() string {
 // PaymentAccountSKR04 returns the SKR04 account that the Haben (credit) side of
 // a booking should post to for a given Zahlungskonto, looked up by name. An
 // explicit BankAccount.SKR04Konto wins; otherwise it falls back by account type
-// (bank→1800, cash→1600). Returns (0,false) when nothing maps.
+// (bank→1800, cash→1600). Credit-card and payroll accounts have no universal
+// default and require an explicit SKR04Konto. Returns (0,false) when nothing maps.
 func (s Settings) PaymentAccountSKR04(bankAccountName string) (int, bool) {
 	for _, ba := range s.BankAccounts {
 		if ba.Name != bankAccountName {
