@@ -331,6 +331,50 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 					}
 				}
 
+				// Status columns: Klartext tooltip always shown (alwaysTooltip).
+				// Symbol set in use: ✓ linked/confirmed/yes · ⚠ uncovered · ○ open/unset.
+				if id.Row < len(it.filtered) {
+					row := it.filtered[id.Row]
+					switch colID {
+					case "BuchungRef":
+						switch {
+						case row.BuchungRef == core.CashConfirmedRef:
+							hoverLabel.tooltip = it.bundle.T("status.cashConfirmed")
+							hoverLabel.alwaysTooltip = true
+						case row.BuchungRef != "":
+							ref := core.ParseBuchungRef(row.BuchungRef)
+							hoverLabel.tooltip = it.bundle.T("status.linked") + " — " + ref.Display()
+							hoverLabel.alwaysTooltip = true
+						case it.app != nil && it.app.isCashAccount(row.Bankkonto):
+							if it.app.cashUncovered[row.Dateiname] {
+								hoverLabel.tooltip = it.bundle.T("status.cashUncovered")
+							} else {
+								hoverLabel.tooltip = it.bundle.T("status.cashCovered")
+							}
+							hoverLabel.alwaysTooltip = true
+						default:
+							// "○" — open / not reconciled
+							hoverLabel.tooltip = it.bundle.T("status.open")
+							hoverLabel.alwaysTooltip = true
+						}
+					case "Teilzahlung":
+						if row.Teilzahlung {
+							hoverLabel.tooltip = it.bundle.T("status.partial")
+							hoverLabel.alwaysTooltip = true
+						}
+					case "Ausgangsrechnung":
+						if row.Ausgangsrechnung {
+							hoverLabel.tooltip = it.bundle.T("status.outgoing")
+							hoverLabel.alwaysTooltip = true
+						}
+					case "HatAnhaenge":
+						if row.HatAnhaenge {
+							hoverLabel.tooltip = it.bundle.T("status.attachment")
+							hoverLabel.alwaysTooltip = true
+						}
+					}
+				}
+
 				// Every data cell is click-to-edit. Captured `dataRow` so
 				// the closure stays valid when Fyne recycles the cell widget.
 				dataRow := id.Row
@@ -448,6 +492,44 @@ func (it *InvoiceTable) FilterEntry() *widget.Entry { return it.filterEntry }
 
 // ChipRow exposes the chip strip for the same reason.
 func (it *InvoiceTable) ChipRow() *fyne.Container { return it.chipRow }
+
+// LegendButton returns a small "?"-button that opens a symbol-legend
+// popup. Place it in the filter row (top bar) so users can always
+// look up what ✓ / ⚠ / ○ mean.
+func (it *InvoiceTable) LegendButton() *widget.Button {
+	return widget.NewButton("?", func() {
+		if it.window == nil {
+			return
+		}
+		title := widget.NewLabelWithStyle(
+			it.bundle.T("legend.title"),
+			fyne.TextAlignLeading,
+			fyne.TextStyle{Bold: true},
+		)
+		// Each row: symbol label + meaning label side by side.
+		row := func(sym, key string) *fyne.Container {
+			symLbl := widget.NewLabelWithStyle(sym, fyne.TextAlignCenter, fyne.TextStyle{})
+			symLbl.Wrapping = fyne.TextWrapOff
+			meanLbl := widget.NewLabel(it.bundle.T(key))
+			meanLbl.Wrapping = fyne.TextWrapWord
+			return container.NewBorder(nil, nil, symLbl, nil, meanLbl)
+		}
+		rows := container.NewVBox(
+			title,
+			widget.NewSeparator(),
+			row("✓", "legend.linked"),
+			row("✓", "legend.cashConfirmed"),
+			row("✓", "legend.cashCovered"),
+			row("⚠", "legend.uncovered"),
+			row("○", "legend.open"),
+			row("✓", "legend.partial"),
+			row("✓", "legend.outgoing"),
+			row("✓", "legend.attachment"),
+		)
+		popup := widget.NewModalPopUp(container.NewPadded(rows), it.window.Canvas())
+		popup.Show()
+	})
+}
 
 // refreshChips rebuilds the chip row so the active chip is shown
 // HighImportance and the others LowImportance.
@@ -935,8 +1017,11 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		}
 		return ""
 	case "HatAnhaenge":
+		// Symbol set: ✓ (yes/linked/confirmed) · ⚠ (warning/uncovered) · ○ (open/none)
+		// HatAnhaenge uses ✓ for consistency; colour-emoji like 📎 are avoided
+		// because the Fyne system font may not render them reliably.
 		if row.HatAnhaenge {
-			return "📎"
+			return "✓"
 		}
 		return ""
 	case "AnzahlAnhaenge":
