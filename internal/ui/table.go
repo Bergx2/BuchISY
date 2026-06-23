@@ -160,6 +160,7 @@ var numericColumns = map[string]bool{
 }
 
 var columnWidthMap = map[string]float32{
+	"Belegnummer":        110,
 	"Dateiname":          250,
 	"Rechnungsdatum":     120,
 	"Jahr":               80,
@@ -846,6 +847,8 @@ func (it *InvoiceTable) formatAmount(amount float64) string {
 
 func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	switch colID {
+	case "Belegnummer":
+		return row.Belegnummer
 	case "Dateiname":
 		return row.Dateiname
 	case "Rechnungsdatum":

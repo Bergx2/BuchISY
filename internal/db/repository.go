@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite" // SQLite driver
@@ -78,6 +79,7 @@ func (r *Repository) initSchema() error {
 		"ALTER TABLE invoices ADD COLUMN wechselkurs REAL DEFAULT 0",
 		"ALTER TABLE invoices ADD COLUMN gebuehr_prozent REAL DEFAULT 0",
 		"ALTER TABLE invoices ADD COLUMN buchung_ref TEXT DEFAULT ''",
+		"ALTER TABLE invoices ADD COLUMN belegnummer TEXT DEFAULT ''",
 	} {
 		if _, err := r.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -97,7 +99,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
 			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
-			wechselkurs, gebuehr_prozent, buchung_ref
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer
 		) VALUES (
 			?, ?, ?, ?,
 			?, ?, ?,
@@ -105,7 +107,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
-			?, ?, ?
+			?, ?, ?, ?
 		)
 	`
 
@@ -116,7 +118,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.Waehrung, row.Gegenkonto, row.Bankkonto, row.Bezahldatum, row.Teilzahlung,
 		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.HatAnhaenge, row.VATID,
 		row.Trinkgeld, core.MarshalTaxLines(row.TaxLines), core.MarshalBooking(row.Buchung), 0,
-		row.Wechselkurs, row.GebuehrProzent, row.BuchungRef,
+		row.Wechselkurs, row.GebuehrProzent, row.BuchungRef, row.Belegnummer,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert invoice: %w", err)
@@ -163,6 +165,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			wechselkurs = ?,
 			gebuehr_prozent = ?,
 			buchung_ref = ?,
+			belegnummer = ?,
 			jahr = ?,
 			monat = ?
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
@@ -194,6 +197,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.Wechselkurs,
 		row.GebuehrProzent,
 		row.BuchungRef,
+		row.Belegnummer,
 		row.Jahr, row.Monat,
 		jahr, monat, oldDateiname,
 	)
@@ -203,6 +207,36 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 	}
 
 	return nil
+}
+
+// NextBelegnummer returns the next sequential receipt number for a filing year,
+// formatted "YYYY-NNNN" (4-digit zero-padded). The sequence is per database
+// (i.e. per profile) and per year: it keys purely on the "YYYY-" prefix of the
+// stored belegnummer, so it stays correct regardless of a row's jahr column.
+// Empty or non-conforming belegnummern are ignored. The value is read, not
+// reserved, so it is stable across cancelled dialogs (no gaps).
+//
+// The lexical MAX equals the numeric max because the suffix is zero-padded to
+// four digits — correct for up to 9999 receipts per year, far beyond any
+// realistic per-profile volume.
+func (r *Repository) NextBelegnummer(jahr string) (string, error) {
+	var max sql.NullString
+	if err := r.db.QueryRow(
+		`SELECT MAX(belegnummer) FROM invoices WHERE belegnummer LIKE ?`,
+		jahr+"-%",
+	).Scan(&max); err != nil {
+		return "", fmt.Errorf("failed to read max belegnummer: %w", err)
+	}
+	n := 0
+	if max.Valid && max.String != "" {
+		// "YYYY-NNNN" → take the numeric suffix after the first "-".
+		if parts := strings.SplitN(max.String, "-", 2); len(parts) == 2 {
+			if v, err := strconv.Atoi(parts[1]); err == nil {
+				n = v
+			}
+		}
+	}
+	return fmt.Sprintf("%s-%04d", jahr, n+1), nil
 }
 
 // Count returns the total number of invoices stored in the database.
@@ -245,7 +279,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
 			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
-			wechselkurs, gebuehr_prozent, buchung_ref
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer
 		FROM invoices
 		WHERE jahr = ? AND monat = ?
 		ORDER BY rechnungsdatum DESC, dateiname ASC
@@ -271,6 +305,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 		var wechselkurs sql.NullFloat64
 		var gebuehrProzent sql.NullFloat64
 		var buchungRef sql.NullString
+		var belegnummer sql.NullString
 		err := rows.Scan(
 			&row.Dateiname, &row.Rechnungsdatum, &row.Jahr, &row.Monat,
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
@@ -278,7 +313,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
 			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &row.HatAnhaenge, &row.VATID,
 			&trinkgeld, &steuerzeilen, &buchung, &exportiert,
-			&wechselkurs, &gebuehrProzent, &buchungRef,
+			&wechselkurs, &gebuehrProzent, &buchungRef, &belegnummer,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -288,6 +323,7 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 		row.Wechselkurs = wechselkurs.Float64
 		row.GebuehrProzent = gebuehrProzent.Float64
 		row.BuchungRef = buchungRef.String
+		row.Belegnummer = belegnummer.String
 
 		row.TaxLines = core.ParseTaxLines(steuerzeilen.String)
 		if len(row.TaxLines) == 0 {

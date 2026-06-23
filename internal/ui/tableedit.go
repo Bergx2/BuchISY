@@ -698,6 +698,7 @@ func (a *App) updateInvoice(
 	willHaveAttachments := originalRow.HatAnhaenge
 
 	newMeta := core.Meta{
+		Belegnummer:       originalRow.Belegnummer, // preserve the existing receipt number on edit
 		Auftraggeber:      company,
 		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,

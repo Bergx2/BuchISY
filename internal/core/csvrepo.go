@@ -14,6 +14,7 @@ import (
 
 // DefaultCSVColumns defines the default column order for the CSV file.
 var DefaultCSVColumns = []string{
+	"Belegnummer",
 	"Dateiname",
 	"Rechnungsdatum",
 	"Jahr",
@@ -48,6 +49,7 @@ var DefaultCSVColumns = []string{
 
 // ColumnDisplayNames maps column IDs to German display names.
 var ColumnDisplayNames = map[string]string{
+	"Belegnummer":        "Belegnummer",
 	"Dateiname":          "Dateiname",
 	"Rechnungsdatum":     "Rechnungsdatum",
 	"Jahr":               "Jahr",
@@ -82,6 +84,7 @@ var ColumnDisplayNames = map[string]string{
 
 // ColumnTranslationKeys maps column IDs to translation keys.
 var ColumnTranslationKeys = map[string]string{
+	"Belegnummer":        "table.col.belegnummer",
 	"Dateiname":          "table.col.filename",
 	"Rechnungsdatum":     "table.col.date",
 	"Jahr":               "table.col.year",
@@ -261,6 +264,7 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 		}
 
 		row := CSVRow{
+			Belegnummer:       valueForColumn(record, headerMap, "Belegnummer"),
 			Dateiname:         valueForColumn(record, headerMap, "Dateiname"),
 			Rechnungsdatum:    valueForColumn(record, headerMap, "Rechnungsdatum"),
 			Jahr:              valueForColumn(record, headerMap, "Jahr"),
@@ -464,6 +468,7 @@ func (r *CSVRepository) formatFloat(f float64) string {
 func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 	// Map of column name to value
 	valueMap := map[string]string{
+		"Belegnummer":        row.Belegnummer,
 		"Dateiname":          row.Dateiname,
 		"Rechnungsdatum":     row.Rechnungsdatum,
 		"Jahr":               row.Jahr,

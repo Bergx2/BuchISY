@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 	wechselkurs REAL DEFAULT 0,
 	gebuehr_prozent REAL DEFAULT 0,
 	buchung_ref TEXT DEFAULT '',
+	belegnummer TEXT DEFAULT '',
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -40,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_invoices_datum ON invoices(rechnungsdatum);
 CREATE INDEX IF NOT EXISTS idx_invoices_auftraggeber ON invoices(auftraggeber);
 CREATE INDEX IF NOT EXISTS idx_invoices_rechnungsnummer ON invoices(rechnungsnummer);
 CREATE INDEX IF NOT EXISTS idx_invoices_dateiname ON invoices(dateiname);
+CREATE INDEX IF NOT EXISTS idx_invoices_belegnummer ON invoices(belegnummer);
 
 -- Trigger to auto-update updated_at timestamp
 CREATE TRIGGER IF NOT EXISTS update_invoices_timestamp

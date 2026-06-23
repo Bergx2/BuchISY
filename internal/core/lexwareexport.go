@@ -18,7 +18,13 @@ func BuildLexwareCSV(rows []CSVRow) ([]byte, int, int) {
 			continue
 		}
 		text := lexClean(strings.TrimSpace(r.Auftraggeber + " " + r.Verwendungszweck))
-		beleg := lexClean(r.Rechnungsnummer)
+		// Prefer the internal sequential receipt number; fall back to the supplier
+		// invoice number for rows that predate the Belegnummer feature.
+		belegRef := r.Belegnummer
+		if belegRef == "" {
+			belegRef = r.Rechnungsnummer
+		}
+		beleg := lexClean(belegRef)
 		for _, e := range r.Buchung.DebitEntries() {
 			amount := strings.Replace(fmt.Sprintf("%.2f", e.Betrag), ".", ",", 1)
 			b.WriteString(fmt.Sprintf("%s;%s;%s;%s;%d;%d\r\n",
