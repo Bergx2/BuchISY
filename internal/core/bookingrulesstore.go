@@ -44,7 +44,7 @@ func (s *BookingRulesStore) Load() (*BookingRules, error) {
 }
 
 // mergeBundledIntoSaved keeps every value from saved and fills in only what the
-// bundled base adds: Vorsteuer rates and category rules the saved file lacks.
+// bundled base adds: Vorsteuer rates, Umsatzsteuer rates, and category rules the saved file lacks.
 func mergeBundledIntoSaved(saved, bundled *BookingRules) *BookingRules {
 	if saved.VorsteuerKonten == nil {
 		saved.VorsteuerKonten = map[string]int{}
@@ -52,6 +52,14 @@ func mergeBundledIntoSaved(saved, bundled *BookingRules) *BookingRules {
 	for satz, konto := range bundled.VorsteuerKonten {
 		if _, ok := saved.VorsteuerKonten[satz]; !ok {
 			saved.VorsteuerKonten[satz] = konto
+		}
+	}
+	if saved.UmsatzsteuerKonten == nil {
+		saved.UmsatzsteuerKonten = map[string]int{}
+	}
+	for k, v := range bundled.UmsatzsteuerKonten {
+		if _, ok := saved.UmsatzsteuerKonten[k]; !ok {
+			saved.UmsatzsteuerKonten[k] = v
 		}
 	}
 	have := map[string]bool{}
