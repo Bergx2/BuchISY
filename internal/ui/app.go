@@ -65,6 +65,11 @@ type App struct {
 	kontenSortCol string // sort column key for the Konten table
 	kontenSortAsc bool   // sort direction
 
+	// Batch entry queue (E17.3): sequential processing of multiple files.
+	pendingFiles []string
+	batchTotal   int
+	batchDone    int
+
 	// UI components
 	yearSelect   *highlightedSelect
 	monthSelect  *highlightedSelect
@@ -566,17 +571,27 @@ func (a *App) buildUI() fyne.CanvasObject {
 	// kick off invoice extraction; in Konten mode they're filed as a
 	// Kontoauszug for the currently selected Zahlungskonto.
 	a.window.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
-		for _, uri := range uris {
-			path := uri.Path()
-			if !core.IsSupportedFile(filepath.Base(path)) {
-				continue
-			}
-			if a.viewMode == "konten" {
-				a.fileStatement(path)
-			} else {
-				a.processSubmission(path, nil, nil)
+		if a.viewMode == "konten" {
+			// In Konten mode: file only the first supported statement.
+			for _, uri := range uris {
+				path := uri.Path()
+				if core.IsSupportedFile(filepath.Base(path)) {
+					a.fileStatement(path)
+					return
+				}
 			}
 			return
+		}
+		// In Belege mode: enqueue ALL supported files for sequential entry.
+		var paths []string
+		for _, uri := range uris {
+			path := uri.Path()
+			if core.IsSupportedFile(filepath.Base(path)) {
+				paths = append(paths, path)
+			}
+		}
+		if len(paths) > 0 {
+			a.enqueueSubmissions(paths)
 		}
 	})
 
@@ -723,6 +738,9 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	overflowBtn.OnTapped = func() {
 		menu := fyne.NewMenu("",
 			fyne.NewMenuItem(a.bundle.T("menu.openTarget"), func() { a.openTargetFolder() }),
+			fyne.NewMenuItem("Mehrere Belege importieren…", func() {
+				a.showFilesPicker(func(paths []string) { a.enqueueSubmissions(paths) })
+			}),
 			fyne.NewMenuItem("Kassenbuch", func() { a.showCashBookView() }),
 			fyne.NewMenuItem("CSV-Export", func() { a.showCSVExportDialog() }),
 			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),

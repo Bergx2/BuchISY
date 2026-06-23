@@ -762,7 +762,11 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	scrollForm.SetMinSize(fyne.NewSize(60, 400))
 
 	// Separate, user-resizable window (a Fyne dialog cannot be drag-resized).
-	confirmWin = a.app.NewWindow(a.bundle.T("modal.title"))
+	modalTitle := a.bundle.T("modal.title")
+	if a.batchTotal > 1 {
+		modalTitle = fmt.Sprintf("%s (%d/%d)", modalTitle, a.batchDone, a.batchTotal)
+	}
+	confirmWin = a.app.NewWindow(modalTitle)
 
 	saveBtn.OnTapped = func() {
 		targetYear := a.currentYear

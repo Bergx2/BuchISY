@@ -239,5 +239,33 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 	}()
 }
 
-// processPDFBatch processes multiple PDF files.
-// TODO: Implement batch processing (currently processes one at a time)
+// enqueueSubmissions queues supported files for sequential entry. The first
+// opens immediately; closing each review modal (save or cancel) opens the next.
+func (a *App) enqueueSubmissions(paths []string) {
+	var files []string
+	for _, p := range paths {
+		if core.IsSupportedFile(filepath.Base(p)) {
+			files = append(files, p)
+		}
+	}
+	if len(files) == 0 {
+		return
+	}
+	a.pendingFiles = files
+	a.batchTotal = len(files)
+	a.batchDone = 0
+	a.processNextPending()
+}
+
+// processNextPending pops and processes the next queued file, chaining onComplete
+// back to itself so the queue advances when each modal closes.
+func (a *App) processNextPending() {
+	if len(a.pendingFiles) == 0 {
+		a.batchTotal, a.batchDone = 0, 0
+		return
+	}
+	path := a.pendingFiles[0]
+	a.pendingFiles = a.pendingFiles[1:]
+	a.batchDone++
+	a.processSubmission(path, nil, func() { a.processNextPending() })
+}
