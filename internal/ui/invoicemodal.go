@@ -435,9 +435,35 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		}
 	}
 
+	// Duplicate warning banner – hidden until checkDuplicate() reveals it.
+	dupBanner := widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	dupBanner.Importance = widget.WarningImportance
+	dupBanner.Hide()
+
+	// checkDuplicate runs a single indexed query and shows/hides dupBanner.
+	var checkDuplicate func()
+	checkDuplicate = func() {
+		if a.dbRepo == nil {
+			return
+		}
+		row := core.CSVRow{
+			Auftraggeber:    companyEntry.Text,
+			Rechnungsnummer: invoiceNumEntry.Text,
+		}
+		label, found, _ := a.dbRepo.FindDuplicate(row)
+		if found {
+			dupBanner.SetText("⚠ Mögliche Dublette von " + label)
+			dupBanner.Show()
+		} else {
+			dupBanner.Hide()
+		}
+	}
+
 	// Update preview on any field change
-	onAnyChange := func(string) { updateFilenamePreview() }
-	companyEntry.OnChanged = onAnyChange
+	companyEntry.OnChanged = func(s string) {
+		updateFilenamePreview()
+		checkDuplicate()
+	}
 	// Special handler for shortDescEntry to handle both character limit and preview
 	shortDescEntry.OnChanged = func(s string) {
 		if len(s) > 80 {
@@ -446,8 +472,11 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		shortDescLabel.SetText(fmt.Sprintf("%d / 80", len(shortDescEntry.Text)))
 		updateFilenamePreview()
 	}
-	invoiceNumEntry.OnChanged = onAnyChange
-	dateEntry.OnChanged = onAnyChange
+	invoiceNumEntry.OnChanged = func(s string) {
+		updateFilenamePreview()
+		checkDuplicate()
+	}
+	dateEntry.OnChanged = func(s string) { updateFilenamePreview() }
 
 	// Create the VAT-lines editor now that updateFilenamePreview is defined.
 	// onChange is a combined callback: filename preview + booking recompute.
@@ -606,8 +635,12 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	if nextBelegnr != "" {
 		belegnrText = "Beleg-Nr. " + nextBelegnr
 	}
+	// Run the initial duplicate check now that all entry widgets exist.
+	checkDuplicate()
+
 	formItems := []fyne.CanvasObject{
 		widget.NewLabelWithStyle(belegnrText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		dupBanner,
 		newCopyableLabel(a.bundle, a.bundle.T("modal.originalFile")),
 		container.NewBorder(nil, nil, nil,
 			container.NewHBox(addAttBtn, openOriginalBtn), originalEntry),
