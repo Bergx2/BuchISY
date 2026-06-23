@@ -1486,14 +1486,24 @@ func (a *App) showGlobalSearch(query string) {
 		a.currentMonth = time.Month(monthNum)
 		a.viewWholeYear = false
 
+		// Clear any active filter so the reloaded table is unfiltered and
+		// SelectByDateiname can find the row.
+		if a.invoiceTable != nil {
+			a.invoiceTable.FilterEntry().SetText("")
+		}
+
 		// Update selectors using the same label formats as buildTopBar.
+		// Guard with stepInProgress so the OnChanged callbacks don't fire
+		// a second onMonthChanged while SetSelected is running.
 		yearStr := fmt.Sprintf("%d", year)
+		a.stepInProgress = true
 		a.yearSelect.SetSelected(yearStr)
 
 		monthKey := fmt.Sprintf("month.%02d", monthNum)
 		monthName := a.bundle.T(monthKey)
 		monthStr := fmt.Sprintf("%02d - %-12s", monthNum, monthName)
 		a.monthSelect.SetSelected(monthStr)
+		a.stepInProgress = false
 
 		a.onMonthChanged()
 

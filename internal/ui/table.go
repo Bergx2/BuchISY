@@ -796,6 +796,7 @@ func (it *InvoiceTable) applyFilter(query string) {
 		}
 		it.filtered = append(it.filtered, row)
 	}
+	it.selectedRow = -1
 	it.applySort()
 	it.updateSummary()
 	it.table.Refresh()
@@ -1126,8 +1127,14 @@ func (it *InvoiceTable) RegisterKeyHandler(cv fyne.Canvas) {
 
 		switch ev.Name {
 		case fyne.KeyUp:
+			if _, isTable := cv.Focused().(*widget.Table); isTable {
+				return
+			}
 			it.moveSelection(-1)
 		case fyne.KeyDown:
+			if _, isTable := cv.Focused().(*widget.Table); isTable {
+				return
+			}
 			it.moveSelection(1)
 		case fyne.KeyReturn, fyne.KeyEnter:
 			it.openSelected()
