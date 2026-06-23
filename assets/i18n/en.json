@@ -283,7 +283,7 @@
   "warnings.intro": "Please review — save anyway?",
 
   "reconcile.title": "Reconciliation",
-  "reconcile.summary": "%d auto-linked, %d suggestions.",
+  "reconcile.summary": "Please confirm each match — %d suggestion(s).",
   "reconcile.confirm": "Confirm",
   "reconcile.none": "No open suggestions.",
   "reconcile.cashHeading": "Cash",
@@ -296,11 +296,15 @@
 
   "status.cashCovered": "Cash covered",
   "status.cashUncovered": "Cash uncovered",
+  "status.cashConfirmed": "Cash confirmed",
 
   "settings.matchWindow": "Reconciliation: date window (days)",
   "settings.matchTolerance": "Reconciliation: foreign tolerance (%)",
 
   "reconcile.lineTaken": "Statement line already linked",
+  "reconcile.cashConfirm": "Confirm",
+  "reconcile.cashCoveredHint": "✓ covered",
+  "reconcile.cashUncoveredHint": "⚠ uncovered",
 
   "modal.erloeskonto": "Revenue account",
 
@@ -314,6 +318,7 @@
   "erloesabgleich.title": "Revenue reconciliation",
   "erloesabgleich.heading": "Outgoing invoices ↔ credits",
   "erloesabgleich.autolinked": "%d auto-linked",
+  "erloesabgleich.summary": "Please confirm each match — %d suggestion(s).",
   "erloesabgleich.none": "No open outgoing invoices with a matching credit",
   "erloesabgleich.confirm": "Link"
 }

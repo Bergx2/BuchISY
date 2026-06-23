@@ -65,6 +65,14 @@ const (
 	AccountTypePayroll = "payroll"
 )
 
+// CashConfirmedRef is a sentinel BuchungRef value that marks a cash-register
+// receipt as confirmed against the generated Kassenbuch (cash book). Because
+// there is no external cash statement to link to, confirmation is internal.
+// Any non-empty BuchungRef is displayed as ✓ in the invoice table, so using
+// this sentinel gives cash receipts the same visual treatment as bank-matched
+// invoices without requiring a new database column.
+const CashConfirmedRef = "kassenbuch|0|0"
+
 // BankAccount represents a user-defined payment account (Zahlungskonto):
 // a bank account, a credit card / clearing account, or a cash register.
 type BankAccount struct {
