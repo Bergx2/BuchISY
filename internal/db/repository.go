@@ -242,6 +242,30 @@ func (r *Repository) NextBelegnummer(jahr string) (string, error) {
 	return fmt.Sprintf("%s-%04d", jahr, n+1), nil
 }
 
+// RenumberBelegnummern reassigns every invoice's Belegnummer per year, in
+// chronological order (by Rechnungsdatum, ties broken by id), gap-free as
+// "YYYY-NNNN". Backfills empty numbers AND closes gaps from deletions. Returns
+// the number of invoices renumbered. Single-user desktop app, so a one-shot
+// rewrite is safe.
+func (r *Repository) RenumberBelegnummern() (int, error) {
+	_, err := r.db.Exec(`
+		WITH numbered AS (
+			SELECT id, printf('%s-%04d', jahr,
+				ROW_NUMBER() OVER (
+					PARTITION BY jahr
+					ORDER BY substr(rechnungsdatum,7,4)||substr(rechnungsdatum,4,2)||substr(rechnungsdatum,1,2), id
+				)) AS bn
+			FROM invoices
+		)
+		UPDATE invoices SET belegnummer = (SELECT bn FROM numbered WHERE numbered.id = invoices.id)
+		WHERE id IN (SELECT id FROM numbered)
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to renumber belegnummern: %w", err)
+	}
+	return r.Count()
+}
+
 // Count returns the total number of invoices stored in the database.
 func (r *Repository) Count() (int, error) {
 	var n int
