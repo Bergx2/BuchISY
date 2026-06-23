@@ -349,6 +349,17 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// the current selection (e.g. file a Nov invoice under Dec).
 	yearSelect := widget.NewSelect(generateYearOptions(), nil)
 	yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+
+	// Pre-allocate the next sequential Belegnummer for the dialog's filing year
+	// so it shows in the live filename preview (${Belegnr}) and is stored on save.
+	// Read, not reserved, so cancelling the dialog leaves no gap. Keyed on the
+	// year prefix, matching the filing-year default; the filing-month dropdown
+	// does not change the filename, so the year prefix stays the dialog-open year.
+	nextBelegnr, err := a.dbRepo.NextBelegnummer(fmt.Sprintf("%04d", a.currentYear))
+	if err != nil {
+		a.logger.Warn("Failed to compute next Belegnummer: %v", err)
+		nextBelegnr = ""
+	}
 	monthSelect := widget.NewSelect(generateMonthOptions(a.bundle), nil)
 	monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth),
 		a.bundle.T(fmt.Sprintf("month.%02d", int(a.currentMonth)))))
@@ -382,6 +393,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			mwstProzent = core.PrimarySatz(ed.Lines())
 		}
 		currentMeta := core.Meta{
+			Belegnummer:       nextBelegnr,
 			Auftraggeber:      companyEntry.Text,
 			Verwendungszweck:  shortDescEntry.Text,
 			Rechnungsnummer:   invoiceNumEntry.Text,
@@ -720,6 +732,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				targetYear,
 				targetMonth,
 				finalBooking,
+				nextBelegnr,
 			)
 			if err != nil {
 				// Keep the window open so the user can correct the data.
@@ -836,9 +849,11 @@ func (a *App) saveInvoice(
 	targetYear int,
 	targetMonth time.Month,
 	buchung core.Booking,
+	belegnummer string,
 ) error {
 	// Build meta
 	meta := core.Meta{
+		Belegnummer:       belegnummer,
 		Auftraggeber:      company,
 		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,

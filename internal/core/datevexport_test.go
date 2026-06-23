@@ -36,6 +36,23 @@ func TestBuildDATEVStapel(t *testing.T) {
 	}
 }
 
+// TestDATEVBelegnummerFields verifies that when a Belegnummer is present it
+// fills Belegfeld 1 while the supplier invoice number moves to Belegfeld 2.
+func TestDATEVBelegnummerFields(t *testing.T) {
+	rows := []CSVRow{
+		{Rechnungsdatum: "06.06.2026", Belegnummer: "2026-0014", Rechnungsnummer: "MC9C7PFZ-103052", Auftraggeber: "Matcha Rina",
+			Buchung: Booking{Entries: []BookingEntry{
+				{Konto: 4650, Betrag: 12.71, Soll: true},
+				{Konto: 1755, Betrag: 12.71, Soll: false},
+			}}},
+	}
+	data, _, _ := BuildDATEVStapel(DATEVHeader{WJBeginn: "20260101"}, rows)
+	s := string(data)
+	if !strings.Contains(s, `;1755;;0606;"2026-0014";"MC9C7PFZ-103052";;"Matcha Rina"`) {
+		t.Errorf("Belegnummer/Rechnungsnummer not split into Belegfeld 1/2:\n%s", s)
+	}
+}
+
 func TestDatevCleanRuneSafe(t *testing.T) {
 	// 40 'ü' runes (80 bytes); truncating to 36 runes must stay valid UTF-8.
 	in := strings.Repeat("ü", 40)

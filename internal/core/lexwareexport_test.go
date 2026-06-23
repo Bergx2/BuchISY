@@ -26,3 +26,21 @@ func TestBuildLexwareCSV(t *testing.T) {
 		t.Errorf("data line wrong:\n%s", s)
 	}
 }
+
+// TestLexwareBelegnummerPreferred verifies the internal Belegnummer is used as
+// the Belegnr when present, in preference to the supplier invoice number.
+func TestLexwareBelegnummerPreferred(t *testing.T) {
+	rows := []CSVRow{
+		{Rechnungsdatum: "06.06.2026", Belegnummer: "2026-0014", Rechnungsnummer: "MC9C7PFZ-103052",
+			Auftraggeber: "Matcha Rina", Verwendungszweck: "Bewirtung",
+			Buchung: Booking{Entries: []BookingEntry{
+				{Konto: 4650, Betrag: 12.71, Soll: true},
+				{Konto: 1755, Betrag: 12.71, Soll: false},
+			}}},
+	}
+	data, _, _ := BuildLexwareCSV(rows)
+	s := string(data)
+	if !strings.Contains(s, "06.06.2026;2026-0014;Matcha Rina Bewirtung;12,71;4650;1755") {
+		t.Errorf("Belegnummer not used as Belegnr:\n%s", s)
+	}
+}

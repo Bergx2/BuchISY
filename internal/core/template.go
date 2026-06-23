@@ -7,6 +7,7 @@ import (
 // TokenAliases maps German token names to their canonical English equivalents.
 var TokenAliases = map[string]string{
 	"${Firma}":             "${Company}",
+	"${Belegnummer}":       "${Belegnr}",
 	"${Rechnungsnummer}":   "${InvoiceNumber}",
 	"${Kurzbez}":           "${Kurzbezeichnung}",
 	"${BetragNetto}":       "${NetAmount}",
@@ -40,6 +41,7 @@ func ApplyTemplate(template string, meta Meta, opts TemplateOpts) (string, error
 
 	// Replace canonical tokens
 	replacements := map[string]string{
+		"${Belegnr}":          meta.Belegnummer,
 		"${YYYY}":             meta.Jahr,
 		"${MM}":               meta.Monat,
 		"${DD}":               extractDay(meta.Rechnungsdatum),

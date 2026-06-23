@@ -8,6 +8,7 @@ import (
 
 // Meta represents the invoice metadata extracted from a PDF.
 type Meta struct {
+	Belegnummer       string     // Sequential receipt number per profile+year, "YYYY-NNNN"
 	Auftraggeber      string     // Company name (previously Firmenname)
 	Verwendungszweck  string     // Purpose/description (previously Kurzbezeichnung)
 	Rechnungsnummer   string     // Invoice number
@@ -170,6 +171,7 @@ type MetaExtractor interface {
 
 // CSVRow represents a row in the invoices CSV file.
 type CSVRow struct {
+	Belegnummer       string // Sequential receipt number per profile+year, "YYYY-NNNN"
 	Dateiname         string
 	Rechnungsdatum    string
 	Jahr              string
@@ -211,6 +213,7 @@ func (m Meta) ToCSVRow() CSVRow {
 	}
 
 	return CSVRow{
+		Belegnummer:       m.Belegnummer,
 		Dateiname:         m.Dateiname,
 		Rechnungsdatum:    m.Rechnungsdatum,
 		Jahr:              m.Jahr,
@@ -245,6 +248,7 @@ func (m Meta) ToCSVRow() CSVRow {
 // ToMeta converts CSVRow to Meta.
 func (r CSVRow) ToMeta() Meta {
 	return Meta{
+		Belegnummer:       r.Belegnummer,
 		Dateiname:         r.Dateiname,
 		Rechnungsdatum:    r.Rechnungsdatum,
 		Jahr:              r.Jahr,

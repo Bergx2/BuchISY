@@ -16,6 +16,7 @@
   "table.col.auftraggeber": "Auftraggeber",
   "table.col.verwendungszweck": "Verwendungszweck",
   "table.col.invoicenumber": "Rechnungsnummer",
+  "table.col.belegnummer": "Belegnummer",
   "table.col.vatid": "USt-IdNr.",
   "field.vatid": "USt-IdNr.",
   "table.col.net": "Betrag netto",

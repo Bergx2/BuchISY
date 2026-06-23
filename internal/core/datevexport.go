@@ -57,11 +57,19 @@ func BuildDATEVStapel(h DATEVHeader, rows []CSVRow) ([]byte, int, int) {
 			continue
 		}
 		beleg := datevBeleg(r.Rechnungsdatum)
-		belegfeld := datevClean(r.Rechnungsnummer, 36)
+		// Belegfeld 1 = internal sequential receipt number (the primary find/sort
+		// key in DATEV); fall back to the invoice number for rows that predate the
+		// Belegnummer feature. Belegfeld 2 carries the supplier invoice number.
+		belegfeld1 := r.Belegnummer
+		if belegfeld1 == "" {
+			belegfeld1 = r.Rechnungsnummer
+		}
+		belegfeld1 = datevClean(belegfeld1, 36)
+		belegfeld2 := datevClean(r.Rechnungsnummer, 36)
 		text := datevClean(strings.TrimSpace(r.Auftraggeber+" "+r.Verwendungszweck), 60)
 		for _, e := range r.Buchung.DebitEntries() {
-			b.WriteString(fmt.Sprintf(`%s;"S";"EUR";;;;%d;%d;;%s;"%s";;;"%s"`+"\r\n",
-				datevAmount(e.Betrag), e.Konto, pay.Konto, beleg, belegfeld, text))
+			b.WriteString(fmt.Sprintf(`%s;"S";"EUR";;;;%d;%d;;%s;"%s";"%s";;"%s"`+"\r\n",
+				datevAmount(e.Betrag), e.Konto, pay.Konto, beleg, belegfeld1, belegfeld2, text))
 			exported++
 		}
 	}

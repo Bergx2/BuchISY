@@ -16,6 +16,7 @@
   "table.col.auftraggeber": "Client",
   "table.col.verwendungszweck": "Purpose",
   "table.col.invoicenumber": "Invoice Number",
+  "table.col.belegnummer": "Receipt No.",
   "table.col.vatid": "VAT-ID No.",
   "field.vatid": "VAT-ID No.",
   "table.col.net": "Net Amount",
