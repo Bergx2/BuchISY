@@ -255,3 +255,97 @@ func TestMarkExportedAndUpdateResets(t *testing.T) {
 		t.Error("Update must reset Exportiert to false")
 	}
 }
+
+// TestFindDuplicate verifies that FindDuplicate matches across all months when
+// Auftraggeber + Rechnungsnummer match, and returns the existing Belegnummer.
+func TestFindDuplicate(t *testing.T) {
+	repo := newTestRepo(t)
+
+	// Insert an invoice in January with a Belegnummer
+	jan := core.CSVRow{
+		Dateiname: "invoice1.pdf", Jahr: "2026", Monat: "01",
+		Auftraggeber: "AWS", Rechnungsnummer: "INV-001",
+		Belegnummer: "2026-0001", Bruttobetrag: 119,
+	}
+	if _, err := repo.Insert(jan); err != nil {
+		t.Fatalf("Insert January: %v", err)
+	}
+
+	// Try to find a duplicate in a different month with same company and invoice number
+	searchRow := core.CSVRow{
+		Auftraggeber: "AWS", Rechnungsnummer: "INV-001",
+	}
+	label, found, err := repo.FindDuplicate(searchRow)
+	if err != nil {
+		t.Fatalf("FindDuplicate: %v", err)
+	}
+	if !found {
+		t.Error("expected to find duplicate across months")
+	}
+	if label != "2026-0001" {
+		t.Errorf("expected Belegnummer '2026-0001', got '%s'", label)
+	}
+
+	// Test with case-insensitive and whitespace-tolerant match
+	searchRow2 := core.CSVRow{
+		Auftraggeber: "aws", Rechnungsnummer: "INV-001",
+	}
+	label2, found2, err := repo.FindDuplicate(searchRow2)
+	if err != nil {
+		t.Fatalf("FindDuplicate case-insensitive: %v", err)
+	}
+	if !found2 {
+		t.Error("expected to find duplicate with different case")
+	}
+	if label2 != "2026-0001" {
+		t.Errorf("expected Belegnummer '2026-0001', got '%s'", label2)
+	}
+
+	// Test with blank Rechnungsnummer → no early signal
+	searchBlank := core.CSVRow{
+		Auftraggeber: "AWS", Rechnungsnummer: "",
+	}
+	_, foundBlank, err := repo.FindDuplicate(searchBlank)
+	if err != nil {
+		t.Fatalf("FindDuplicate blank: %v", err)
+	}
+	if foundBlank {
+		t.Error("expected no duplicate found for blank Rechnungsnummer")
+	}
+
+	// Test non-existent combination
+	searchNone := core.CSVRow{
+		Auftraggeber: "Google", Rechnungsnummer: "INV-999",
+	}
+	_, foundNone, err := repo.FindDuplicate(searchNone)
+	if err != nil {
+		t.Fatalf("FindDuplicate non-existent: %v", err)
+	}
+	if foundNone {
+		t.Error("expected no duplicate found for non-existent company+invoice")
+	}
+
+	// Test fallback to Dateiname when Belegnummer is empty
+	feb := core.CSVRow{
+		Dateiname: "invoice2.pdf", Jahr: "2026", Monat: "02",
+		Auftraggeber: "GCP", Rechnungsnummer: "INV-002",
+		Belegnummer: "", // empty, should fallback to dateiname
+		Bruttobetrag: 150,
+	}
+	if _, err := repo.Insert(feb); err != nil {
+		t.Fatalf("Insert February: %v", err)
+	}
+	searchFeb := core.CSVRow{
+		Auftraggeber: "GCP", Rechnungsnummer: "INV-002",
+	}
+	labelFallback, foundFeb, err := repo.FindDuplicate(searchFeb)
+	if err != nil {
+		t.Fatalf("FindDuplicate fallback: %v", err)
+	}
+	if !foundFeb {
+		t.Error("expected to find duplicate (fallback to dateiname)")
+	}
+	if labelFallback != "invoice2.pdf" {
+		t.Errorf("expected fallback Dateiname 'invoice2.pdf', got '%s'", labelFallback)
+	}
+}

@@ -400,6 +400,48 @@ func (r *Repository) IsDuplicate(jahr, monat string, row core.CSVRow) (bool, err
 	return count > 0, nil
 }
 
+// FindDuplicate searches across ALL months for an invoice with the same
+// Auftraggeber (case-insensitive, trimmed) and non-empty Rechnungsnummer.
+// Returns the existing invoice's Belegnummer (or Dateiname as fallback) as label.
+// If row.Rechnungsnummer is blank, returns found=false (no early signal).
+func (r *Repository) FindDuplicate(row core.CSVRow) (label string, found bool, err error) {
+	// Guard: blank Rechnungsnummer → no early signal
+	if strings.TrimSpace(row.Rechnungsnummer) == "" {
+		return "", false, nil
+	}
+
+	query := `
+		SELECT belegnummer, dateiname FROM invoices
+		WHERE LOWER(TRIM(auftraggeber)) = LOWER(TRIM(?))
+		AND rechnungsnummer = ?
+		AND rechnungsnummer <> ''
+		LIMIT 1
+	`
+
+	var belegnummer sql.NullString
+	var dateiname string
+
+	err = r.db.QueryRow(query, row.Auftraggeber, row.Rechnungsnummer).Scan(&belegnummer, &dateiname)
+
+	if err == sql.ErrNoRows {
+		// No match found
+		return "", false, nil
+	}
+
+	if err != nil {
+		return "", false, fmt.Errorf("failed to find duplicate: %w", err)
+	}
+
+	// Return belegnummer if available, else fallback to dateiname
+	if belegnummer.Valid && belegnummer.String != "" {
+		label = belegnummer.String
+	} else {
+		label = dateiname
+	}
+
+	return label, true, nil
+}
+
 // MarkExported flags an invoice as having been included in a booking export.
 func (r *Repository) MarkExported(jahr, monat, dateiname string) error {
 	_, err := r.db.Exec(`UPDATE invoices SET exportiert = 1 WHERE jahr = ? AND monat = ? AND dateiname = ?`, jahr, monat, dateiname)
