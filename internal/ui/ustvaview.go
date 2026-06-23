@@ -51,6 +51,8 @@ func (a *App) showUStVADialog() {
 		body.Add(widget.NewSeparator())
 	}
 
+	var u core.UStVAOfficial // current period's result, for the PDF export
+
 	reload := func() {
 		fromY, fromM, toY, toM := a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth)
 		switch period {
@@ -62,7 +64,7 @@ func (a *App) showUStVADialog() {
 			fromM, toM = 1, 12
 		}
 		rows := a.collectInvoiceRows(fromY, fromM, toY, toM)
-		u := core.ComputeUStVAOfficial(rows, a.bookingRules)
+		u = core.ComputeUStVAOfficial(rows, a.bookingRules)
 
 		body.Objects = nil
 
@@ -145,8 +147,25 @@ func (a *App) showUStVADialog() {
 	toggle.SetSelected(a.bundle.T("export.month"))
 	reload()
 
+	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
+		data, err := core.BuildUStVAPDF(u, a.bundle.T("ustva.title"))
+		if err != nil {
+			a.showError(a.bundle.T("error.processing.title"), err.Error())
+			return
+		}
+		periodStr := fmt.Sprintf("%04d", a.currentYear)
+		switch period {
+		case 0:
+			periodStr = fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+		case 1:
+			periodStr = fmt.Sprintf("%04d-Q%d", a.currentYear, (int(a.currentMonth)-1)/3+1)
+		}
+		a.savePDF("UStVA_"+periodStr+".pdf", data)
+	})
+
 	header := widget.NewLabelWithStyle(a.bundle.T("ustva.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	content := container.NewBorder(container.NewVBox(header, toggle), nil, nil, nil, scroll)
+	topBar := container.NewBorder(nil, nil, nil, pdfBtn, toggle)
+	content := container.NewBorder(container.NewVBox(header, topBar), nil, nil, nil, scroll)
 	d := dialog.NewCustom(a.bundle.T("ustva.title"), a.bundle.T("common.close"), content, a.window)
 	d.Resize(fyne.NewSize(520, 520))
 	d.Show()

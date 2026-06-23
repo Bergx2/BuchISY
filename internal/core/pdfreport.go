@@ -206,3 +206,101 @@ func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// BuildUStVAPDF renders the official UStVA Kennzahlen (Kz 81/86/21/45/84/85/
+// 66/67/83) as a form — the document the user hands to the tax advisor. Only
+// non-zero Kennzahlen are shown; Kz 83 (Zahllast/Überschuss) is always shown.
+func BuildUStVAPDF(u UStVAOfficial, title string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P")
+	wKz, wLabel, wVal := 18.0, 122.0, 35.0
+
+	row := func(kz, label string, value float64, bold bool) {
+		style := ""
+		if bold {
+			style = "B"
+		}
+		pdf.SetFont("Arial", style, 9)
+		pdf.CellFormat(wKz, 6, tr(kz), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(wLabel, 6, tr(truncate(label, 80)), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(wVal, 6, tr(pdfAmount(value)), "1", 0, "R", false, 0, "")
+		pdf.Ln(6)
+		pdf.SetFont("Arial", "", 9)
+	}
+	section := func(h string) {
+		pdf.Ln(2)
+		pdf.SetFont("Arial", "B", 10)
+		pdf.CellFormat(0, 7, tr(h), "", 1, "L", false, 0, "")
+		pdf.SetFont("Arial", "", 9)
+	}
+
+	section("A. Steuerpflichtige Umsätze")
+	if u.Kz81 != 0 {
+		row("Kz 81", "Umsätze 19 % (Bemessungsgrundlage)", u.Kz81, false)
+		row("", "   davon Umsatzsteuer", u.USt81, false)
+	}
+	if u.Kz86 != 0 {
+		row("Kz 86", "Umsätze 7 % (Bemessungsgrundlage)", u.Kz86, false)
+		row("", "   davon Umsatzsteuer", u.USt86, false)
+	}
+	section("D. Leistungsempfänger als Steuerschuldner (§ 13b UStG)")
+	if u.Kz84 != 0 {
+		row("Kz 84", "§ 13b Bemessungsgrundlage", u.Kz84, false)
+		row("Kz 85", "§ 13b Steuer", u.Kz85, false)
+	}
+	section("E. Nicht steuerbare Umsätze")
+	if u.Kz21 != 0 {
+		row("Kz 21", "Innergem. sonstige Leistungen (§ 18b UStG)", u.Kz21, false)
+	}
+	if u.Kz45 != 0 {
+		row("Kz 45", "Übrige nicht steuerbare Umsätze (Ausland)", u.Kz45, false)
+	}
+	section("F. Abziehbare Vorsteuerbeträge")
+	if u.Kz66 != 0 {
+		row("Kz 66", "Vorsteuer aus Rechnungen", u.Kz66, false)
+	}
+	if u.Kz67 != 0 {
+		row("Kz 67", "Vorsteuer aus § 13b-Leistungen", u.Kz67, false)
+	}
+	section("H. Verbleibende Vorauszahlung / Überschuss")
+	row("Kz 83", "Zahllast / Überschuss", u.Kz83, true)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// BuildZMPDF renders the Zusammenfassende Meldung: one row per EU customer
+// VAT-ID with its net sum + "Sonstige Leistung", plus the Kontrollsumme and the
+// own VAT-ID in the header (when set).
+func BuildZMPDF(z ZM, ownVatID, title string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P")
+	if ownVatID != "" {
+		pdf.SetFont("Arial", "", 9)
+		pdf.CellFormat(0, 6, tr("Eigene USt-IdNr.: "+ownVatID), "", 1, "L", false, 0, "")
+		pdf.Ln(1)
+	}
+	headers := []string{"USt-IdNr. (Kunde)", "Summe (netto)", "Art der Leistung"}
+	widths := []float64{60, 40, 70}
+	pdfTableHeader(pdf, tr, headers, widths)
+	for _, l := range z.Zeilen {
+		pdfPageBreak(pdf, tr, headers, widths, 6)
+		pdf.CellFormat(widths[0], 6, tr(l.UStIdNr), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(widths[1], 6, tr(pdfAmount(l.Netto)), "1", 0, "R", false, 0, "")
+		pdf.CellFormat(widths[2], 6, tr("Sonstige Leistung"), "1", 0, "L", false, 0, "")
+		pdf.Ln(6)
+	}
+	pdfPageBreak(pdf, tr, headers, widths, 7)
+	pdf.SetFont("Arial", "B", 9)
+	pdf.CellFormat(widths[0], 7, tr("Kontrollsumme"), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[1], 7, tr(pdfAmount(z.Kontrollsumme)), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[2], 7, tr(""), "1", 0, "L", false, 0, "")
+	pdf.Ln(7)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

@@ -25,6 +25,8 @@ func (a *App) showZMDialog() {
 		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
 	}
 
+	var zm core.ZM // current period's result, for the PDF export
+
 	reload := func() {
 		fromY, fromM, toY, toM := a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth)
 		switch period {
@@ -36,7 +38,7 @@ func (a *App) showZMDialog() {
 			fromM, toM = 1, 12
 		}
 		rows := a.collectInvoiceRows(fromY, fromM, toY, toM)
-		zm := core.ComputeZM(rows)
+		zm = core.ComputeZM(rows)
 
 		body.Objects = nil
 
@@ -77,12 +79,28 @@ func (a *App) showZMDialog() {
 	toggle.SetSelected(a.bundle.T("zm.quarter"))
 	reload()
 
+	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
+		data, err := core.BuildZMPDF(zm, a.settings.OwnVATID, a.bundle.T("zm.title"))
+		if err != nil {
+			a.showError(a.bundle.T("error.processing.title"), err.Error())
+			return
+		}
+		periodStr := fmt.Sprintf("%04d", a.currentYear)
+		switch period {
+		case 0:
+			periodStr = fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
+		case 1:
+			periodStr = fmt.Sprintf("%04d-Q%d", a.currentYear, (int(a.currentMonth)-1)/3+1)
+		}
+		a.savePDF("ZM_"+periodStr+".pdf", data)
+	})
+
 	headingLabel := widget.NewLabelWithStyle(a.bundle.T("zm.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	headerItems := []fyne.CanvasObject{headingLabel}
 	if a.settings.OwnVATID != "" {
 		headerItems = append(headerItems, widget.NewLabel("USt-IdNr: "+a.settings.OwnVATID))
 	}
-	headerItems = append(headerItems, toggle)
+	headerItems = append(headerItems, container.NewBorder(nil, nil, nil, pdfBtn, toggle))
 	header := container.NewVBox(headerItems...)
 
 	content := container.NewBorder(header, nil, nil, nil, scroll)
