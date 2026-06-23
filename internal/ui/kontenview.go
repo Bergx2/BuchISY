@@ -198,6 +198,12 @@ func (a *App) autoFillNewStatements(folder string, names []string) {
 					a.window)
 			}
 			a.window.SetContent(a.buildUI())
+			// E18.2: a freshly imported statement is the trigger for
+			// reconciliation — open the (confirm-each) Belegabgleich right away
+			// when at least one statement was imported successfully.
+			if len(names) > len(failures) {
+				a.showBelegabgleich()
+			}
 		})
 	}()
 }
