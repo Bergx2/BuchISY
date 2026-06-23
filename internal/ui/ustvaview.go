@@ -12,22 +12,28 @@ import (
 	"github.com/bergx2/buchisy/internal/core"
 )
 
-// showUStVADialog shows the deductible input VAT (Vorsteuer) per rate for the
-// current month or whole year.
+// showUStVADialog shows the VAT return for the current month or whole year:
+// output VAT owed (Umsatzsteuer, incl. §13b), deductible input VAT (Vorsteuer,
+// incl. §13b) and the resulting Zahllast.
 func (a *App) showUStVADialog() {
-	var u core.UStVA
 	yearMode := false
+	body := container.NewVBox()
+	scroll := container.NewVScroll(body)
 
-	list := widget.NewList(
-		func() int { return len(u.Zeilen) },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
-		func(i widget.ListItemID, o fyne.CanvasObject) {
-			z := u.Zeilen[i]
-			amount := strings.Replace(fmt.Sprintf("%.2f", z.Vorsteuer), ".", ",", 1)
-			o.(*widget.Label).SetText(fmt.Sprintf("%s %d %%   (%d)   %s", a.bundle.T("ustva.vorsteuer"), z.Satz, z.Konto, amount))
-		},
-	)
-	totalLabel := widget.NewLabel("")
+	fmtAmt := func(v float64) string {
+		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+	}
+	addSection := func(headingKey string, zeilen []core.UStVAZeile, total float64) {
+		body.Add(widget.NewLabelWithStyle(a.bundle.T(headingKey), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+		for _, z := range zeilen {
+			body.Add(widget.NewLabel(fmt.Sprintf("    %d %%   (%d)   %s €", z.Satz, z.Konto, fmtAmt(z.Betrag))))
+		}
+		if len(zeilen) == 0 {
+			body.Add(widget.NewLabel("    —"))
+		}
+		body.Add(widget.NewLabel("    " + a.bundle.T("ustva.summe", fmtAmt(total))))
+		body.Add(widget.NewSeparator())
+	}
 
 	reload := func() {
 		fromY, fromM, toY, toM := a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth)
@@ -35,10 +41,18 @@ func (a *App) showUStVADialog() {
 			fromM, toM = 1, 12
 		}
 		rows := a.collectInvoiceRows(fromY, fromM, toY, toM)
-		u = core.ComputeUStVA(rows, a.bookingRules)
-		amount := strings.Replace(fmt.Sprintf("%.2f", u.VorsteuerGesamt), ".", ",", 1)
-		totalLabel.SetText(a.bundle.T("ustva.total", amount))
-		list.Refresh()
+		u := core.ComputeUStVA(rows, a.bookingRules)
+
+		body.Objects = nil
+		addSection("ustva.umsatzsteuer.heading", u.Umsatzsteuer, u.UmsatzsteuerGesamt)
+		addSection("ustva.vorsteuer.heading", u.Vorsteuer, u.VorsteuerGesamt)
+
+		zKey, zVal := "ustva.zahllast", u.Zahllast
+		if u.Zahllast < 0 {
+			zKey, zVal = "ustva.ueberschuss", -u.Zahllast
+		}
+		body.Add(widget.NewLabelWithStyle(a.bundle.T(zKey, fmtAmt(zVal)), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+		body.Refresh()
 	}
 
 	toggle := widget.NewRadioGroup([]string{a.bundle.T("export.month"), a.bundle.T("export.year")}, func(sel string) {
@@ -50,8 +64,8 @@ func (a *App) showUStVADialog() {
 	reload()
 
 	header := widget.NewLabelWithStyle(a.bundle.T("ustva.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	content := container.NewBorder(container.NewVBox(header, toggle), totalLabel, nil, nil, list)
+	content := container.NewBorder(container.NewVBox(header, toggle), nil, nil, nil, scroll)
 	d := dialog.NewCustom(a.bundle.T("ustva.title"), a.bundle.T("common.close"), content, a.window)
-	d.Resize(fyne.NewSize(460, 380))
+	d.Resize(fyne.NewSize(480, 480))
 	d.Show()
 }
