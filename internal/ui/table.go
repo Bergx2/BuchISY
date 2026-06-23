@@ -272,19 +272,19 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				}
 			case 1:
 				// Filetype column: shows the original file's extension
-				// (PDF, JPG, …). Click opens the edit dialog — same as
-				// every other cell. The original file itself is one
-				// click away from inside the dialog via "Beleg öffnen"
-				// or via the row's right-click menu.
+				// (PDF, JPG, …). Click OPENS THE ORIGINAL FILE in the OS
+				// default app (outside BuchISY). Every other cell still
+				// opens the edit/preview dialog.
 				hoverLabel.Alignment = fyne.TextAlignCenter
 				ext := strings.ToUpper(strings.TrimPrefix(
 					filepath.Ext(it.filtered[id.Row].Dateiname), "."))
 				hoverLabel.SetText(ext)
-				hoverLabel.tooltip = "Bearbeiten"
+				hoverLabel.tooltip = "Datei öffnen"
 				dataRow := id.Row
 				hoverLabel.onTap = func() {
 					if dataRow >= 0 && dataRow < len(it.filtered) && it.app != nil {
-						it.app.showEditDialog(it.filtered[dataRow], nil)
+						r := it.filtered[dataRow]
+						it.app.openFileInOS(it.app.resolveInvoicePath(r))
 					}
 				}
 			default:
