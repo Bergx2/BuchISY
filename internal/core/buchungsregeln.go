@@ -27,6 +27,7 @@ type BookingRule struct {
 type BookingRules struct {
 	VorsteuerKonten    map[string]int `json:"vorsteuer_konten"`
 	UmsatzsteuerKonten map[string]int `json:"umsatzsteuer_konten,omitempty"`
+	ErloesKonten       map[string]int `json:"erloes_konten,omitempty"`
 	Regeln             []BookingRule  `json:"regeln"`
 }
 
@@ -59,5 +60,19 @@ func (r *BookingRules) VorsteuerKonto(satzProzent float64) (int, bool) {
 // UmsatzsteuerKonto returns the output-VAT account for a VAT rate (percent).
 func (r *BookingRules) UmsatzsteuerKonto(satzProzent float64) (int, bool) {
 	k, ok := r.UmsatzsteuerKonten[strconv.Itoa(int(satzProzent+0.5))]
+	return k, ok
+}
+
+// ErloesKonto picks the revenue account for an outgoing invoice from its
+// counterparty VAT-ID and VAT amount: German VAT → "inland"; 0% + EU VAT-ID →
+// "eu" (§18b); 0% + non-EU → "drittland".
+func (r *BookingRules) ErloesKonto(vatID string, mwst float64) (int, bool) {
+	key := "drittland"
+	if mwst > 0.005 {
+		key = "inland"
+	} else if IsEUVatID(vatID) {
+		key = "eu"
+	}
+	k, ok := r.ErloesKonten[key]
 	return k, ok
 }
