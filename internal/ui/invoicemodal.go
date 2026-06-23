@@ -575,7 +575,12 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	rebuildSwitcher()
 
 	// Form layout
+	belegnrText := "Beleg-Nr. —"
+	if nextBelegnr != "" {
+		belegnrText = "Beleg-Nr. " + nextBelegnr
+	}
 	formItems := []fyne.CanvasObject{
+		widget.NewLabelWithStyle(belegnrText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		newCopyableLabel(a.bundle, a.bundle.T("modal.originalFile")),
 		container.NewBorder(nil, nil, nil,
 			container.NewHBox(addAttBtn, openOriginalBtn), originalEntry),

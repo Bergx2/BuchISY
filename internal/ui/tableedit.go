@@ -486,9 +486,15 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	rebuildSwitcher()
 
+	belegnrText := "Beleg-Nr. —"
+	if row.Belegnummer != "" {
+		belegnrText = "Beleg-Nr. " + row.Belegnummer
+	}
 	form := container.NewVBox(
 		container.NewBorder(nil, nil,
-			container.NewHBox(newCopyableLabel(a.bundle, "Datei: "+row.Dateiname),
+			container.NewHBox(
+				widget.NewLabelWithStyle(belegnrText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+				newCopyableLabel(a.bundle, "Datei: "+row.Dateiname),
 				openBelegBtn, addAttBtn),
 			container.NewHBox(cancelBtn, saveBtn)),
 		previewSwitcher,
