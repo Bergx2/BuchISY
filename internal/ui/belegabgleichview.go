@@ -431,6 +431,75 @@ func (a *App) showBelegabgleich() {
 	// Refresh table (in case any rows changed state before the dialog opens).
 	a.loadInvoices()
 
+	// ── Barkasse: collect unconfirmed cash receipts ──────────────────────────
+	// Cash accounts have no external statement; a sentinel BuchungRef marks
+	// a receipt as reconciled without needing a new DB column.
+	// Build the per-row interactive widgets here; they are inserted into the
+	// dialog vbox (in both the empty and non-empty branches below).
+	var cashConfirmRows []core.CSVRow
+	for _, row := range rows {
+		if row.BuchungRef != "" {
+			continue
+		}
+		if accountType(row.Bankkonto) != core.AccountTypeCash {
+			continue
+		}
+		cashConfirmRows = append(cashConfirmRows, row)
+	}
+
+	// buildCashConfirmBox constructs the Barkasse section widget (heading +
+	// one confirm-row per unconfirmed cash receipt). Returns nil when there
+	// are no unconfirmed cash receipts.
+	buildCashConfirmBox := func() fyne.CanvasObject {
+		if len(cashConfirmRows) == 0 {
+			return nil
+		}
+		heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
+		heading.TextStyle = fyne.TextStyle{Bold: true}
+		vb := container.NewVBox(heading)
+
+		for _, cr := range cashConfirmRows {
+			// Capture loop variable for closure safety.
+			cashRow := cr
+
+			bruttoStr := strings.Replace(fmt.Sprintf("%.2f", cashRow.Bruttobetrag), ".", ",", 1)
+
+			// Coverage hint from a.cashUncovered (populated by loadInvoices).
+			coverageHint := ""
+			if a.cashUncovered != nil {
+				if a.cashUncovered[cashRow.Dateiname] {
+					coverageHint = "  " + a.bundle.T("reconcile.cashUncoveredHint")
+				} else {
+					coverageHint = "  " + a.bundle.T("reconcile.cashCoveredHint")
+				}
+			}
+
+			rowLabel := fmt.Sprintf("%s · %s · %s · %s €%s",
+				cashRow.Belegnummer,
+				cashRow.Rechnungsdatum,
+				cashRow.Auftraggeber,
+				bruttoStr,
+				coverageHint,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			confirmBtn := widget.NewButton(a.bundle.T("reconcile.cashConfirm"), nil)
+			confirmBtn.OnTapped = func() {
+				cashRow.BuchungRef = core.CashConfirmedRef
+				if err := a.dbRepo.Update(cashRow.Jahr, cashRow.Monat, cashRow.Dateiname, cashRow); err != nil {
+					a.logger.Warn("Belegabgleich cash confirm Update %s: %v", cashRow.Dateiname, err)
+				}
+				confirmBtn.Disable()
+				lbl.SetText("✓ " + rowLabel)
+				a.loadInvoices()
+			}
+
+			vb.Add(container.NewBorder(nil, nil, nil, confirmBtn, lbl))
+		}
+		return vb
+	}
+
 	// Build Barkasse summary block (informational only).
 	cashAccounts := a.cashAccounts()
 	var cashBox *fyne.Container
@@ -460,7 +529,7 @@ func (a *App) showBelegabgleich() {
 	// Build dialog content.
 	var content fyne.CanvasObject
 
-	if len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 {
+	if len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 && len(cashConfirmRows) == 0 {
 		vbox := container.NewVBox(widget.NewLabel(a.bundle.T("reconcile.none")))
 		if cashBox != nil {
 			heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
@@ -470,11 +539,17 @@ func (a *App) showBelegabgleich() {
 		}
 		content = container.NewVScroll(vbox)
 	} else {
-		headerText := a.bundle.T("reconcile.summary", len(suggestions))
-		header := widget.NewLabel(headerText)
-		header.TextStyle = fyne.TextStyle{Bold: true}
+		vbox := container.NewVBox()
 
-		vbox := container.NewVBox(header)
+		// Show the bank/creditcard suggestion summary header only when there are
+		// actual statement suggestions to confirm (avoids "0 Vorschläge" when
+		// the dialog was opened solely because of unconfirmed cash receipts).
+		if len(suggestions) > 0 || len(groupSuggestions) > 0 || len(partialSuggestions) > 0 {
+			headerText := a.bundle.T("reconcile.summary", len(suggestions))
+			header := widget.NewLabel(headerText)
+			header.TextStyle = fyne.TextStyle{Bold: true}
+			vbox.Add(header)
+		}
 
 		for _, s := range suggestions {
 			// Capture loop variable for closure safety.
@@ -760,6 +835,14 @@ func (a *App) showBelegabgleich() {
 			heading.TextStyle = fyne.TextStyle{Bold: true}
 			vbox.Add(heading)
 			vbox.Add(cashBox)
+		}
+
+		// ── Barkasse per-receipt confirmation ──────────────────────────────────
+		// Rendered after the bank/creditcard sections. Each unconfirmed cash
+		// receipt gets a "Bestätigen" button; clicking it writes the sentinel
+		// BuchungRef so the table shows ✓ without a new DB column.
+		if box := buildCashConfirmBox(); box != nil {
+			vbox.Add(box)
 		}
 
 		content = container.NewVScroll(vbox)

@@ -301,6 +301,9 @@
   "settings.matchTolerance": "Abgleich: Fremdwährungs-Toleranz (%)",
 
   "reconcile.lineTaken": "Auszugsposition bereits verknüpft",
+  "reconcile.cashConfirm": "Bestätigen",
+  "reconcile.cashCoveredHint": "✓ gedeckt",
+  "reconcile.cashUncoveredHint": "⚠ nicht gedeckt",
 
   "modal.erloeskonto": "Erlöskonto",
 

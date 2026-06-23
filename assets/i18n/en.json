@@ -301,6 +301,9 @@
   "settings.matchTolerance": "Reconciliation: foreign tolerance (%)",
 
   "reconcile.lineTaken": "Statement line already linked",
+  "reconcile.cashConfirm": "Confirm",
+  "reconcile.cashCoveredHint": "✓ covered",
+  "reconcile.cashUncoveredHint": "⚠ uncovered",
 
   "modal.erloeskonto": "Revenue account",
 
