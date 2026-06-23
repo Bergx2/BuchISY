@@ -43,11 +43,11 @@ func DefaultMatchConfig() MatchConfig {
 	return MatchConfig{DateWindowDays: 5, ForeignTolerancePct: 1.5}
 }
 
-// MatchInvoiceToStatement ranks the statement lines whose amount matches the
-// invoice by date proximity + supplier-name overlap, and classifies the outcome.
+// matchToStatement ranks statement lines by amount + date proximity + supplier-name overlap.
+// wantCredit: if true, matches INCOMING credits (IstGutschrift=true); if false, matches DEBIT lines (IstGutschrift=false).
 // cfg controls date window, foreign-currency tolerance, and alias token boosts.
-// Credit lines (IstGutschrift=true) are always excluded.
-func MatchInvoiceToStatement(row CSVRow, lines []StatementBooking, cfg MatchConfig) (MatchKind, []ScoredLine) {
+// Returns the outcome classification and candidate lines sorted by score (highest first).
+func matchToStatement(row CSVRow, lines []StatementBooking, cfg MatchConfig, wantCredit bool) (MatchKind, []ScoredLine) {
 	amount := InvoiceEURAmount(row)
 	if amount <= 0 {
 		return MatchNone, nil
@@ -72,7 +72,7 @@ func MatchInvoiceToStatement(row CSVRow, lines []StatementBooking, cfg MatchConf
 
 	var cands []ScoredLine
 	for _, l := range lines {
-		if l.IstGutschrift { // never match an expense to an incoming credit
+		if l.IstGutschrift != wantCredit { // skip lines not matching the desired type
 			continue
 		}
 		if absf(l.Betrag-amount) > tol {
@@ -97,6 +97,19 @@ func MatchInvoiceToStatement(row CSVRow, lines []StatementBooking, cfg MatchConf
 		return MatchAuto, cands
 	}
 	return MatchSuggest, cands
+}
+
+// MatchInvoiceToStatement matches an expense invoice to statement DEBIT lines
+// (credits excluded). cfg controls window, foreign tolerance, alias boosts.
+func MatchInvoiceToStatement(row CSVRow, lines []StatementBooking, cfg MatchConfig) (MatchKind, []ScoredLine) {
+	return matchToStatement(row, lines, cfg, false)
+}
+
+// MatchRevenueToStatement matches an outgoing invoice (Ausgangsrechnung) to
+// incoming bank CREDIT lines (Gutschriften) by amount + date + customer-name
+// overlap — the mirror of MatchInvoiceToStatement.
+func MatchRevenueToStatement(row CSVRow, lines []StatementBooking, cfg MatchConfig) (MatchKind, []ScoredLine) {
+	return matchToStatement(row, lines, cfg, true)
 }
 
 func absf(x float64) float64 {

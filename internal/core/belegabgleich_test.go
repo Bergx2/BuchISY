@@ -112,6 +112,30 @@ func TestMatchConfigForeignToleranceAndCredit(t *testing.T) {
 	}
 }
 
+func TestMatchRevenueToStatement(t *testing.T) {
+	cfg := DefaultMatchConfig()
+	row := CSVRow{Auftraggeber: "Acme Ltd", Ausgangsrechnung: true, Bruttobetrag: 1190, Rechnungsdatum: "10.01.2026"}
+	lines := []StatementBooking{
+		{Page: 0, LineIdx: 1, Date: "12.01.2026", Text: "Acme Ltd Zahlung", Betrag: 1190, IstGutschrift: true},  // incoming credit → match
+		{Page: 0, LineIdx: 2, Date: "12.01.2026", Text: "Acme Ltd", Betrag: 1190, IstGutschrift: false},          // debit → must NOT match
+	}
+	kind, cands := MatchRevenueToStatement(row, lines, cfg)
+	if kind == MatchNone || len(cands) != 1 {
+		t.Fatalf("want one credit-line match, got kind=%v cands=%+v", kind, cands)
+	}
+	if !cands[0].Line.IstGutschrift || cands[0].Line.LineIdx != 1 {
+		t.Errorf("matched the wrong line: %+v", cands[0].Line)
+	}
+	// And the expense matcher must still ignore the credit line:
+	exKind, exCands := MatchInvoiceToStatement(row, lines, cfg)
+	for _, c := range exCands {
+		if c.Line.IstGutschrift {
+			t.Errorf("expense matcher must never return a credit line: %+v", c)
+		}
+	}
+	_ = exKind
+}
+
 func TestFindGroupedPaymentsTriple(t *testing.T) {
 	cfg := DefaultMatchConfig()
 	invoices := []CSVRow{
