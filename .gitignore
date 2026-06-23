@@ -113,3 +113,5 @@ temp/
 # Testing
 coverage.txt
 coverage.html
+_backups/
+.superpowers/
