@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -10,18 +11,17 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/zalando/go-keyring"
 
 	"github.com/bergx2/buchisy/internal/core"
 )
 
 // showErloesAbgleich runs revenue reconciliation for the current month:
 // auto-links unambiguous incoming credit matches and presents ambiguous ones
-// as a confirm-list. This is the mirror of showBelegabgleich, but filtered to
-// Ausgangsrechnungen and bank CREDIT lines (IstGutschrift==true).
-//
-// SCOPE NOTE: grouped (n:1) and partial (1:n) payment detection, as well as
-// Claude re-ranking of ambiguous suggestions, are intentionally deferred to a
-// future iteration. Auto-link + confirm-suggestions is the deliverable here.
+// as a confirm-list, with grouped (n:1) and partial (1:n) payment detection,
+// alias learning, and Claude re-ranking for close-call suggestions.
+// This mirrors showBelegabgleich but is filtered to Ausgangsrechnungen and
+// bank CREDIT lines (IstGutschrift==true).
 func (a *App) showErloesAbgleich() {
 	year := fmt.Sprintf("%04d", a.currentYear)
 	month := fmt.Sprintf("%02d", int(a.currentMonth))
@@ -196,6 +196,8 @@ func (a *App) showErloesAbgleich() {
 	})
 
 	autoLinked := 0
+	// Track which Ausgangsrechnungen were auto-linked this run (by filename).
+	autoLinkedSet := map[string]bool{}
 
 	for _, r := range autoResults {
 		top := r.candidates[0]
@@ -220,7 +222,15 @@ func (a *App) showErloesAbgleich() {
 		if err := a.dbRepo.Update(r.row.Jahr, r.row.Monat, r.row.Dateiname, r.row); err != nil {
 			a.logger.Warn("ErloesAbgleich auto-link Update %s: %v", r.row.Dateiname, err)
 		}
+		// Mechanism 3: alias learning on auto-link.
+		if a.statementAliases != nil {
+			a.statementAliases.Learn(r.row.Auftraggeber, top.scored.Line.Text)
+			if err := a.statementAliases.Save(); err != nil {
+				a.logger.Warn("ErloesAbgleich auto-link: save aliases: %v", err)
+			}
+		}
 		claimed[key] = true
+		autoLinkedSet[r.row.Dateiname] = true
 		autoLinked++
 	}
 
@@ -247,13 +257,136 @@ func (a *App) showErloesAbgleich() {
 		})
 	}
 
+	// ── Step 4: Claude re-ranking for close-call ambiguous suggestions ────────
+	// Mechanism 4: when processing mode is "claude" and the top-2 single-line
+	// candidates are within a small score margin (< 0.3), ask Claude to pick the
+	// best matching credit line. Errors are non-fatal.
+	if a.settings.ProcessingMode == "claude" {
+		apiKey, keyErr := keyring.Get("BuchISY", a.keyringAccount())
+		if keyErr == nil && apiKey != "" {
+			for i := range suggestions {
+				sug := &suggestions[i]
+				if len(sug.candidates) < 2 {
+					continue
+				}
+				if sug.candidates[0].scored.Score-sug.candidates[1].scored.Score >= 0.3 {
+					continue
+				}
+				lineTexts := make([]string, len(sug.candidates))
+				for j, c := range sug.candidates {
+					lineTexts[j] = c.scored.Line.Text
+				}
+				idx, rankErr := a.anthropicExtractor.RankStatementLine(
+					context.Background(),
+					apiKey,
+					a.settings.AnthropicModel,
+					sug.row.Auftraggeber,
+					lineTexts,
+				)
+				if rankErr != nil {
+					a.logger.Warn("ErloesAbgleich RankStatementLine %s: %v", sug.row.Auftraggeber, rankErr)
+					continue
+				}
+				if idx > 0 && idx < len(sug.candidates) {
+					// Move Claude's pick to the front.
+					chosen := sug.candidates[idx]
+					copy(sug.candidates[1:idx+1], sug.candidates[0:idx])
+					sug.candidates[0] = chosen
+				}
+			}
+		}
+	}
+
+	// ── Step 5: Grouped (n:1) and partial (1:n) detection ────────────────────
+	// Mechanism 1: FindGroupedRevenuePayments — one credit line covering N invoices.
+	// Mechanism 2: RevenuePartialPaymentLines — one Teilzahlung invoice with partial credits.
+	// Both run over unclaimed credit lines and unlinked Ausgangsrechnungen.
+
+	type groupSuggestion struct {
+		group core.GroupMatch
+	}
+	type partialSuggestion struct {
+		row        core.CSVRow
+		candidates []scoredWithFile
+	}
+
+	var groupSuggestions []groupSuggestion
+	var partialSuggestions []partialSuggestion
+
+	// Track which accounts we've already processed for group detection.
+	groupProcessedAcct := map[string]bool{}
+
+	for _, row := range rows {
+		// Only unlinked Ausgangsrechnungen on bank accounts not auto-linked this run.
+		if !row.Ausgangsrechnung || row.BuchungRef != "" || autoLinkedSet[row.Dateiname] {
+			continue
+		}
+		if accountType(row.Bankkonto) != core.AccountTypeBank {
+			continue
+		}
+
+		// Mechanism 2: partial payment suggestions for Teilzahlung invoices.
+		// Match per file so each candidate's source file is unambiguous.
+		if row.Teilzahlung {
+			var swf []scoredWithFile
+			for _, sl := range unclaimedByFile(stmtCache[row.Bankkonto], claimed, refKey) {
+				for _, c := range core.RevenuePartialPaymentLines(row, sl.lines) {
+					swf = append(swf, scoredWithFile{scored: c, file: sl.file})
+				}
+			}
+			if len(swf) > 0 {
+				sort.SliceStable(swf, func(i, j int) bool { return swf[i].scored.Score > swf[j].scored.Score })
+				partialSuggestions = append(partialSuggestions, partialSuggestion{row: row, candidates: swf})
+			}
+		}
+
+		// Mechanism 1: group detection per account (run once per account).
+		if !groupProcessedAcct[row.Bankkonto] {
+			groupProcessedAcct[row.Bankkonto] = true
+
+			// Collect all unlinked Ausgangsrechnungen for this account.
+			var unmatchedInvoices []core.CSVRow
+			for _, r2 := range rows {
+				if !r2.Ausgangsrechnung || r2.Bankkonto != row.Bankkonto {
+					continue
+				}
+				if r2.BuchungRef != "" || autoLinkedSet[r2.Dateiname] {
+					continue
+				}
+				if accountType(r2.Bankkonto) != core.AccountTypeBank {
+					continue
+				}
+				unmatchedInvoices = append(unmatchedInvoices, r2)
+			}
+
+			// Detect groups per file so each group's source file is unambiguous,
+			// and don't reuse an invoice across files' groups.
+			groupedInvoices := map[string]bool{}
+			for _, sl := range unclaimedByFile(stmtCache[row.Bankkonto], claimed, refKey) {
+				var avail []core.CSVRow
+				for _, inv := range unmatchedInvoices {
+					if !groupedInvoices[inv.Dateiname] {
+						avail = append(avail, inv)
+					}
+				}
+				for _, g := range core.FindGroupedRevenuePayments(avail, sl.lines, cfg) {
+					g.File = sl.file
+					for _, dn := range g.Dateinamen {
+						groupedInvoices[dn] = true
+					}
+					groupSuggestions = append(groupSuggestions, groupSuggestion{group: g})
+				}
+			}
+		}
+	}
+
 	// Refresh table so auto-linked rows show their new BuchungRef.
 	a.loadInvoices()
 
-	// ── Step 4: Build dialog content ─────────────────────────────────────────
+	// ── Step 6: Build dialog content ──────────────────────────────────────────
 	var content fyne.CanvasObject
 
-	if autoLinked == 0 && len(suggestions) == 0 {
+	if autoLinked == 0 && len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 {
 		content = container.NewVScroll(
 			container.NewVBox(widget.NewLabel(a.bundle.T("erloesabgleich.none"))),
 		)
@@ -264,6 +397,7 @@ func (a *App) showErloesAbgleich() {
 
 		vbox := container.NewVBox(header)
 
+		// ── Single-line suggestions ────────────────────────────────────────────
 		for _, s := range suggestions {
 			// Capture loop variable for closure safety.
 			sug := s
@@ -320,6 +454,13 @@ func (a *App) showErloesAbgleich() {
 				if err := a.dbRepo.Update(sug.row.Jahr, sug.row.Monat, sug.row.Dateiname, sug.row); err != nil {
 					a.logger.Warn("ErloesAbgleich confirm Update %s: %v", sug.row.Dateiname, err)
 				}
+				// Mechanism 3: alias learning on confirm.
+				if a.statementAliases != nil {
+					a.statementAliases.Learn(sug.row.Auftraggeber, chosen.scored.Line.Text)
+					if err := a.statementAliases.Save(); err != nil {
+						a.logger.Warn("ErloesAbgleich confirm: save aliases: %v", err)
+					}
+				}
 				claimed[key] = true
 				confirmBtn.Disable()
 				lbl.SetText("✓ " + rowLabel)
@@ -328,8 +469,6 @@ func (a *App) showErloesAbgleich() {
 
 			// Build row widget. When ≥2 candidates exist, add a Select dropdown
 			// so the user can choose which credit line to confirm.
-			// Mirror the expense dialog's E12 fix: the label updates when the
-			// dropdown selection changes to reflect the newly selected candidate.
 			var rowWidget fyne.CanvasObject
 			if len(sug.candidates) >= 2 {
 				options := make([]string, len(sug.candidates))
@@ -340,7 +479,7 @@ func (a *App) showErloesAbgleich() {
 					}
 					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
 					// 1-based index prefix ensures option labels are unique even when
-					// two candidates render identically (E12 fix mirrors expense dialog).
+					// two candidates render identically (mirrors expense dialog E12 fix).
 					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
 						i+1,
 						c.scored.Line.Page+1,
@@ -358,8 +497,7 @@ func (a *App) showErloesAbgleich() {
 							break
 						}
 					}
-					// Update the label to reflect the newly selected candidate
-					// (E12 fix: dropdown change updates the label, mirroring expense dialog).
+					// Update the label to reflect the newly selected candidate.
 					chosen := sug.candidates[selIdx]
 					newLineRunes := []rune(chosen.scored.Line.Text)
 					if len(newLineRunes) > 60 {
@@ -386,6 +524,181 @@ func (a *App) showErloesAbgleich() {
 				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn, lbl)
 			}
 
+			vbox.Add(rowWidget)
+		}
+
+		// ── Mechanism 1: Group (n:1) payment rows ─────────────────────────────
+		for _, gs := range groupSuggestions {
+			// Capture for closure safety.
+			grp := gs.group
+
+			lineRunes := []rune(grp.Line.Text)
+			if len(lineRunes) > 60 {
+				lineRunes = append(lineRunes[:57], []rune("…")...)
+			}
+			betragStr := strings.Replace(fmt.Sprintf("%.2f", grp.Line.Betrag), ".", ",", 1)
+			filePart := ""
+			if grp.File != "" {
+				filePart = " (" + filepath.Base(grp.File) + ")"
+			}
+			countLabel := fmt.Sprintf(a.bundle.T("reconcile.group"), len(grp.Dateinamen))
+			rowLabel := fmt.Sprintf("%s (%s) = S.%d Z.%d · %s · %s € · %s%s",
+				countLabel,
+				strings.Join(grp.Dateinamen, ", "),
+				grp.Line.Page+1,
+				grp.Line.LineIdx,
+				grp.Line.Date,
+				betragStr,
+				string(lineRunes),
+				filePart,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			linkAllBtn := widget.NewButton(a.bundle.T("reconcile.linkAll"), nil)
+			linkAllBtn.OnTapped = func() {
+				// Guard against double-linking the same statement line.
+				grpKey := refKey(grp.File, grp.Line.Page, grp.Line.LineIdx)
+				if claimed[grpKey] {
+					lbl.SetText("⚠ " + a.bundle.T("reconcile.lineTaken"))
+					linkAllBtn.Disable()
+					return
+				}
+				lineRef := core.BuchungRef{
+					StatementFilename: grp.File,
+					Page:              grp.Line.Page,
+					LineIdx:           grp.Line.LineIdx,
+				}.String()
+				for _, name := range grp.Dateinamen {
+					for _, r2 := range rows {
+						if r2.Dateiname != name {
+							continue
+						}
+						r2.BuchungRef = lineRef
+						if pay, ok := a.settings.PaymentAccountSKR04(r2.Bankkonto); ok {
+							r2.Buchung = r2.Buchung.WithSettlementAccount(pay)
+						}
+						if err := a.dbRepo.Update(r2.Jahr, r2.Monat, r2.Dateiname, r2); err != nil {
+							a.logger.Warn("ErloesAbgleich linkAll Update %s: %v", r2.Dateiname, err)
+						}
+						// Mechanism 3: alias learning for each linked invoice in the group.
+						if a.statementAliases != nil {
+							a.statementAliases.Learn(r2.Auftraggeber, grp.Line.Text)
+							if err := a.statementAliases.Save(); err != nil {
+								a.logger.Warn("ErloesAbgleich linkAll: save aliases: %v", err)
+							}
+						}
+						break
+					}
+				}
+				// Claim the line so no other row in this session can reuse it.
+				claimed[grpKey] = true
+				linkAllBtn.Disable()
+				lbl.SetText("✓ " + rowLabel)
+				a.loadInvoices()
+			}
+
+			vbox.Add(container.NewBorder(nil, nil, nil, linkAllBtn, lbl))
+		}
+
+		// ── Mechanism 2: Partial (1:n) payment rows ───────────────────────────
+		for _, ps := range partialSuggestions {
+			// Capture for closure safety.
+			psug := ps
+			pSelIdx := 0
+
+			if len(psug.candidates) == 0 {
+				continue
+			}
+			top := psug.candidates[0]
+			invEUR := core.InvoiceEURAmount(psug.row)
+			invAmtStr := strings.Replace(fmt.Sprintf("%.2f", invEUR), ".", ",", 1)
+			lineBetragStr := strings.Replace(fmt.Sprintf("%.2f", top.scored.Line.Betrag), ".", ",", 1)
+			lineRunes := []rune(top.scored.Line.Text)
+			if len(lineRunes) > 60 {
+				lineRunes = append(lineRunes[:57], []rune("…")...)
+			}
+			baseName := filepath.Base(top.file)
+			rowLabel := fmt.Sprintf("[%s] %s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+				a.bundle.T("reconcile.partial"),
+				psug.row.Auftraggeber,
+				invAmtStr,
+				top.scored.Line.Page+1,
+				top.scored.Line.LineIdx,
+				top.scored.Line.Date,
+				lineBetragStr,
+				string(lineRunes),
+				baseName,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			confirmBtn := widget.NewButton(a.bundle.T("erloesabgleich.confirm"), nil)
+			confirmBtn.OnTapped = func() {
+				// Guard against double-linking the same statement line.
+				chosen := psug.candidates[pSelIdx]
+				key := refKey(chosen.file, chosen.scored.Line.Page, chosen.scored.Line.LineIdx)
+				if claimed[key] {
+					lbl.SetText("⚠ " + a.bundle.T("reconcile.lineTaken"))
+					confirmBtn.Disable()
+					return
+				}
+				psug.row.BuchungRef = core.BuchungRef{
+					StatementFilename: chosen.file,
+					Page:              chosen.scored.Line.Page,
+					LineIdx:           chosen.scored.Line.LineIdx,
+				}.String()
+				if pay, ok := a.settings.PaymentAccountSKR04(psug.row.Bankkonto); ok {
+					psug.row.Buchung = psug.row.Buchung.WithSettlementAccount(pay)
+				}
+				if err := a.dbRepo.Update(psug.row.Jahr, psug.row.Monat, psug.row.Dateiname, psug.row); err != nil {
+					a.logger.Warn("ErloesAbgleich partial confirm Update %s: %v", psug.row.Dateiname, err)
+				}
+				// Mechanism 3: alias learning on partial confirm.
+				if a.statementAliases != nil {
+					a.statementAliases.Learn(psug.row.Auftraggeber, chosen.scored.Line.Text)
+					if err := a.statementAliases.Save(); err != nil {
+						a.logger.Warn("ErloesAbgleich partial confirm: save aliases: %v", err)
+					}
+				}
+				claimed[key] = true
+				confirmBtn.Disable()
+				lbl.SetText("✓ " + rowLabel)
+				a.loadInvoices()
+			}
+
+			var rowWidget fyne.CanvasObject
+			if len(psug.candidates) >= 2 {
+				options := make([]string, len(psug.candidates))
+				for i, c := range psug.candidates {
+					runes := []rune(c.scored.Line.Text)
+					if len(runes) > 60 {
+						runes = append(runes[:57], []rune("…")...)
+					}
+					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
+					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
+						i+1,
+						c.scored.Line.Page+1,
+						c.scored.Line.LineIdx,
+						c.scored.Line.Date,
+						bStr,
+						string(runes),
+					)
+				}
+				sel := widget.NewSelect(options, func(selected string) {
+					for i, opt := range options {
+						if opt == selected {
+							pSelIdx = i
+							break
+						}
+					}
+				})
+				sel.SetSelected(options[0])
+				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn,
+					container.NewVBox(lbl, sel))
+			} else {
+				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn, lbl)
+			}
 			vbox.Add(rowWidget)
 		}
 
