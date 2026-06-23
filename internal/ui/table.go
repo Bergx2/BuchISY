@@ -263,6 +263,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			case 0:
 				// Edit: pencil icon, tooltip "Bearbeiten", opens edit dialog.
 				hoverLabel.Alignment = fyne.TextAlignCenter
+				hoverLabel.alwaysTooltip = false // recycled cell may carry a status flag
 				hoverLabel.SetText("✏️")
 				hoverLabel.tooltip = "Bearbeiten"
 				dataRow := id.Row
@@ -277,6 +278,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				// default app (outside BuchISY). Every other cell still
 				// opens the edit/preview dialog.
 				hoverLabel.Alignment = fyne.TextAlignCenter
+				hoverLabel.alwaysTooltip = false // recycled cell may carry a status flag
 				ext := strings.ToUpper(strings.TrimPrefix(
 					filepath.Ext(it.filtered[id.Row].Dateiname), "."))
 				hoverLabel.SetText(ext)
@@ -526,7 +528,14 @@ func (it *InvoiceTable) LegendButton() *widget.Button {
 			row("✓", "legend.outgoing"),
 			row("✓", "legend.attachment"),
 		)
-		popup := widget.NewModalPopUp(container.NewPadded(rows), it.window.Canvas())
+		var popup *widget.PopUp
+		closeBtn := widget.NewButton(it.bundle.T("common.close"), func() {
+			if popup != nil {
+				popup.Hide()
+			}
+		})
+		content := container.NewVBox(rows, widget.NewSeparator(), container.NewCenter(closeBtn))
+		popup = widget.NewModalPopUp(container.NewPadded(content), it.window.Canvas())
 		popup.Show()
 	})
 }
