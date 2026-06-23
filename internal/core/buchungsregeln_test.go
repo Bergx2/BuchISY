@@ -69,3 +69,33 @@ func TestErloesKonto(t *testing.T) {
 		t.Error("unset config must return ok=false")
 	}
 }
+
+func TestSuggestKonto(t *testing.T) {
+	r := &BookingRules{KontoStichwoerter: map[string]int{"tankstelle": 4663, "aral": 4663, "hotel": 4660, "telekom": 4920}}
+	cases := []struct {
+		text string
+		want int
+		ok   bool
+	}{
+		{"ARAL Tankstelle München", 4663, true},
+		{"Best Western Hotel", 4660, true},
+		{"Deutsche Telekom GmbH", 4920, true},
+		{"Unbekannter Lieferant XY", 0, false},
+		{"", 0, false},
+	}
+	for _, c := range cases {
+		k, ok := r.SuggestKonto(c.text)
+		if k != c.want || ok != c.ok {
+			t.Errorf("SuggestKonto(%q) = (%d,%v), want (%d,%v)", c.text, k, ok, c.want, c.ok)
+		}
+	}
+	// longest keyword wins: "deutsche bahn" (4670) over "bahn" (4671)
+	r2 := &BookingRules{KontoStichwoerter: map[string]int{"bahn": 4671, "deutsche bahn": 4670}}
+	if k, _ := r2.SuggestKonto("Fahrkarte Deutsche Bahn AG"); k != 4670 {
+		t.Errorf("longest-match: got %d, want 4670", k)
+	}
+	// unset config → no suggestion, no panic
+	if _, ok := (&BookingRules{}).SuggestKonto("ARAL"); ok {
+		t.Error("nil map must return ok=false")
+	}
+}
