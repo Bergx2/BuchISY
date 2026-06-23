@@ -250,9 +250,14 @@
   "controlling.total": "Total: %s €",
 
   "ustva.title": "VAT return",
-  "ustva.heading": "Deductible input VAT",
+  "ustva.heading": "VAT return",
   "ustva.vorsteuer": "Input VAT",
   "ustva.total": "Total input VAT: %s €",
+  "ustva.umsatzsteuer.heading": "Output VAT (owed)",
+  "ustva.vorsteuer.heading": "Input VAT (deductible)",
+  "ustva.summe": "Total: %s €",
+  "ustva.zahllast": "VAT payable: %s €",
+  "ustva.ueberschuss": "VAT surplus: %s €",
 
   "backup.title": "Backup",
   "backup.done": "Backup created (%d files).",

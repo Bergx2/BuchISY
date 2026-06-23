@@ -250,9 +250,14 @@
   "controlling.total": "Summe: %s €",
 
   "ustva.title": "USt-Voranmeldung",
-  "ustva.heading": "Abziehbare Vorsteuer",
+  "ustva.heading": "Umsatzsteuer-Voranmeldung",
   "ustva.vorsteuer": "Vorsteuer",
   "ustva.total": "Summe Vorsteuer: %s €",
+  "ustva.umsatzsteuer.heading": "Umsatzsteuer (geschuldet)",
+  "ustva.vorsteuer.heading": "Vorsteuer (abziehbar)",
+  "ustva.summe": "Summe: %s €",
+  "ustva.zahllast": "Zahllast: %s €",
+  "ustva.ueberschuss": "Überschuss: %s €",
 
   "backup.title": "Backup",
   "backup.done": "Backup erstellt (%d Dateien).",
