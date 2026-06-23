@@ -486,19 +486,18 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	rebuildSwitcher()
 
-	belegnrText := "Beleg-Nr. —"
-	if row.Belegnummer != "" {
-		belegnrText = "Beleg-Nr. " + row.Belegnummer
-	}
+	belegnrEntry := widget.NewEntry()
+	belegnrEntry.SetText(row.Belegnummer)
+	belegnrEntry.SetPlaceHolder("z. B. 2026-0007")
 	form := container.NewVBox(
 		container.NewBorder(nil, nil,
 			container.NewHBox(
-				widget.NewLabelWithStyle(belegnrText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 				newCopyableLabel(a.bundle, "Datei: "+row.Dateiname),
 				openBelegBtn, addAttBtn),
 			container.NewHBox(cancelBtn, saveBtn)),
 		previewSwitcher,
 		section("Identifikation", selectableForm(a.bundle,
+			fi("Beleg-Nr.", belegnrEntry),
 			fi(a.bundle.T("field.company"), companyEntry),
 			fi(a.bundle.T("field.shortdesc"), container.NewBorder(nil, nil, nil, shortDescLabel, shortDescEntry)),
 			fi(a.bundle.T("field.invoicenumber"),
@@ -641,6 +640,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			targetMonth,
 			ausgangsrechnungCheck.Checked,
 			finalBooking,
+			belegnrEntry.Text,
 		)
 		if err != nil {
 			dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), editWin)
@@ -718,13 +718,14 @@ func (a *App) updateInvoice(
 	targetMonth time.Month,
 	ausgangsrechnung bool,
 	buchung core.Booking,
+	belegnummer string,
 ) error {
 	// Attachments are managed live via the _AnhangN switcher in the edit
 	// dialog, so an updated invoice keeps whatever attachments it already had.
 	willHaveAttachments := originalRow.HatAnhaenge
 
 	newMeta := core.Meta{
-		Belegnummer:       originalRow.Belegnummer, // preserve the existing receipt number on edit
+		Belegnummer:       strings.TrimSpace(belegnummer), // editable: manual correction/override
 		Auftraggeber:      company,
 		Verwendungszweck:  shortDesc,
 		Rechnungsnummer:   invoiceNum,

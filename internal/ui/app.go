@@ -732,6 +732,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
 			fyne.NewMenuItem("Erlös-Abgleich", func() { a.showErloesAbgleich() }),
+			fyne.NewMenuItem("Belegnummern neu vergeben", func() { a.renumberBelegnummern() }),
 			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),
 		)
 		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)
@@ -907,6 +908,31 @@ func (a *App) onMonthChanged() {
 		a.logger.Info("Month changed to %d-%02d", a.currentYear, a.currentMonth)
 	}
 	a.loadInvoices()
+}
+
+// renumberBelegnummern reassigns all receipt numbers chronologically per year
+// (gap-free), after a confirmation — for backfilling legacy invoices and closing
+// gaps left by deletions.
+func (a *App) renumberBelegnummern() {
+	dialog.ShowConfirm("Belegnummern neu vergeben",
+		"Alle Belege werden pro Jahr chronologisch (nach Rechnungsdatum) lückenlos neu nummeriert (JJJJ-NNNN). Bestehende Belegnummern werden dabei überschrieben.\n\nFortfahren?",
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			n, err := a.dbRepo.RenumberBelegnummern()
+			if err != nil {
+				a.showError(a.bundle.T("error.processing.title"), err.Error())
+				return
+			}
+			// Refresh the current month's CSV export + the table.
+			csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+			if err := a.dbRepo.ExportToCSV(fmt.Sprintf("%04d", a.currentYear), fmt.Sprintf("%02d", int(a.currentMonth)), csvPath, a.csvRepo); err != nil {
+				a.logger.Warn("Failed to export CSV after renumber: %v", err)
+			}
+			a.loadInvoices()
+			a.showToast(fmt.Sprintf("%d Belege neu nummeriert", n))
+		}, a.window)
 }
 
 // loadInvoices loads invoices from the SQLite database for the current
