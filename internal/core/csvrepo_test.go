@@ -200,3 +200,19 @@ func TestCSVWechselkursRoundTrip(t *testing.T) {
 		t.Fatalf("kurs/prozent not round-tripped: %+v", rows)
 	}
 }
+
+func TestCSVAusgangsrechnungColumn(t *testing.T) {
+	r := NewCSVRepository()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "invoices.csv")
+	if err := r.Rewrite(path, []CSVRow{{Dateiname: "a.pdf", Ausgangsrechnung: true}}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := r.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || !rows[0].Ausgangsrechnung {
+		t.Fatalf("Ausgangsrechnung not round-tripped via CSV: %+v", rows)
+	}
+}

@@ -178,6 +178,7 @@ var columnWidthMap = map[string]float32{
 	"BetragNetto_EUR":    120,
 	"Gebuehr":            100,
 	"HatAnhaenge":        80,
+	"Ausgangsrechnung":   110,
 }
 
 // NewInvoiceTable creates a new invoice table.
@@ -886,6 +887,11 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		return row.Bezahldatum
 	case "Teilzahlung":
 		if row.Teilzahlung {
+			return "✓"
+		}
+		return ""
+	case "Ausgangsrechnung":
+		if row.Ausgangsrechnung {
 			return "✓"
 		}
 		return ""

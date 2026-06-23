@@ -17,6 +17,7 @@
   "table.col.verwendungszweck": "Purpose",
   "table.col.invoicenumber": "Invoice Number",
   "table.col.belegnummer": "Receipt No.",
+  "table.col.ausgangsrechnung": "Outgoing invoice",
   "table.col.vatid": "VAT-ID No.",
   "field.vatid": "VAT-ID No.",
   "table.col.net": "Net Amount",
