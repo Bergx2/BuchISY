@@ -58,6 +58,35 @@ func TestBuildInvoiceListPDF(t *testing.T) {
 	}
 }
 
+func TestBuildUStVAPDF(t *testing.T) {
+	u := UStVAOfficial{Kz81: 6500, USt81: 1235, Kz45: 1077.60, Kz84: 462.40, Kz85: 87.86, Kz67: 87.86, Kz66: 37.79, Kz83: 1197.21}
+	data, err := BuildUStVAPDF(u, "UStVA 2025")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 100 || string(data[:4]) != "%PDF" {
+		t.Fatalf("not a PDF (%d bytes)", len(data))
+	}
+	// empty (everything zero) still renders Kz 83 without error
+	if _, err := BuildUStVAPDF(UStVAOfficial{}, "Leer"); err != nil {
+		t.Errorf("empty UStVA PDF errored: %v", err)
+	}
+}
+
+func TestBuildZMPDF(t *testing.T) {
+	z := ZM{Zeilen: []ZMZeile{{UStIdNr: "FI26378052", Netto: 44795}}, Kontrollsumme: 44795}
+	data, err := BuildZMPDF(z, "287472874", "Zusammenfassende Meldung 2025")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 100 || string(data[:4]) != "%PDF" {
+		t.Fatalf("not a PDF (%d bytes)", len(data))
+	}
+	if _, err := BuildZMPDF(ZM{}, "", "Leer"); err != nil {
+		t.Errorf("empty ZM PDF errored: %v", err)
+	}
+}
+
 func TestPDFReportsPaginate(t *testing.T) {
 	var rows []CSVRow
 	for i := 0; i < 200; i++ {
