@@ -248,6 +248,9 @@
   "controlling.title": "Controlling",
   "controlling.heading": "Booked sums per account",
   "controlling.total": "Total: %s €",
+  "controlling.einnahmen": "Revenue",
+  "controlling.ausgaben": "Expenses",
+  "controlling.saldo": "Balance: %s €",
 
   "ustva.title": "VAT return",
   "ustva.heading": "VAT return",

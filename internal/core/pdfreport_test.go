@@ -25,15 +25,21 @@ func TestBuildBookingJournalPDF(t *testing.T) {
 }
 
 func TestBuildControllingPDF(t *testing.T) {
-	sums := []AccountSum{{Konto: 6640, Name: "Bewirtungskosten (abziehbar)", Summe: 1240.00}}
-	data, err := BuildControllingPDF(sums, 1240.00, "Controlling 2026")
+	c := Controlling{
+		Einnahmen:       []AccountSum{{Konto: 8400, Name: "Erlöse", Summe: 1000.00}},
+		Ausgaben:        []AccountSum{{Konto: 6640, Name: "Bewirtungskosten (abziehbar)", Summe: 1240.00}},
+		EinnahmenGesamt: 1000.00,
+		AusgabenGesamt:  1240.00,
+		Saldo:           -240.00,
+	}
+	data, err := BuildControllingPDF(c, "Controlling 2026")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(data) < 100 || string(data[:4]) != "%PDF" {
 		t.Fatalf("not a PDF (%d bytes)", len(data))
 	}
-	if _, err := BuildControllingPDF(nil, 0, "Leer"); err != nil {
+	if _, err := BuildControllingPDF(Controlling{}, "Leer"); err != nil {
 		t.Errorf("empty controlling PDF errored: %v", err)
 	}
 }
@@ -66,12 +72,17 @@ func TestPDFReportsPaginate(t *testing.T) {
 	if err != nil || len(l) < 1000 || string(l[:4]) != "%PDF" {
 		t.Fatalf("list: err=%v len=%d", err, len(l))
 	}
-	var sums []AccountSum
+	var ausgaben []AccountSum
 	for i := 0; i < 200; i++ {
-		sums = append(sums, AccountSum{Konto: 6000 + i, Name: "Konto", Summe: 1})
+		ausgaben = append(ausgaben, AccountSum{Konto: 6000 + i, Name: "Konto", Summe: 1})
 	}
-	c, err := BuildControllingPDF(sums, 200, "Controlling")
-	if err != nil || len(c) < 1000 || string(c[:4]) != "%PDF" {
-		t.Fatalf("controlling: err=%v len=%d", err, len(c))
+	ctrl := Controlling{
+		Ausgaben:       ausgaben,
+		AusgabenGesamt: 200,
+		Saldo:          -200,
+	}
+	cp, err := BuildControllingPDF(ctrl, "Controlling")
+	if err != nil || len(cp) < 1000 || string(cp[:4]) != "%PDF" {
+		t.Fatalf("controlling: err=%v len=%d", err, len(cp))
 	}
 }
