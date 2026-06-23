@@ -251,6 +251,14 @@ func (a *App) enqueueSubmissions(paths []string) {
 	if len(files) == 0 {
 		return
 	}
+	// If a batch is already in flight (a modal is open or a file is being
+	// extracted), append to the running queue instead of replacing it — that
+	// avoids losing the remaining files and opening a second modal.
+	if a.batchTotal > 0 {
+		a.pendingFiles = append(a.pendingFiles, files...)
+		a.batchTotal += len(files)
+		return
+	}
 	a.pendingFiles = files
 	a.batchTotal = len(files)
 	a.batchDone = 0
