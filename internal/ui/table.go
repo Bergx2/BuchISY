@@ -920,6 +920,9 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	case "Unterordner":
 		return row.Unterordner
 	case "BuchungRef":
+		if row.BuchungRef == core.CashConfirmedRef {
+			return "✓ " + it.bundle.T("status.cashConfirmed")
+		}
 		if row.BuchungRef != "" {
 			return "✓ " + core.ParseBuchungRef(row.BuchungRef).Display() // linked
 		}

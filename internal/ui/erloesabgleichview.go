@@ -175,12 +175,25 @@ func (a *App) showErloesAbgleich() {
 		})
 	}
 
-	// ── Step 3: Greedy auto-link by score; claim each credit line at most once ─
+	// ── Step 3: Route all matches into the confirm list (no silent auto-linking) ─
+	// E18 confirm-each: every match (auto or ambiguous) requires explicit user
+	// confirmation. High-confidence (formerly MatchAuto) entries are flagged with
+	// highConfidence=true so they appear with a ★ prefix and sort to the top.
+
 	refKey := func(file string, page, lineIdx int) string {
 		return core.BuchungRef{StatementFilename: file, Page: page, LineIdx: lineIdx}.String()
 	}
 
 	claimed := map[string]bool{}
+
+	// E18: autoLinkedSet is always empty — nothing is silently linked.
+	autoLinkedSet := map[string]bool{}
+
+	type erloessSuggestion struct {
+		row            core.CSVRow
+		candidates     []scoredWithFile
+		highConfidence bool
+	}
 
 	var autoResults []matchResult
 	var suggestResults []matchResult
@@ -195,67 +208,36 @@ func (a *App) showErloesAbgleich() {
 		return autoResults[i].candidates[0].scored.Score > autoResults[j].candidates[0].scored.Score
 	})
 
-	autoLinked := 0
-	// Track which Ausgangsrechnungen were auto-linked this run (by filename).
-	autoLinkedSet := map[string]bool{}
-
-	for _, r := range autoResults {
-		top := r.candidates[0]
-		key := refKey(top.file, top.scored.Line.Page, top.scored.Line.LineIdx)
-		if claimed[key] {
-			// Line already claimed by a higher-scored invoice — demote to suggest.
-			suggestResults = append(suggestResults, matchResult{
-				row:        r.row,
-				kind:       core.MatchSuggest,
-				candidates: r.candidates,
-			})
-			continue
-		}
-		r.row.BuchungRef = core.BuchungRef{
-			StatementFilename: top.file,
-			Page:              top.scored.Line.Page,
-			LineIdx:           top.scored.Line.LineIdx,
-		}.String()
-		if pay, ok := a.settings.PaymentAccountSKR04(r.row.Bankkonto); ok {
-			r.row.Buchung = r.row.Buchung.WithSettlementAccount(pay)
-		}
-		if err := a.dbRepo.Update(r.row.Jahr, r.row.Monat, r.row.Dateiname, r.row); err != nil {
-			a.logger.Warn("ErloesAbgleich auto-link Update %s: %v", r.row.Dateiname, err)
-		}
-		// Mechanism 3: alias learning on auto-link.
-		if a.statementAliases != nil {
-			a.statementAliases.Learn(r.row.Auftraggeber, top.scored.Line.Text)
-			if err := a.statementAliases.Save(); err != nil {
-				a.logger.Warn("ErloesAbgleich auto-link: save aliases: %v", err)
-			}
-		}
-		claimed[key] = true
-		autoLinkedSet[r.row.Dateiname] = true
-		autoLinked++
-	}
-
-	// Build suggestion list: drop candidates whose line was already claimed.
-	type erloessSuggestion struct {
-		row        core.CSVRow
-		candidates []scoredWithFile
-	}
 	var suggestions []erloessSuggestion
+
+	// Former-auto results become high-confidence suggestions (no claiming here).
+	for _, r := range autoResults {
+		suggestions = append(suggestions, erloessSuggestion{
+			row:            r.row,
+			candidates:     r.candidates,
+			highConfidence: true,
+		})
+	}
+
+	// Ambiguous/suggest results — all candidates available (nothing claimed yet).
 	for _, r := range suggestResults {
-		var remaining []scoredWithFile
-		for _, c := range r.candidates {
-			k := refKey(c.file, c.scored.Line.Page, c.scored.Line.LineIdx)
-			if !claimed[k] {
-				remaining = append(remaining, c)
-			}
-		}
-		if len(remaining) == 0 {
+		if len(r.candidates) == 0 {
 			continue
 		}
 		suggestions = append(suggestions, erloessSuggestion{
-			row:        r.row,
-			candidates: remaining,
+			row:            r.row,
+			candidates:     r.candidates,
+			highConfidence: false,
 		})
 	}
+
+	// Sort: high-confidence (★) first, then by top-candidate score descending.
+	sort.SliceStable(suggestions, func(i, j int) bool {
+		if suggestions[i].highConfidence != suggestions[j].highConfidence {
+			return suggestions[i].highConfidence
+		}
+		return suggestions[i].candidates[0].scored.Score > suggestions[j].candidates[0].scored.Score
+	})
 
 	// ── Step 4: Claude re-ranking for close-call ambiguous suggestions ────────
 	// Mechanism 4: when processing mode is "claude" and the top-2 single-line
@@ -317,7 +299,7 @@ func (a *App) showErloesAbgleich() {
 	groupProcessedAcct := map[string]bool{}
 
 	for _, row := range rows {
-		// Only unlinked Ausgangsrechnungen on bank accounts not auto-linked this run.
+		// Only unlinked Ausgangsrechnungen on bank accounts.
 		if !row.Ausgangsrechnung || row.BuchungRef != "" || autoLinkedSet[row.Dateiname] {
 			continue
 		}
@@ -380,22 +362,26 @@ func (a *App) showErloesAbgleich() {
 		}
 	}
 
-	// Refresh table so auto-linked rows show their new BuchungRef.
+	// Refresh table before showing the dialog.
 	a.loadInvoices()
 
 	// ── Step 6: Build dialog content ──────────────────────────────────────────
 	var content fyne.CanvasObject
 
-	if autoLinked == 0 && len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 {
+	if len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 {
 		content = container.NewVScroll(
 			container.NewVBox(widget.NewLabel(a.bundle.T("erloesabgleich.none"))),
 		)
 	} else {
-		headerText := fmt.Sprintf(a.bundle.T("erloesabgleich.autolinked"), autoLinked)
-		header := widget.NewLabel(headerText)
-		header.TextStyle = fyne.TextStyle{Bold: true}
+		vbox := container.NewVBox()
 
-		vbox := container.NewVBox(header)
+		// Show summary header only when there are actual suggestions to confirm.
+		if len(suggestions) > 0 || len(groupSuggestions) > 0 || len(partialSuggestions) > 0 {
+			headerText := fmt.Sprintf(a.bundle.T("erloesabgleich.summary"), len(suggestions))
+			header := widget.NewLabel(headerText)
+			header.TextStyle = fyne.TextStyle{Bold: true}
+			vbox.Add(header)
+		}
 
 		// ── Single-line suggestions ────────────────────────────────────────────
 		for _, s := range suggestions {
@@ -418,8 +404,14 @@ func (a *App) showErloesAbgleich() {
 
 			baseName := filepath.Base(top.file)
 
-			// Label: <Auftraggeber>  <amount> €  →  S.<page+1> Z.<lineIdx> · <date> · <betrag> · <text> (<file>)
-			rowLabel := fmt.Sprintf("%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+			// Label: [★ ]<Auftraggeber>  <amount> €  →  S.<page+1> Z.<lineIdx> · <date> · <betrag> · <text> (<file>)
+			// ★ prefix indicates a high-confidence (formerly auto-linked) match.
+			prefix := ""
+			if sug.highConfidence {
+				prefix = "★ "
+			}
+			rowLabel := fmt.Sprintf("%s%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+				prefix,
 				sug.row.Auftraggeber,
 				invAmtStr,
 				top.scored.Line.Page+1,
@@ -505,7 +497,8 @@ func (a *App) showErloesAbgleich() {
 					}
 					newBStr := strings.Replace(fmt.Sprintf("%.2f", chosen.scored.Line.Betrag), ".", ",", 1)
 					newBase := filepath.Base(chosen.file)
-					lbl.SetText(fmt.Sprintf("%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+					lbl.SetText(fmt.Sprintf("%s%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+						prefix,
 						sug.row.Auftraggeber,
 						invAmtStr,
 						chosen.scored.Line.Page+1,

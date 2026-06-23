@@ -296,6 +296,7 @@
 
   "status.cashCovered": "Bar gedeckt",
   "status.cashUncovered": "Bar nicht gedeckt",
+  "status.cashConfirmed": "Barkasse bestätigt",
 
   "settings.matchWindow": "Abgleich: Datumsfenster (Tage)",
   "settings.matchTolerance": "Abgleich: Fremdwährungs-Toleranz (%)",
@@ -317,6 +318,7 @@
   "erloesabgleich.title": "Erlös-Abgleich",
   "erloesabgleich.heading": "Ausgangsrechnungen ↔ Gutschriften",
   "erloesabgleich.autolinked": "%d automatisch verknüpft",
+  "erloesabgleich.summary": "Bitte jede Zuordnung bestätigen — %d Vorschlag/Vorschläge.",
   "erloesabgleich.none": "Keine offenen Ausgangsrechnungen mit passender Gutschrift",
   "erloesabgleich.confirm": "Verknüpfen"
 }
