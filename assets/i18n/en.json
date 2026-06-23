@@ -308,5 +308,11 @@
   "zm.kontrollsumme": "Control total: %s €",
   "zm.art.sonstige": "Services",
   "zm.quarter": "Quarter",
-  "zm.empty": "No intra-EU sales in this period"
+  "zm.empty": "No intra-EU sales in this period",
+
+  "erloesabgleich.title": "Revenue reconciliation",
+  "erloesabgleich.heading": "Outgoing invoices ↔ credits",
+  "erloesabgleich.autolinked": "%d auto-linked",
+  "erloesabgleich.none": "No open outgoing invoices with a matching credit",
+  "erloesabgleich.confirm": "Link"
 }

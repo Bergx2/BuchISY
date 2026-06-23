@@ -731,6 +731,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
+			fyne.NewMenuItem("Erlös-Abgleich", func() { a.showErloesAbgleich() }),
 			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),
 		)
 		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)

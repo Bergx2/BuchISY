@@ -308,5 +308,11 @@
   "zm.kontrollsumme": "Kontrollsumme: %s €",
   "zm.art.sonstige": "Sonstige Leistung",
   "zm.quarter": "Quartal",
-  "zm.empty": "Keine EU-Umsätze im Zeitraum"
+  "zm.empty": "Keine EU-Umsätze im Zeitraum",
+
+  "erloesabgleich.title": "Erlös-Abgleich",
+  "erloesabgleich.heading": "Ausgangsrechnungen ↔ Gutschriften",
+  "erloesabgleich.autolinked": "%d automatisch verknüpft",
+  "erloesabgleich.none": "Keine offenen Ausgangsrechnungen mit passender Gutschrift",
+  "erloesabgleich.confirm": "Verknüpfen"
 }
