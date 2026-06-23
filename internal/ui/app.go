@@ -86,6 +86,11 @@ type App struct {
 	// Dismissed config-hint banners (Task 2): keyed by hint i18n key.
 	// Hints dismissed with ✕ stay hidden for the session.
 	dismissedHints map[string]bool
+
+	// Empty-state widgets (Task 3): centerWrapper holds either the table or
+	// the empty-state; swapped after every loadInvoices() call.
+	centerWrapper *fyne.Container
+	emptyState    fyne.CanvasObject
 }
 
 // New creates the BuchISY application and shows the profile picker.
@@ -699,7 +704,29 @@ func (a *App) buildUI() fyne.CanvasObject {
 	headerObjects = append(headerObjects, topBar, filterRow)
 	header := container.NewVBox(headerObjects...)
 
-	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.invoiceTable.Container())
+	// Empty-state shown when the selected month has zero invoices.
+	emptyTitle := widget.NewLabelWithStyle(
+		a.bundle.T("empty.title"),
+		fyne.TextAlignCenter,
+		fyne.TextStyle{Bold: true},
+	)
+	emptyHint := widget.NewLabelWithStyle(
+		a.bundle.T("empty.hint"),
+		fyne.TextAlignCenter,
+		fyne.TextStyle{},
+	)
+	emptyBtn := widget.NewButtonWithIcon(
+		a.bundle.T("empty.add"),
+		theme.ContentAddIcon(),
+		func() { a.showCustomFilePicker() },
+	)
+	emptyBtn.Importance = widget.HighImportance
+	a.emptyState = container.NewCenter(container.NewVBox(emptyTitle, emptyHint, emptyBtn))
+
+	// centerWrapper holds either the table or the empty-state; swapped in loadInvoices.
+	a.centerWrapper = container.NewStack(a.invoiceTable.Container())
+
+	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.centerWrapper)
 	return a.mainContent
 }
 
@@ -1103,6 +1130,7 @@ func (a *App) loadInvoices() {
 			}
 		}
 		a.invoiceTable.SetData(all)
+		a.refreshCenterContent()
 		return
 	}
 
@@ -1112,6 +1140,7 @@ func (a *App) loadInvoices() {
 	if err != nil {
 		a.logger.Error("Failed to load invoices from database: %v", err)
 		a.invoiceTable.SetData([]core.CSVRow{})
+		a.refreshCenterContent()
 		return
 	}
 
@@ -1133,6 +1162,23 @@ func (a *App) loadInvoices() {
 		}
 	}
 	a.invoiceTable.SetData(rows)
+	a.refreshCenterContent()
+}
+
+// refreshCenterContent swaps the centerWrapper between the invoice table
+// and the empty-state depending on how many rows the table currently has.
+// Called after every loadInvoices() so month/year changes and add/delete
+// operations all get the correct view.
+func (a *App) refreshCenterContent() {
+	if a.centerWrapper == nil || a.emptyState == nil || a.invoiceTable == nil {
+		return
+	}
+	if a.invoiceTable.RowCount() == 0 {
+		a.centerWrapper.Objects = []fyne.CanvasObject{a.emptyState}
+	} else {
+		a.centerWrapper.Objects = []fyne.CanvasObject{a.invoiceTable.Container()}
+	}
+	a.centerWrapper.Refresh()
 }
 
 // annotateAttachments fills each row's AnzahlAnhaenge/HatAnhaenge from the

@@ -634,6 +634,11 @@ func (it *InvoiceTable) Container() *fyne.Container {
 	return it.container
 }
 
+// RowCount returns the number of currently visible (filtered) rows.
+func (it *InvoiceTable) RowCount() int {
+	return len(it.filtered)
+}
+
 // SetData sets the table data and refreshes.
 func (it *InvoiceTable) SetData(data []core.CSVRow) {
 	it.data = data
