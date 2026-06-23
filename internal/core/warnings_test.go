@@ -31,4 +31,15 @@ func TestInvoiceWarnings(t *testing.T) {
 	if !hasWarn(InvoiceWarnings(fxNoRate), "Wechselkurs") {
 		t.Error("expected a foreign-without-rate warning")
 	}
+	// Outgoing, 0% VAT, no customer VAT-ID → ZM-gap warning.
+	zmGap := CSVRow{Ausgangsrechnung: true, BetragNetto: 1000, SteuersatzBetrag: 0, Bruttobetrag: 1000, Gegenkonto: 8341, Waehrung: "EUR"}
+	if !hasWarn(InvoiceWarnings(zmGap), "ZM-Eintrag") {
+		t.Error("expected a missing-VAT-ID ZM warning for outgoing 0%% invoice")
+	}
+	// But WITH a customer VAT-ID → no ZM warning.
+	zmOk := zmGap
+	zmOk.VATID = "FI26378052"
+	if hasWarn(InvoiceWarnings(zmOk), "ZM-Eintrag") {
+		t.Error("must not warn when the customer VAT-ID is present")
+	}
 }
