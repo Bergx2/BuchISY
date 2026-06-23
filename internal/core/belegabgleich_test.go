@@ -149,3 +149,34 @@ func TestFindGroupedPaymentsTriple(t *testing.T) {
 		t.Fatalf("expected one 3-invoice group summing to 100, got %+v", groups)
 	}
 }
+
+func TestFindGroupedRevenuePayments(t *testing.T) {
+	cfg := DefaultMatchConfig()
+	// One credit (Gutschrift) of 300 = two outgoing invoices 100 + 200.
+	invs := []CSVRow{
+		{Dateiname: "a.pdf", Ausgangsrechnung: true, Bruttobetrag: 100, Rechnungsdatum: "10.01.2026"},
+		{Dateiname: "b.pdf", Ausgangsrechnung: true, Bruttobetrag: 200, Rechnungsdatum: "11.01.2026"},
+	}
+	credit := []StatementBooking{{Page: 0, LineIdx: 1, Date: "12.01.2026", Betrag: 300, IstGutschrift: true}}
+	g := FindGroupedRevenuePayments(invs, credit, cfg)
+	if len(g) != 1 || len(g[0].Dateinamen) != 2 {
+		t.Fatalf("want one 2-invoice group on the credit, got %+v", g)
+	}
+	// A DEBIT line of 300 must NOT produce a revenue group.
+	debit := []StatementBooking{{Page: 0, LineIdx: 2, Date: "12.01.2026", Betrag: 300, IstGutschrift: false}}
+	if g := FindGroupedRevenuePayments(invs, debit, cfg); len(g) != 0 {
+		t.Errorf("debit line must not group revenue: %+v", g)
+	}
+}
+
+func TestRevenuePartialPaymentLines(t *testing.T) {
+	row := CSVRow{Ausgangsrechnung: true, Teilzahlung: true, Bruttobetrag: 1000, Rechnungsdatum: "10.01.2026"}
+	lines := []StatementBooking{
+		{Page: 0, LineIdx: 1, Date: "12.01.2026", Betrag: 400, IstGutschrift: true},  // partial credit → candidate
+		{Page: 0, LineIdx: 2, Date: "12.01.2026", Betrag: 400, IstGutschrift: false}, // debit → excluded
+	}
+	c := RevenuePartialPaymentLines(row, lines)
+	if len(c) != 1 || !c[0].Line.IstGutschrift {
+		t.Fatalf("want one credit partial line, got %+v", c)
+	}
+}

@@ -174,12 +174,15 @@ type GroupMatch struct {
 	File       string          // source statement file (filled by the caller)
 }
 
-// FindGroupedPayments finds statement lines (non-credit) whose Betrag equals the
-// sum of 2 or 3 invoices within cfg.DateWindowDays of that line. Only invoices
-// with InvoiceEURAmount > 0 are considered. Returns one disjoint group per line
-// (first match wins); invoices are not reused across groups. File is left empty
-// — the caller fills it from the statement cache.
-func FindGroupedPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchConfig) []GroupMatch {
+// findGroupedPayments is the internal implementation of grouped-payment matching.
+// wantCredit: if false, matches DEBIT lines (IstGutschrift=false); if true, matches
+// INCOMING CREDIT lines (IstGutschrift=true).
+// Finds statement lines whose Betrag equals the sum of 2 or 3 invoices within
+// cfg.DateWindowDays of that line. Only invoices with InvoiceEURAmount > 0 are
+// considered. Returns one disjoint group per line (first match wins); invoices are
+// not reused across groups. File is left empty — the caller fills it from the
+// statement cache.
+func findGroupedPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchConfig, wantCredit bool) []GroupMatch {
 	window := cfg.DateWindowDays
 	if window <= 0 {
 		window = 5
@@ -189,7 +192,7 @@ func FindGroupedPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchC
 	var results []GroupMatch
 
 	for _, l := range lines {
-		if l.IstGutschrift || l.Betrag <= 0 {
+		if l.IstGutschrift != wantCredit || l.Betrag <= 0 {
 			continue
 		}
 		// Build windowed candidate list for this line.
@@ -252,11 +255,31 @@ func FindGroupedPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchC
 	return results
 }
 
-// PartialPaymentLines returns statement lines that look like a partial payment for
-// the given invoice (Teilzahlung=true). Only non-credit lines with
-// 0 < Betrag < InvoiceEURAmount(row)-0.01 are returned, ranked by date proximity
-// to the invoice's Bezahldatum (or Rechnungsdatum).
-func PartialPaymentLines(row CSVRow, lines []StatementBooking) []ScoredLine {
+// FindGroupedPayments finds statement DEBIT lines (non-credit) whose Betrag equals the
+// sum of 2 or 3 invoices within cfg.DateWindowDays of that line. Only invoices
+// with InvoiceEURAmount > 0 are considered. Returns one disjoint group per line
+// (first match wins); invoices are not reused across groups. File is left empty
+// — the caller fills it from the statement cache.
+func FindGroupedPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchConfig) []GroupMatch {
+	return findGroupedPayments(invoices, lines, cfg, false)
+}
+
+// FindGroupedRevenuePayments finds statement CREDIT lines (Gutschriften) whose Betrag
+// equals the sum of 2 or 3 outgoing invoices (Ausgangsrechnungen) within cfg.DateWindowDays
+// of that line. Returns one disjoint group per credit line (first match wins); invoices
+// are not reused across groups. File is left empty — the caller fills it from the
+// statement cache.
+func FindGroupedRevenuePayments(invoices []CSVRow, lines []StatementBooking, cfg MatchConfig) []GroupMatch {
+	return findGroupedPayments(invoices, lines, cfg, true)
+}
+
+// partialPaymentLines is the internal implementation of partial-payment matching.
+// wantCredit: if false, matches DEBIT lines (IstGutschrift=false); if true, matches
+// INCOMING CREDIT lines (IstGutschrift=true).
+// Returns statement lines that look like a partial payment for the given invoice
+// (Teilzahlung=true). Only lines matching wantCredit with 0 < Betrag < InvoiceEURAmount(row)-0.01
+// are returned, ranked by date proximity to the invoice's Bezahldatum (or Rechnungsdatum).
+func partialPaymentLines(row CSVRow, lines []StatementBooking, wantCredit bool) []ScoredLine {
 	if !row.Teilzahlung {
 		return nil
 	}
@@ -268,7 +291,7 @@ func PartialPaymentLines(row CSVRow, lines []StatementBooking) []ScoredLine {
 
 	var cands []ScoredLine
 	for _, l := range lines {
-		if l.IstGutschrift {
+		if l.IstGutschrift != wantCredit {
 			continue
 		}
 		if l.Betrag <= 0 || l.Betrag >= fullAmt-0.01 {
@@ -280,6 +303,22 @@ func PartialPaymentLines(row CSVRow, lines []StatementBooking) []ScoredLine {
 	}
 	sort.SliceStable(cands, func(i, j int) bool { return cands[i].Score > cands[j].Score })
 	return cands
+}
+
+// PartialPaymentLines returns statement DEBIT lines that look like a partial payment for
+// the given invoice (Teilzahlung=true). Only non-credit lines with
+// 0 < Betrag < InvoiceEURAmount(row)-0.01 are returned, ranked by date proximity
+// to the invoice's Bezahldatum (or Rechnungsdatum).
+func PartialPaymentLines(row CSVRow, lines []StatementBooking) []ScoredLine {
+	return partialPaymentLines(row, lines, false)
+}
+
+// RevenuePartialPaymentLines returns statement CREDIT lines that look like a partial
+// payment for the given outgoing invoice (Ausgangsrechnung, Teilzahlung=true).
+// Only incoming credit lines with 0 < Betrag < InvoiceEURAmount(row)-0.01 are
+// returned, ranked by date proximity to the invoice's Bezahldatum (or Rechnungsdatum).
+func RevenuePartialPaymentLines(row CSVRow, lines []StatementBooking) []ScoredLine {
+	return partialPaymentLines(row, lines, true)
 }
 
 // parseFlexDate parses "DD.MM.YYYY" or "DD.MM." (taking the year from other).
