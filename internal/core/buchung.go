@@ -104,6 +104,30 @@ func (b Booking) PaymentEntry() (BookingEntry, bool) {
 	return found, true
 }
 
+// PaymentAndCounters splits a booking into its single payment/base entry and
+// the counter entries that post against it. For an incoming invoice the base is
+// the single Haben (Zahlungskonto); for a revenue invoice (isRevenue) it is the
+// single Soll. ok is false unless the base side has exactly one entry and there
+// is at least one counter — the exporters skip the booking in that case.
+func (b Booking) PaymentAndCounters(isRevenue bool) (BookingEntry, []BookingEntry, bool) {
+	var base BookingEntry
+	baseCount := 0
+	counters := make([]BookingEntry, 0, len(b.Entries))
+	for _, e := range b.Entries {
+		isBase := (isRevenue && e.Soll) || (!isRevenue && !e.Soll)
+		if isBase {
+			base = e
+			baseCount++
+		} else {
+			counters = append(counters, e)
+		}
+	}
+	if baseCount != 1 || len(counters) == 0 {
+		return BookingEntry{}, nil, false
+	}
+	return base, counters, true
+}
+
 // DebitEntries returns the Soll (debit) entries — the expense/Vorsteuer lines.
 func (b Booking) DebitEntries() []BookingEntry {
 	out := make([]BookingEntry, 0, len(b.Entries))
