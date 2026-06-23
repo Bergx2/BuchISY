@@ -14,13 +14,13 @@ type ExportClassification struct {
 }
 
 // ClassifyForExport partitions rows into exportable, already-exported, and
-// skipped (with a reason). An exportable row has a balanced booking with one
-// Haben. Already-exported exportable rows are added to Exportable only when
-// includeExported is true.
+// skipped (with a reason). An exportable row has a balanced booking with a
+// valid payment/base entry (direction-aware). Already-exported exportable rows
+// are added to Exportable only when includeExported is true.
 func ClassifyForExport(rows []CSVRow, includeExported bool) ExportClassification {
 	var c ExportClassification
 	for _, r := range rows {
-		_, ok := r.Buchung.PaymentEntry()
+		_, _, ok := r.Buchung.PaymentAndCounters(r.Ausgangsrechnung)
 		if !r.Buchung.Balanced() || !ok {
 			grund := "nicht ausgeglichen"
 			if len(r.Buchung.Entries) == 0 {

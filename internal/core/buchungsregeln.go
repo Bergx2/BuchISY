@@ -25,8 +25,9 @@ type BookingRule struct {
 // BookingRules is the bundled rules base: Vorsteuer accounts keyed by integer
 // percent ("19","7") and the list of category rules.
 type BookingRules struct {
-	VorsteuerKonten map[string]int `json:"vorsteuer_konten"`
-	Regeln          []BookingRule  `json:"regeln"`
+	VorsteuerKonten    map[string]int `json:"vorsteuer_konten"`
+	UmsatzsteuerKonten map[string]int `json:"umsatzsteuer_konten,omitempty"`
+	Regeln             []BookingRule  `json:"regeln"`
 }
 
 // ParseBookingRules decodes the rules base JSON.
@@ -52,5 +53,11 @@ func (r *BookingRules) Rule(kategorie string) (BookingRule, bool) {
 // rate is matched as an integer key, so 19.0 → "19".
 func (r *BookingRules) VorsteuerKonto(satzProzent float64) (int, bool) {
 	k, ok := r.VorsteuerKonten[strconv.Itoa(int(satzProzent+0.5))]
+	return k, ok
+}
+
+// UmsatzsteuerKonto returns the output-VAT account for a VAT rate (percent).
+func (r *BookingRules) UmsatzsteuerKonto(satzProzent float64) (int, bool) {
+	k, ok := r.UmsatzsteuerKonten[strconv.Itoa(int(satzProzent+0.5))]
 	return k, ok
 }

@@ -176,6 +176,60 @@ func TestBuildBookingNewCategories(t *testing.T) {
 	}
 }
 
+func TestBuildRevenueBooking(t *testing.T) {
+	rules := &BookingRules{UmsatzsteuerKonten: map[string]int{"19": 1776}}
+	lines := []TaxLine{{Netto: 6500, SatzProzent: 19, MwStBetrag: 1235}}
+	b, err := BuildRevenueBooking(rules, lines, 8400, 1200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Balanced() {
+		t.Fatalf("not balanced: %+v", b.Entries)
+	}
+	// Soll payment = gross 7735; Haben Erlös 6500 + USt 1235.
+	want := map[int]struct {
+		betrag float64
+		soll   bool
+	}{1200: {7735, true}, 8400: {6500, false}, 1776: {1235, false}}
+	if len(b.Entries) != 3 {
+		t.Fatalf("got %d entries, want 3: %+v", len(b.Entries), b.Entries)
+	}
+	for _, e := range b.Entries {
+		w, ok := want[e.Konto]
+		if !ok || e.Betrag != w.betrag || e.Soll != w.soll {
+			t.Errorf("entry %+v unexpected", e)
+		}
+	}
+}
+
+func TestPaymentAndCounters(t *testing.T) {
+	// Incoming: 1 Haben (payment) + 2 Soll.
+	in := Booking{Entries: []BookingEntry{
+		{Konto: 4980, Betrag: 100, Soll: true},
+		{Konto: 1576, Betrag: 19, Soll: true},
+		{Konto: 1200, Betrag: 119, Soll: false},
+	}}
+	base, counters, ok := in.PaymentAndCounters(false)
+	if !ok || base.Konto != 1200 || len(counters) != 2 {
+		t.Fatalf("incoming: base=%v counters=%d ok=%v", base, len(counters), ok)
+	}
+	// Revenue: 1 Soll (payment) + 2 Haben.
+	rev := Booking{Entries: []BookingEntry{
+		{Konto: 1200, Betrag: 119, Soll: true},
+		{Konto: 8400, Betrag: 100, Soll: false},
+		{Konto: 1776, Betrag: 19, Soll: false},
+	}}
+	base, counters, ok = rev.PaymentAndCounters(true)
+	if !ok || base.Konto != 1200 || len(counters) != 2 {
+		t.Fatalf("revenue: base=%v counters=%d ok=%v", base, len(counters), ok)
+	}
+	// Ambiguous base side (2 Soll for revenue) → ok=false.
+	bad := Booking{Entries: []BookingEntry{{Konto: 1, Soll: true}, {Konto: 2, Soll: true}}}
+	if _, _, ok := bad.PaymentAndCounters(true); ok {
+		t.Error("two Soll entries for revenue must yield ok=false")
+	}
+}
+
 func sollByKonto(b Booking) map[int]float64 {
 	m := map[int]float64{}
 	for _, e := range b.Entries {

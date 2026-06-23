@@ -27,6 +27,27 @@ func TestBuildLexwareCSV(t *testing.T) {
 	}
 }
 
+func TestLexwareRevenueRow(t *testing.T) {
+	rows := []CSVRow{{
+		Rechnungsdatum: "10.12.2025", Belegnummer: "2025-0002", Auftraggeber: "Symeo",
+		Ausgangsrechnung: true,
+		Buchung: Booking{Entries: []BookingEntry{
+			{Konto: 1200, Betrag: 7735, Soll: true},
+			{Konto: 8400, Betrag: 6500, Soll: false},
+			{Konto: 1776, Betrag: 1235, Soll: false},
+		}},
+	}}
+	data, exported, _ := BuildLexwareCSV(rows)
+	s := string(data)
+	if exported != 2 {
+		t.Fatalf("exported=%d, want 2", exported)
+	}
+	// Erlös: Soll 1200 (bank), Haben 8400.
+	if !strings.Contains(s, "10.12.2025;2025-0002;Symeo;6500,00;1200;8400") {
+		t.Errorf("revenue Erlös line missing:\n%s", s)
+	}
+}
+
 // TestLexwareBelegnummerPreferred verifies the internal Belegnummer is used as
 // the Belegnr when present, in preference to the supplier invoice number.
 func TestLexwareBelegnummerPreferred(t *testing.T) {

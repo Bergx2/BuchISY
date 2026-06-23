@@ -104,6 +104,30 @@ func (b Booking) PaymentEntry() (BookingEntry, bool) {
 	return found, true
 }
 
+// PaymentAndCounters splits a booking into its single payment/base entry and
+// the counter entries that post against it. For an incoming invoice the base is
+// the single Haben (Zahlungskonto); for a revenue invoice (isRevenue) it is the
+// single Soll. ok is false unless the base side has exactly one entry and there
+// is at least one counter — the exporters skip the booking in that case.
+func (b Booking) PaymentAndCounters(isRevenue bool) (BookingEntry, []BookingEntry, bool) {
+	var base BookingEntry
+	baseCount := 0
+	counters := make([]BookingEntry, 0, len(b.Entries))
+	for _, e := range b.Entries {
+		isBase := (isRevenue && e.Soll) || (!isRevenue && !e.Soll)
+		if isBase {
+			base = e
+			baseCount++
+		} else {
+			counters = append(counters, e)
+		}
+	}
+	if baseCount != 1 || len(counters) == 0 {
+		return BookingEntry{}, nil, false
+	}
+	return base, counters, true
+}
+
 // DebitEntries returns the Soll (debit) entries — the expense/Vorsteuer lines.
 func (b Booking) DebitEntries() []BookingEntry {
 	out := make([]BookingEntry, 0, len(b.Entries))
@@ -178,5 +202,34 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 		sollSum += e.Betrag
 	}
 	entries = append(entries, BookingEntry{Konto: paymentAccount, Betrag: round2(sollSum), Soll: false})
+	return Booking{Entries: entries}, nil
+}
+
+// BuildRevenueBooking turns an outgoing invoice's tax lines into a balanced
+// revenue Booking: Soll paymentAccount (gross received), Haben revenueAccount
+// (net) + Umsatzsteuer per rate. The mirror of BuildBooking. paymentAccount is
+// computed as the sum of the Haben side, so the booking always balances even if
+// a rate's Umsatzsteuer account is unconfigured.
+func BuildRevenueBooking(rules *BookingRules, lines []TaxLine, revenueAccount, paymentAccount int) (Booking, error) {
+	if len(lines) == 0 {
+		return Booking{}, fmt.Errorf("keine Steuerzeilen für Erlösbuchung")
+	}
+	entries := []BookingEntry{
+		{Konto: revenueAccount, Betrag: round2(SumNetto(lines)), Soll: false},
+	}
+	for _, l := range lines {
+		if l.MwStBetrag == 0 {
+			continue
+		}
+		if konto, ok := rules.UmsatzsteuerKonto(l.SatzProzent); ok {
+			entries = append(entries, BookingEntry{Konto: konto, Betrag: round2(l.MwStBetrag), Soll: false})
+		}
+	}
+	var habenSum float64
+	for _, e := range entries {
+		habenSum += e.Betrag
+	}
+	// Payment (Soll) = Σ Haben, prepended so it reads payment-first.
+	entries = append([]BookingEntry{{Konto: paymentAccount, Betrag: round2(habenSum), Soll: true}}, entries...)
 	return Booking{Entries: entries}, nil
 }

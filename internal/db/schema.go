@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 	gebuehr_prozent REAL DEFAULT 0,
 	buchung_ref TEXT DEFAULT '',
 	belegnummer TEXT DEFAULT '',
+	ausgangsrechnung INTEGER DEFAULT 0,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

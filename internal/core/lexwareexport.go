@@ -12,7 +12,7 @@ func BuildLexwareCSV(rows []CSVRow) ([]byte, int, int) {
 	b.WriteString("Datum;Belegnr;Buchungstext;Betrag;Sollkonto;Habenkonto\r\n")
 	exported, skipped := 0, 0
 	for _, r := range rows {
-		pay, ok := r.Buchung.PaymentEntry()
+		base, counters, ok := r.Buchung.PaymentAndCounters(r.Ausgangsrechnung)
 		if !r.Buchung.Balanced() || !ok {
 			skipped++
 			continue
@@ -25,10 +25,14 @@ func BuildLexwareCSV(rows []CSVRow) ([]byte, int, int) {
 			belegRef = r.Rechnungsnummer
 		}
 		beleg := lexClean(belegRef)
-		for _, e := range r.Buchung.DebitEntries() {
+		for _, e := range counters {
+			soll, haben := e.Konto, base.Konto
+			if !e.Soll {
+				soll, haben = base.Konto, e.Konto
+			}
 			amount := strings.Replace(fmt.Sprintf("%.2f", e.Betrag), ".", ",", 1)
 			b.WriteString(fmt.Sprintf("%s;%s;%s;%s;%d;%d\r\n",
-				r.Rechnungsdatum, beleg, text, amount, e.Konto, pay.Konto))
+				r.Rechnungsdatum, beleg, text, amount, soll, haben))
 			exported++
 		}
 	}

@@ -51,7 +51,7 @@ func BuildDATEVStapel(h DATEVHeader, rows []CSVRow) ([]byte, int, int) {
 
 	exported, skipped := 0, 0
 	for _, r := range rows {
-		pay, ok := r.Buchung.PaymentEntry()
+		base, counters, ok := r.Buchung.PaymentAndCounters(r.Ausgangsrechnung)
 		if !r.Buchung.Balanced() || !ok {
 			skipped++
 			continue
@@ -67,9 +67,13 @@ func BuildDATEVStapel(h DATEVHeader, rows []CSVRow) ([]byte, int, int) {
 		belegfeld1 = datevClean(belegfeld1, 36)
 		belegfeld2 := datevClean(r.Rechnungsnummer, 36)
 		text := datevClean(strings.TrimSpace(r.Auftraggeber+" "+r.Verwendungszweck), 60)
-		for _, e := range r.Buchung.DebitEntries() {
-			b.WriteString(fmt.Sprintf(`%s;"S";"EUR";;;;%d;%d;;%s;"%s";"%s";;"%s"`+"\r\n",
-				datevAmount(e.Betrag), e.Konto, pay.Konto, beleg, belegfeld1, belegfeld2, text))
+		for _, e := range counters {
+			sh := "S"
+			if !e.Soll {
+				sh = "H"
+			}
+			b.WriteString(fmt.Sprintf(`%s;"%s";"EUR";;;;%d;%d;;%s;"%s";"%s";;"%s"`+"\r\n",
+				datevAmount(e.Betrag), sh, e.Konto, base.Konto, beleg, belegfeld1, belegfeld2, text))
 			exported++
 		}
 	}

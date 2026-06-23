@@ -31,6 +31,23 @@ func (a *App) bookingCategoryLabel(kategorie string) string {
 	return kategorie
 }
 
+// computeRevenueBooking builds the revenue booking for an outgoing invoice:
+// Soll Zahlungskonto, Haben Erlöskonto + Umsatzsteuer. Returns (booking, ok, msg).
+func (a *App) computeRevenueBooking(lines []core.TaxLine, revenueAccount int, bankAccountName string) (core.Booking, bool, string) {
+	if len(lines) == 0 {
+		return core.Booking{}, false, a.bundle.T("booking.no.lines")
+	}
+	payment, ok := a.settings.PaymentAccountSKR04(bankAccountName)
+	if !ok {
+		return core.Booking{}, false, a.bundle.T("booking.no.payment.account")
+	}
+	b, err := core.BuildRevenueBooking(a.bookingRules, lines, revenueAccount, payment)
+	if err != nil {
+		return core.Booking{}, false, err.Error()
+	}
+	return b, true, ""
+}
+
 // computeInvoiceBooking resolves the payment account and builds the booking.
 // Returns (booking, bookable, reasonIfNotBookable).
 func (a *App) computeInvoiceBooking(kategorie string, lines []core.TaxLine, trinkgeld float64, expenseAccount int, bankAccountName string) (core.Booking, bool, string) {

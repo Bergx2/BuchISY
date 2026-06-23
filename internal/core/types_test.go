@@ -17,3 +17,14 @@ func TestMetaTaxLinesRoundTrip(t *testing.T) {
 		t.Fatalf("ToMeta lost detail: %+v", back)
 	}
 }
+
+func TestAusgangsrechnungRoundTrip(t *testing.T) {
+	m := Meta{Auftraggeber: "Kunde", Ausgangsrechnung: true}
+	if !m.ToCSVRow().Ausgangsrechnung {
+		t.Error("ToCSVRow dropped Ausgangsrechnung")
+	}
+	r := CSVRow{Auftraggeber: "Kunde", Ausgangsrechnung: true}
+	if !r.ToMeta().Ausgangsrechnung {
+		t.Error("ToMeta dropped Ausgangsrechnung")
+	}
+}

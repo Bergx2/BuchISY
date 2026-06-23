@@ -95,3 +95,13 @@ func TestBookingRulesStoreMergesNewBundledCategories(t *testing.T) {
 		t.Errorf("standard rule duplicated: %d copies", n)
 	}
 }
+
+func TestUmsatzsteuerKonto(t *testing.T) {
+	r := &BookingRules{UmsatzsteuerKonten: map[string]int{"19": 1776}}
+	if k, ok := r.UmsatzsteuerKonto(19); !ok || k != 1776 {
+		t.Errorf("UmsatzsteuerKonto(19) = %d,%v, want 1776,true", k, ok)
+	}
+	if _, ok := r.UmsatzsteuerKonto(7); ok {
+		t.Error("UmsatzsteuerKonto(7) should be (0,false) when unset")
+	}
+}

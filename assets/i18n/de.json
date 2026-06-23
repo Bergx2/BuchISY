@@ -17,6 +17,7 @@
   "table.col.verwendungszweck": "Verwendungszweck",
   "table.col.invoicenumber": "Rechnungsnummer",
   "table.col.belegnummer": "Belegnummer",
+  "table.col.ausgangsrechnung": "Ausgangsrechnung",
   "table.col.vatid": "USt-IdNr.",
   "field.vatid": "USt-IdNr.",
   "table.col.net": "Betrag netto",
@@ -277,5 +278,7 @@
   "settings.matchWindow": "Abgleich: Datumsfenster (Tage)",
   "settings.matchTolerance": "Abgleich: Fremdwährungs-Toleranz (%)",
 
-  "reconcile.lineTaken": "Auszugsposition bereits verknüpft"
+  "reconcile.lineTaken": "Auszugsposition bereits verknüpft",
+
+  "modal.erloeskonto": "Erlöskonto"
 }
