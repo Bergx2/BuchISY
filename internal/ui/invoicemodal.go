@@ -272,6 +272,12 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	paymentDateEntry := widget.NewEntry()
 	paymentDateEntry.SetText(meta.Bezahldatum)
 	paymentDateEntry.SetPlaceHolder(a.bundle.T("field.paymentDate"))
+	// #6 Chain recompute so the booking preview updates when Bezahldatum changes.
+	paymentDateEntry.OnChanged = func(string) {
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	}
 
 	// Add calendar button for payment date
 	paymentDateCalendarBtn := widget.NewButton("📅", func() {
@@ -519,6 +525,14 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		if ausgangsrechnungCheck.Checked {
 			b, bookable, reason = a.computeRevenueBooking(
 				ed.Lines(), selectedAccount, bankAccountSelect.Selected)
+			// #6 Payment settlement: when a payment date is set, settle the
+			// revenue booking from Forderung (1400) to the actual bank account,
+			// so the preview already reflects the paid state at entry time.
+			if bookable && strings.TrimSpace(paymentDateEntry.Text) != "" {
+				if pay, ok := a.settings.PaymentAccountSKR04(bankAccountSelect.Selected); ok {
+					b = b.WithSettlementAccount(pay)
+				}
+			}
 		} else {
 			b, bookable, reason = a.computeInvoiceBooking(
 				catKeyByLabel[categorySelect.Selected],
@@ -644,9 +658,53 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Run the initial duplicate check now that all entry widgets exist.
 	checkDuplicate()
 
+	// #7 Source badge — shown only when the extractor set a Quelle label.
+	var quelleLabel fyne.CanvasObject
+	if meta.Quelle != "" {
+		lbl := widget.NewLabelWithStyle("Quelle: "+meta.Quelle,
+			fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+		quelleLabel = lbl
+	} else {
+		quelleLabel = widget.NewLabel("") // placeholder keeps layout stable
+		quelleLabel.Hide()
+	}
+
+	// #5 Live warnings strip — updated by refreshWarnings() whenever any
+	// amount/date/currency/account/Ausgangsrechnung field changes.
+	warningsLabel := widget.NewLabel("")
+	warningsLabel.Importance = widget.WarningImportance
+	warningsLabel.Wrapping = fyne.TextWrapWord
+	warningsLabel.Hide()
+
+	refreshWarnings := func() {
+		warnings := core.InvoiceWarnings(core.CSVRow{
+			BetragNetto:      core.SumNetto(ed.Lines()),
+			SteuersatzBetrag: core.SumMwSt(ed.Lines()),
+			Bruttobetrag:     ed.Brutto(),
+			Trinkgeld:        ed.Trinkgeld(),
+			Gegenkonto:       selectedAccount,
+			Waehrung:         core.CurrencyCodeFromOption(currencySelect.Selected),
+			Wechselkurs:      parseDecimal(kursEntry.Text),
+			Rechnungsdatum:   dateEntry.Text,
+			VATID:            vatIDEntry.Text,
+			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
+		})
+		if len(warnings) == 0 {
+			warningsLabel.Hide()
+		} else {
+			warningsLabel.SetText("⚠ " + strings.Join(warnings, " • "))
+			warningsLabel.Show()
+		}
+	}
+
+	// refreshWarnings and OnChanged chaining are installed after the currency
+	// OnChanged is fully wired below (near updateCurrencyConversionVisibility).
+
 	formItems := []fyne.CanvasObject{
 		widget.NewLabelWithStyle(belegnrText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		quelleLabel,
 		dupBanner,
+		warningsLabel,
 		newCopyableLabel(a.bundle, a.bundle.T("modal.originalFile")),
 		container.NewBorder(nil, nil, nil,
 			container.NewHBox(addAttBtn, openOriginalBtn), originalEntry),
@@ -737,8 +795,35 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	currencySelect.OnChanged = func(string) {
 		updateCurrencyConversionVisibility()
 		updateFilenamePreview()
+		refreshWarnings()
 	}
 	updateCurrencyConversionVisibility()
+
+	// #5 Chain refreshWarnings into all remaining OnChanged hooks — now that
+	// all widgets have their primary OnChanged assigned above.
+	prevDateChanged := dateEntry.OnChanged
+	dateEntry.OnChanged = func(s string) {
+		if prevDateChanged != nil {
+			prevDateChanged(s)
+		}
+		refreshWarnings()
+	}
+	prevAusgangsChanged := ausgangsrechnungCheck.OnChanged
+	ausgangsrechnungCheck.OnChanged = func(checked bool) {
+		if prevAusgangsChanged != nil {
+			prevAusgangsChanged(checked)
+		}
+		refreshWarnings()
+	}
+	// ed onChange calls recomputeBooking, which we wrap to also run refreshWarnings.
+	prevRecomputeBooking := recomputeBooking
+	recomputeBooking = func() {
+		prevRecomputeBooking()
+		refreshWarnings()
+	}
+
+	// Initial warnings evaluation.
+	refreshWarnings()
 
 	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
 		confirmWin.Close()
@@ -881,6 +966,19 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		},
 		func() { confirmWin.Close() },
 	)
+	// #8 Keyboard: Escape = cancel (always safe). Return/Enter is intentionally
+	// NOT wired to save because the modal contains multi-line text entries
+	// (commentEntry) where Enter is a normal editing key and we cannot reliably
+	// detect which widget has focus in Fyne without hooking every entry — that
+	// would be fragile. Ctrl+S (wired by addDialogShortcuts) is the keyboard
+	// save shortcut. We override SetOnTypedKey here to keep Escape working; the
+	// previous SetOnTypedKey from addDialogShortcuts is replaced by this one.
+	// E17.4
+	confirmWin.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
+		if ev.Name == fyne.KeyEscape {
+			confirmWin.Close()
+		}
+	})
 	split := container.NewHSplit(scrollForm, preview)
 	splitOffset := a.settings.PreviewSplitOffset
 	// Clamp away from the edges so a previously dragged-too-far divider
