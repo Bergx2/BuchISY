@@ -96,6 +96,55 @@ func TestParseExtractionAccountSuggestions(t *testing.T) {
 	}
 }
 
+func TestParseExtractionAusgangsrechnung(t *testing.T) {
+	// ausgangsrechnung: true must propagate to meta.Ausgangsrechnung.
+	resp := `{"auftraggeber":"Bergx2 GmbH","rechnungsnummer":"AR-42","bruttobetrag":1190.0,"ausgangsrechnung":true}`
+	meta, err := parseExtractionJSON(resp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !meta.Ausgangsrechnung {
+		t.Error("expected meta.Ausgangsrechnung == true, got false")
+	}
+
+	// ausgangsrechnung: false (explicit) → false.
+	resp2 := `{"auftraggeber":"AWS","bruttobetrag":50.0,"ausgangsrechnung":false}`
+	meta2, err := parseExtractionJSON(resp2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta2.Ausgangsrechnung {
+		t.Error("expected meta.Ausgangsrechnung == false, got true")
+	}
+
+	// Field absent → default false (zero value).
+	resp3 := `{"auftraggeber":"Google","bruttobetrag":20.0}`
+	meta3, err := parseExtractionJSON(resp3, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta3.Ausgangsrechnung {
+		t.Error("expected meta.Ausgangsrechnung == false when field absent")
+	}
+}
+
+func TestSystemPromptForAusgangsrechnungBlock(t *testing.T) {
+	// With own VAT-IDs: prompt must contain the Ausgangsrechnung instruction.
+	p := systemPromptFor([]string{"DE287472874"})
+	if !strings.Contains(p, "ausgangsrechnung") {
+		t.Error("systemPromptFor with ownVATIDs must mention ausgangsrechnung")
+	}
+	if !strings.Contains(p, "DE287472874") {
+		t.Error("systemPromptFor must include the own VAT-ID in ausgangsrechnung block")
+	}
+
+	// Without own VAT-IDs: base prompt returned; no extra instruction needed.
+	pBase := systemPromptFor(nil)
+	if pBase != systemPromptBase {
+		t.Error("systemPromptFor with no ownVATIDs must return systemPromptBase unchanged")
+	}
+}
+
 func TestAccountHintSectionListsAccounts(t *testing.T) {
 	e := NewExtractor(nil, false)
 	e.SetAccountHints([]core.SKRAccount{{Number: 6837, Name: "Fremdleistungen"}, {Number: 6815, Name: "Bürobedarf"}})

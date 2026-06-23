@@ -25,7 +25,8 @@ Ziel: Liefere ausschließlich ein strenges JSON-Objekt mit genau diesen Schlüss
   "waehrung": "EUR|USD|andere ISO4217 oder null",
   "rechnungsdatum": "dd.MM.yyyy oder null",
   "jahr": "YYYY oder null",
-  "monat": "MM oder null"
+  "monat": "MM oder null",
+  "ausgangsrechnung": false
 }
 
 Regeln:
@@ -59,10 +60,16 @@ func systemPromptFor(ownVATIDs []string) string {
 	if len(clean) == 0 {
 		return systemPromptBase
 	}
-	return systemPromptBase + "\n\n=== STRENG VERBOTEN ===\n" +
+	ausgangsBlock := "\n\n=== AUSGANGSRECHNUNG-ERKENNUNG ===\n" +
+		"ausgangsrechnung = true, wenn die Rechnung vom App-Nutzer AUSGESTELLT wurde — d.h. wenn der Rechnungs-AUSSTELLER eine der folgenden eigenen USt-IdNrn trägt (Nutzer = Verkäufer/Aussteller):\n" +
+		"  • " + strings.Join(clean, "\n  • ") + "\n" +
+		"Bei einer normalen Eingangsrechnung (Nutzer = Empfänger) ist ausgangsrechnung = false. Wenn keine eigene USt-IdNr sichtbar ist, ausgangsrechnung = false.\n" +
+		"=== ENDE AUSGANGSRECHNUNG-ERKENNUNG ==="
+	verbotBlock := "\n\n=== STRENG VERBOTEN ===\n" +
 		"Folgende VAT-IDs gehören dem App-Nutzer selbst und dürfen ABSOLUT NIEMALS als vat_id zurückgegeben werden — auch wenn sie auf der Rechnung stehen, auch wenn sie der ersten Firma zugeordnet sind, auch wenn die Rechnung eine Ausgangsrechnung des Nutzers ist:\n" +
 		"  • " + strings.Join(clean, "\n  • ") + "\n\n" +
 		"Wenn die einzige sichtbare VAT-ID einer dieser Werte ist, MUSS vat_id auf null gesetzt werden. Suche stattdessen nach der VAT-ID des Geschäftspartners (bei Eingangsrechnungen: Aussteller; bei Ausgangsrechnungen: Kunde). Wenn keine vorhanden, null.\n=== ENDE STRENG VERBOTEN ==="
+	return systemPromptBase + ausgangsBlock + verbotBlock
 }
 
 // cleanVATIDList trims whitespace and drops empty entries from a list
@@ -427,6 +434,7 @@ func parseExtractionJSON(response string, ownVATIDs []string) (core.Meta, error)
 		Jahr                    *string  `json:"jahr"`
 		Monat                   *string  `json:"monat"`
 		GegenkontoVorschlaege   []int    `json:"gegenkonto_vorschlaege"`
+		Ausgangsrechnung        *bool    `json:"ausgangsrechnung"`
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
@@ -482,6 +490,9 @@ func parseExtractionJSON(response string, ownVATIDs []string) (core.Meta, error)
 		meta.Monat = *result.Monat
 	}
 	meta.KontoVorschlaege = result.GegenkontoVorschlaege
+	if result.Ausgangsrechnung != nil {
+		meta.Ausgangsrechnung = *result.Ausgangsrechnung
+	}
 
 	return meta, nil
 }

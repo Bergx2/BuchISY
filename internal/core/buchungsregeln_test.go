@@ -53,3 +53,19 @@ func TestBundledChartHasNewCategories(t *testing.T) {
 		t.Errorf("kfz rule = %+v", kfz)
 	}
 }
+
+func TestErloesKonto(t *testing.T) {
+	r := &BookingRules{ErloesKonten: map[string]int{"inland": 8400, "eu": 8341, "drittland": 8200}}
+	if k, _ := r.ErloesKonto("DE123", 19); k != 8400 {
+		t.Errorf("domestic (with VAT) = %d, want 8400", k)
+	}
+	if k, _ := r.ErloesKonto("FI26378052", 0); k != 8341 {
+		t.Errorf("EU 0%% = %d, want 8341", k)
+	}
+	if k, _ := r.ErloesKonto("", 0); k != 8200 {
+		t.Errorf("Drittland 0%% = %d, want 8200", k)
+	}
+	if _, ok := (&BookingRules{}).ErloesKonto("DE", 19); ok {
+		t.Error("unset config must return ok=false")
+	}
+}

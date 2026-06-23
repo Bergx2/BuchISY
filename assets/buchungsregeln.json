@@ -1,6 +1,7 @@
 {
   "vorsteuer_konten": { "19": 1406, "7": 1401 },
   "umsatzsteuer_konten": { "19": 3806, "7": 3801 },
+  "erloes_konten": { "inland": 8400, "eu": 8341, "drittland": 8200 },
   "regeln": [
     { "kategorie": "standard", "name": "Standard-Aufwand" },
     { "kategorie": "bewirtung", "name": "Bewirtung (§ 4 Abs. 5 EStG)", "abziehbar_prozent": 70, "konto_abziehbar": 6640, "konto_nicht_abziehbar": 6644 },
