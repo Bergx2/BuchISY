@@ -556,6 +556,27 @@ func (a *App) listStatements(accountName string) []string {
 // buildKontenUI builds the bank-statement browser view: top bar with
 // the toggle, an account selector and an upload button; main area is
 // an HSplit of the statement list + the document preview.
+// accountRichLabel renders a payment account for the Konten picker as
+// "<full name> · <SKR-Konto> <Kontoname>", so both the full account name and
+// the booking account number are visible. Falls back to the plain name when no
+// SKR account is assigned.
+func (a *App) accountRichLabel(name string) string {
+	for _, ba := range a.settings.BankAccounts {
+		if ba.Name != name {
+			continue
+		}
+		if ba.SKR04Konto != 0 {
+			chartName := ""
+			if acc, ok := a.chart.Find(ba.SKR04Konto); ok && acc.Name != "" {
+				chartName = " " + acc.Name
+			}
+			return fmt.Sprintf("%s  ·  %d%s", name, ba.SKR04Konto, chartName)
+		}
+		return name
+	}
+	return name
+}
+
 func (a *App) buildKontenUI() fyne.CanvasObject {
 	accounts := a.bankAccountOptionList()
 	if a.kontenAccount == "" && len(accounts) > 0 {
@@ -571,7 +592,7 @@ func (a *App) buildKontenUI() fyne.CanvasObject {
 		chips := make([]fyne.CanvasObject, 0, len(accounts))
 		for _, name := range accounts {
 			n := name
-			b := widget.NewButton(n, func() {
+			b := widget.NewButton(a.accountRichLabel(n), func() { // show name + Kontonummer
 				if n == a.kontenAccount {
 					return
 				}
@@ -587,17 +608,31 @@ func (a *App) buildKontenUI() fyne.CanvasObject {
 		}
 		accountPicker = container.NewHBox(chips...)
 	} else {
-		accountSelect := widget.NewSelect(accounts, func(sel string) {
-			if sel == a.kontenAccount {
+		// Rich options "<name> · <Konto> <Name>" with a map back to the plain
+		// account name (which is the stored key / statement-folder name).
+		richOptions := make([]string, 0, len(accounts))
+		richToName := make(map[string]string, len(accounts))
+		nameToRich := make(map[string]string, len(accounts))
+		for _, name := range accounts {
+			rich := a.accountRichLabel(name)
+			richOptions = append(richOptions, rich)
+			richToName[rich] = name
+			nameToRich[name] = rich
+		}
+		accountSelect := widget.NewSelect(richOptions, func(sel string) {
+			name := richToName[sel]
+			if name == a.kontenAccount {
 				return
 			}
-			a.kontenAccount = sel
+			a.kontenAccount = name
 			a.window.SetContent(a.buildUI())
 		})
 		if a.kontenAccount != "" {
-			accountSelect.SetSelected(a.kontenAccount)
+			accountSelect.SetSelected(nameToRich[a.kontenAccount])
 		}
-		accountPicker = container.NewHBox(widget.NewLabel("Konto:"), accountSelect)
+		// Give the dropdown more width so the full label fits.
+		wide := container.NewGridWrap(fyne.NewSize(460, accountSelect.MinSize().Height), accountSelect)
+		accountPicker = container.NewHBox(widget.NewLabel("Konto:"), wide)
 	}
 
 	settingsBtn := widget.NewButton(a.bundle.T("menu.settings"), func() {
