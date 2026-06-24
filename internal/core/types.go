@@ -27,6 +27,7 @@ type Meta struct {
 	KontoVorschlaege  []int      // transient: AI-suggested Gegenkonten for unknown suppliers (not persisted)
 	Bankkonto         string     // Bank account
 	Bezahldatum       string     // Payment date DD.MM.YYYY
+	BarBezahlt        bool       `json:"-"` // transient: invoice was paid in cash (bar/Bargeld); not persisted to DB or CSV
 	Teilzahlung       bool       // Partial payment flag
 	Ausgangsrechnung  bool       // true = outgoing/revenue invoice (Erlös)
 	Dateiname         string     // Final filename

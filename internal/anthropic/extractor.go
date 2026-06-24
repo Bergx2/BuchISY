@@ -26,6 +26,8 @@ Ziel: Liefere ausschließlich ein strenges JSON-Objekt mit genau diesen Schlüss
   "rechnungsdatum": "dd.MM.yyyy oder null",
   "jahr": "YYYY oder null",
   "monat": "MM oder null",
+  "bezahldatum": "dd.MM.yyyy oder null",
+  "bar_bezahlt": false,
   "ausgangsrechnung": false
 }
 
@@ -43,6 +45,8 @@ Regeln:
 - waehrung: Verwende ISO-Code (z. B. EUR, USD). "€" ⇒ EUR.
 - jahr / monat: aus rechnungsdatum ableiten (YYYY, MM).
 - verwendungszweck: kurze menschliche Zusammenfassung (max. ~80 Zeichen), z. B. "Cloud-Abo Oktober 2025".
+- bezahldatum: Setze dieses Feld NUR, wenn der Beleg explizit eine erfolgte Zahlung ausweist — z. B. "Zahlung: bar", "bar bezahlt", "Betrag erhalten", "bereits bezahlt", "bezahlt am", Quittung, Kassenbon, EC-Zahlung, Kassenbewegung, oder ein ähnlicher Hinweis. Verwende dann das Zahlungs- bzw. Belegdatum (dd.MM.yyyy). Falls kein explizites Zahlungsdatum angegeben ist, aber der Beleg eindeutig ein bezahlter Kassenbon/Quittung ist, verwende das Belegdatum. In allen anderen Fällen (normale Rechnung ohne Zahlungsbestätigung): null.
+- bar_bezahlt: true, wenn die Zahlung in BARGELD erfolgt ist (bar, Bargeld, Kassenbon, Quittung, Cash). false in allen anderen Fällen (Überweisung, EC, Kreditkarte, PayPal, unbekannt).
 
 vat_id (Umsatzsteuer-Identifikationsnummer des Rechnungsstellers):
 - Beispiele für gültige Formate: "DE123456789", "ATU12345678", "FR12345678901", "GB123456789", "VAT-Nr.", "USt-IdNr.", "VAT-ID", "TAX-ID", "Tax Number".
@@ -434,6 +438,8 @@ func parseExtractionJSON(response string, ownVATIDs []string) (core.Meta, error)
 		Jahr                    *string  `json:"jahr"`
 		Monat                   *string  `json:"monat"`
 		GegenkontoVorschlaege   []int    `json:"gegenkonto_vorschlaege"`
+		Bezahldatum             *string  `json:"bezahldatum"`
+		BarBezahlt              *bool    `json:"bar_bezahlt"`
 		Ausgangsrechnung        *bool    `json:"ausgangsrechnung"`
 	}
 
@@ -490,6 +496,12 @@ func parseExtractionJSON(response string, ownVATIDs []string) (core.Meta, error)
 		meta.Monat = *result.Monat
 	}
 	meta.KontoVorschlaege = result.GegenkontoVorschlaege
+	if result.Bezahldatum != nil && *result.Bezahldatum != "" && meta.Bezahldatum == "" {
+		meta.Bezahldatum = *result.Bezahldatum
+	}
+	if result.BarBezahlt != nil {
+		meta.BarBezahlt = *result.BarBezahlt
+	}
 	if result.Ausgangsrechnung != nil {
 		meta.Ausgangsrechnung = *result.Ausgangsrechnung
 	}

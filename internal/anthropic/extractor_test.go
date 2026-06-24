@@ -145,6 +145,44 @@ func TestSystemPromptForAusgangsrechnungBlock(t *testing.T) {
 	}
 }
 
+func TestParseExtractionCashPayment(t *testing.T) {
+	// bezahldatum + bar_bezahlt=true must propagate to Meta.
+	resp := `{"auftraggeber":"Bäckerei Müller","bruttobetrag":4.80,"bezahldatum":"20.06.2026","bar_bezahlt":true}`
+	meta, err := parseExtractionJSON(resp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Bezahldatum != "20.06.2026" {
+		t.Errorf("expected Bezahldatum=20.06.2026, got %q", meta.Bezahldatum)
+	}
+	if !meta.BarBezahlt {
+		t.Error("expected BarBezahlt==true, got false")
+	}
+
+	// bar_bezahlt=false and no bezahldatum → zero values.
+	resp2 := `{"auftraggeber":"AWS","bruttobetrag":50.0,"bar_bezahlt":false}`
+	meta2, err := parseExtractionJSON(resp2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta2.Bezahldatum != "" {
+		t.Errorf("expected empty Bezahldatum, got %q", meta2.Bezahldatum)
+	}
+	if meta2.BarBezahlt {
+		t.Error("expected BarBezahlt==false, got true")
+	}
+
+	// Both fields absent → zero values (no crash).
+	resp3 := `{"auftraggeber":"Google","bruttobetrag":20.0}`
+	meta3, err := parseExtractionJSON(resp3, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta3.Bezahldatum != "" || meta3.BarBezahlt {
+		t.Errorf("absent fields must be zero: Bezahldatum=%q BarBezahlt=%v", meta3.Bezahldatum, meta3.BarBezahlt)
+	}
+}
+
 func TestAccountHintSectionListsAccounts(t *testing.T) {
 	e := NewExtractor(nil, false)
 	e.SetAccountHints([]core.SKRAccount{{Number: 6837, Name: "Fremdleistungen"}, {Number: 6815, Name: "Bürobedarf"}})
