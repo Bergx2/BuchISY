@@ -50,17 +50,21 @@ func (a *App) showCustomFilePicker() {
 			} else {
 				cumulative = filepath.Join(cumulative, seg)
 			}
+			target := cumulative
 			if i == len(segments)-1 {
-				breadcrumb.Add(widget.NewLabelWithStyle(
-					seg, fyne.TextAlignLeading, fyne.TextStyle{Bold: true},
-				))
+				// Current folder: render as a button too (NOT a label), so it
+				// sits on the same baseline as the other segments instead of
+				// floating higher. Highlighted to mark "you are here".
+				cur := widget.NewButton(seg, func() { loadFiles(target) })
+				cur.Importance = widget.HighImportance
+				breadcrumb.Add(cur)
 				continue
 			}
-			target := cumulative
 			segBtn := widget.NewButton(seg, func() { loadFiles(target) })
 			segBtn.Importance = widget.LowImportance
 			breadcrumb.Add(segBtn)
-			breadcrumb.Add(widget.NewLabel("›"))
+			sep := widget.NewLabel("›")
+			breadcrumb.Add(container.NewCenter(sep)) // vertically center the separator to the buttons
 		}
 		breadcrumb.Refresh()
 		breadcrumbScroll.ScrollToOffset(fyne.NewPos(breadcrumb.MinSize().Width, 0))
