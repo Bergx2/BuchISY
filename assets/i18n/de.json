@@ -320,6 +320,8 @@
   "reconcile.cashConfirm": "Bestätigen",
   "reconcile.cashCoveredHint": "✓ gedeckt",
   "reconcile.cashUncoveredHint": "⚠ nicht gedeckt",
+  "reconcile.confirmAllStar": "Alle eindeutigen (★) bestätigen — %d",
+  "reconcile.confirmAllAsk": "%d Belege jetzt verknüpfen?",
 
   "modal.erloeskonto": "Erlöskonto",
 

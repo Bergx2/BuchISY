@@ -320,6 +320,8 @@
   "reconcile.cashConfirm": "Confirm",
   "reconcile.cashCoveredHint": "✓ covered",
   "reconcile.cashUncoveredHint": "⚠ uncovered",
+  "reconcile.confirmAllStar": "Confirm all unambiguous (★) — %d",
+  "reconcile.confirmAllAsk": "Link %d receipts now?",
 
   "modal.erloeskonto": "Revenue account",
 

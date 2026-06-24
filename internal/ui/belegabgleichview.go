@@ -551,6 +551,65 @@ func (a *App) showBelegabgleich() {
 			vbox.Add(header)
 		}
 
+		// ── "Alle ★ bestätigen" bulk-confirm button ────────────────────────────
+		// Count high-confidence suggestions whose top candidate's line is not yet
+		// claimed. The button is only shown when at least one such row exists.
+		starCount := 0
+		for _, s := range suggestions {
+			if !s.highConfidence {
+				continue
+			}
+			top := s.candidates[0]
+			key := refKey(top.file, top.scored.Line.Page, top.scored.Line.LineIdx)
+			if !claimed[key] {
+				starCount++
+			}
+		}
+		if starCount > 0 {
+			bulkBtn := widget.NewButton(a.bundle.T("reconcile.confirmAllStar", starCount), nil)
+			bulkBtn.OnTapped = func() {
+				dialog.ShowConfirm(
+					a.bundle.T("reconcile.confirmAllStar", starCount),
+					a.bundle.T("reconcile.confirmAllAsk", starCount),
+					func(ok bool) {
+						if !ok {
+							return
+						}
+						for i := range suggestions {
+							sug := &suggestions[i]
+							if !sug.highConfidence {
+								continue
+							}
+							top := sug.candidates[0]
+							key := refKey(top.file, top.scored.Line.Page, top.scored.Line.LineIdx)
+							if claimed[key] {
+								continue
+							}
+							sug.row.BuchungRef = core.BuchungRef{
+								StatementFilename: top.file,
+								Page:              top.scored.Line.Page,
+								LineIdx:           top.scored.Line.LineIdx,
+							}.String()
+							if err := a.dbRepo.Update(sug.row.Jahr, sug.row.Monat, sug.row.Dateiname, sug.row); err != nil {
+								a.logger.Warn("Belegabgleich bulkConfirm Update %s: %v", sug.row.Dateiname, err)
+							}
+							if a.statementAliases != nil {
+								a.statementAliases.Learn(sug.row.Auftraggeber, top.scored.Line.Text)
+								if err := a.statementAliases.Save(); err != nil {
+									a.logger.Warn("Belegabgleich bulkConfirm: save aliases: %v", err)
+								}
+							}
+							claimed[key] = true
+						}
+						a.loadInvoices()
+						bulkBtn.Disable()
+					},
+					a.window,
+				)
+			}
+			vbox.Add(bulkBtn)
+		}
+
 		for _, s := range suggestions {
 			// Capture loop variable for closure safety.
 			sug := s
