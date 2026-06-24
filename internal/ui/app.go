@@ -53,6 +53,8 @@ type App struct {
 	bookingRules       *core.BookingRules
 	bookingRulesStore  *core.BookingRulesStore
 	bookingTemplates   *core.BookingTemplateStore
+	assets             []core.Asset
+	assetsPath         string
 
 	// Current state
 	currentYear    int
@@ -293,6 +295,14 @@ func (a *App) startProfile(profile string) {
 	a.bookingTemplates = core.NewBookingTemplateStore(configDir)
 	if err := a.bookingTemplates.Load(); err != nil {
 		logger.Warn("Failed to load booking templates: %v", err)
+	}
+
+	a.assetsPath = filepath.Join(configDir, "assets.json")
+	if loaded, err := core.LoadAssets(a.assetsPath); err != nil {
+		logger.Warn("Failed to load assets: %v", err)
+		a.assets = []core.Asset{}
+	} else {
+		a.assets = loaded
 	}
 
 	// One folder per Zahlungskonto, created at <StorageRoot>/<Name>/.
@@ -924,6 +934,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Rechnungsausgangsbuch (PDF)", func() { a.showSalesJournalPDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
 			fyne.NewMenuItem("Erlös-Abgleich", func() { a.showErloesAbgleich() }),
+			fyne.NewMenuItem(a.bundle.T("anlagen.title"), func() { a.showAnlagen() }),
 			fyne.NewMenuItem("Belegnummern neu vergeben", func() { a.renumberBelegnummern() }),
 			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),
 		)
