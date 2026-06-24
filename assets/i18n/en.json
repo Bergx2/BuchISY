@@ -444,5 +444,8 @@
   "anlagen.form.cancel": "Cancel",
   "anlagen.form.err.bezeichnung": "Please enter a description.",
   "anlagen.form.err.wert": "Please enter a valid acquisition cost.",
-  "anlagen.form.err.nd": "Please enter a valid useful life."
+  "anlagen.form.err.nd": "Please enter a valid useful life.",
+
+  "exportpkg.menu": "Export GoBD/StB Package",
+  "exportpkg.done": "Export package created: %d receipts attached out of %d rows."
 }

@@ -444,5 +444,8 @@
   "anlagen.form.cancel": "Abbrechen",
   "anlagen.form.err.bezeichnung": "Bitte eine Bezeichnung eingeben.",
   "anlagen.form.err.wert": "Bitte einen gültigen Anschaffungswert eingeben.",
-  "anlagen.form.err.nd": "Bitte eine gültige Nutzungsdauer eingeben."
+  "anlagen.form.err.nd": "Bitte eine gültige Nutzungsdauer eingeben.",
+
+  "exportpkg.menu": "GoBD-/StB-Paket exportieren",
+  "exportpkg.done": "Exportpaket erstellt: %d Belege von %d Zeilen beigelegt."
 }
