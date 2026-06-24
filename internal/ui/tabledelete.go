@@ -3,6 +3,9 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
+	"time"
 
 	"fyne.io/fyne/v2/dialog"
 
@@ -58,6 +61,9 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
 	filePath := core.InvoiceFilePath(targetFolder, row)
 
+	// Buffer file bytes BEFORE removal so Undo can restore the file.
+	data, _ := os.ReadFile(filePath) // nil if file doesn't exist — that's fine
+
 	// Delete PDF file. A missing file is fine (nothing to delete); any
 	// other failure is reported to the user after the CSV entry is removed.
 	fileRemoveFailed := false
@@ -104,6 +110,65 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 				row.Dateiname),
 		)
 	} else {
-		a.showToast(fmt.Sprintf("✓ Rechnung gelöscht: %s", row.Dateiname))
+		// Capture loop variables for the closure.
+		capturedRow := row
+		capturedJahr := jahr
+		capturedMonat := monat
+		capturedFilePath := filePath
+		capturedData := data
+		undoDone := false // one-shot: the 8s toast can be tapped only once
+		a.showToastWithAction(
+			"✓ Rechnung gelöscht: "+row.Dateiname,
+			a.bundle.T("undo"),
+			func() {
+				if undoDone {
+					return
+				}
+				undoDone = true
+				a.undoDelete(capturedRow, capturedJahr, capturedMonat, capturedFilePath, capturedData)
+			},
+		)
 	}
+}
+
+// undoDelete restores a deleted invoice: rewrites the PDF file (if data is
+// available), re-inserts the row into the database, regenerates the CSV, and
+// reloads the invoice table.
+func (a *App) undoDelete(row core.CSVRow, jahr, monat, filePath string, data []byte) {
+	// Restore the file if we have its contents.
+	if len(data) > 0 {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+			a.showError(a.bundle.T("error.processing.title"),
+				fmt.Sprintf("Undo: Verzeichnis konnte nicht erstellt werden: %v", err))
+			return
+		}
+		if err := os.WriteFile(filePath, data, 0644); err != nil {
+			a.showError(a.bundle.T("error.processing.title"),
+				fmt.Sprintf("Undo: Datei konnte nicht wiederhergestellt werden: %v", err))
+			return
+		}
+		a.logger.Info("Undo: restored file %s", filePath)
+	}
+
+	// Re-insert the database row.
+	if _, err := a.dbRepo.Insert(row); err != nil {
+		a.showError(a.bundle.T("error.processing.title"),
+			fmt.Sprintf("Undo: Datenbankeintrag konnte nicht wiederhergestellt werden: %v", err))
+		return
+	}
+	a.logger.Info("Undo: re-inserted invoice %s", row.Dateiname)
+
+	// Regenerate the CSV for the month the invoice BELONGED to (captured at
+	// delete time) — the user may have navigated to another month during the
+	// 8-second undo window, so a.currentYear/Month would be wrong.
+	y, _ := strconv.Atoi(jahr)
+	m, _ := strconv.Atoi(monat)
+	csvPath := a.storageManager.GetCSVPath(y, time.Month(m))
+	if err := a.dbRepo.ExportToCSV(jahr, monat, csvPath, a.csvRepo); err != nil {
+		a.logger.Warn("Undo: Failed to export CSV: %v", err)
+	}
+
+	// Reload the table and confirm to the user.
+	a.loadInvoices()
+	a.showToast(a.bundle.T("undo.done"))
 }

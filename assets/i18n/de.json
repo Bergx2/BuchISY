@@ -224,6 +224,9 @@
   "export.includeExported": "Auch bereits exportierte einbeziehen",
   "export.done": "%d Buchungszeilen exportiert.",
 
+  "undo": "Rückgängig",
+  "undo.done": "Löschen rückgängig gemacht",
+
   "settings.datev.berater": "DATEV Berater-Nr.",
   "settings.datev.mandant": "DATEV Mandanten-Nr.",
   "settings.datev.wj": "Wirtschaftsjahr-Beginn (TTMMJJJJ)",
@@ -320,6 +323,8 @@
   "reconcile.cashConfirm": "Bestätigen",
   "reconcile.cashCoveredHint": "✓ gedeckt",
   "reconcile.cashUncoveredHint": "⚠ nicht gedeckt",
+  "reconcile.confirmAllStar": "Alle eindeutigen (★) bestätigen — %d",
+  "reconcile.confirmAllAsk": "%d Belege jetzt verknüpfen?",
 
   "modal.erloeskonto": "Erlöskonto",
 
