@@ -203,12 +203,9 @@ func (a *App) showAccountSearch(current int, onPick func(number int)) {
 			return
 		}
 		chosen := row.account
-		if a.accountPrefs != nil {
-			a.accountPrefs.RecordUse(chosen.Number)
-			if err := a.accountPrefs.Save(); err != nil && a.logger != nil {
-				a.logger.Warn("Failed to save account prefs: %v", err)
-			}
-		}
+		// Note: "recently used" is recorded by the caller (the invoice
+		// Gegenkonto picks), NOT here — so picking a structural account in the
+		// Settings dialog doesn't pollute the recent list.
 		dlg.Hide()
 		onPick(chosen.Number)
 	}

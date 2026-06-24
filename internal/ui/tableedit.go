@@ -146,6 +146,10 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		a.showAccountSearch(selectedAccount, func(n int) {
 			selectedAccount = n
 			updateAccountDisplay()
+			if a.accountPrefs != nil { // record invoice Gegenkonto picks as "recently used"
+				a.accountPrefs.RecordUse(n)
+				_ = a.accountPrefs.Save()
+			}
 			if recomputeBooking != nil {
 				recomputeBooking()
 			}

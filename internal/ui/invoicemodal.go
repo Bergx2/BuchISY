@@ -225,6 +225,10 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			accountManuallyPicked = true
 			selectedAccount = n
 			updateAccountDisplay()
+			if a.accountPrefs != nil { // record invoice Gegenkonto picks as "recently used"
+				a.accountPrefs.RecordUse(n)
+				_ = a.accountPrefs.Save()
+			}
 			if recomputeBooking != nil {
 				recomputeBooking()
 			}
