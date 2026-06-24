@@ -913,6 +913,8 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
 			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),
 				fyne.NewMenuItem("Offene Posten", func() { a.showOpenItems() }),
+			fyne.NewMenuItem(a.bundle.T("susa.title"), func() { a.showSuSa() }),
+			fyne.NewMenuItem(a.bundle.T("guv.title"), func() { a.showGuV() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Änderungsprotokoll", func() { a.showAuditLog() }),
 			fyne.NewMenuItem(a.bundle.T("period.lock"), func() { a.lockCurrentMonth() }),

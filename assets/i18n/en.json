@@ -393,5 +393,16 @@
   "opos.col.betrag": "Amount",
   "opos.col.alter": "Age (days)",
   "opos.col.bucket": "Aging",
-  "opos.total": "Total"
+  "opos.total": "Total",
+  "susa.title": "Trial Balance",
+  "susa.col.konto": "Account",
+  "susa.col.name": "Name",
+  "susa.col.soll": "Debit",
+  "susa.col.haben": "Credit",
+  "susa.col.saldo": "Balance",
+  "susa.total": "Total",
+  "guv.title": "P&L / BWA",
+  "guv.erloese": "Revenue",
+  "guv.aufwand": "Expenses",
+  "guv.ergebnis": "Net Result"
 }
