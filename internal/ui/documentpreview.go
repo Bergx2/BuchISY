@@ -173,7 +173,7 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 			return previewPlaceholder(mainPath, "Bild kann nicht dekodiert werden"), nil
 		}
 
-		strip := newPdfPreviewStrip([]image.Image{img}, [][]core.Rect{nil})
+		strip := newPdfPreviewStrip([]image.Image{img}, [][]core.Rect{nil}, hl)
 		scroll := container.NewScroll(strip)
 		strip.scroll = scroll
 		strip.onWidthChange = scroll.Refresh
