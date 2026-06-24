@@ -526,6 +526,11 @@ func (a *App) showBelegabgleich() {
 		}
 	}
 
+	// dlg is declared here so the bulk-confirm closure can reference it to
+	// close and reopen the dialog after linking all ★ rows. It is assigned
+	// below after dialog.NewCustom returns.
+	var dlg dialog.Dialog
+
 	// Build dialog content.
 	var content fyne.CanvasObject
 
@@ -602,7 +607,12 @@ func (a *App) showBelegabgleich() {
 							claimed[key] = true
 						}
 						a.loadInvoices()
-						bulkBtn.Disable()
+						// Rebuild the dialog so the now-linked ★ rows are gone from the
+						// suggestion list and no stale "Bestätigen" buttons remain visible.
+						if dlg != nil {
+							dlg.Hide()
+						}
+						a.showBelegabgleich()
 					},
 					a.window,
 				)
@@ -907,7 +917,7 @@ func (a *App) showBelegabgleich() {
 		content = container.NewVScroll(vbox)
 	}
 
-	dlg := dialog.NewCustom(
+	dlg = dialog.NewCustom(
 		a.bundle.T("reconcile.title"),
 		a.bundle.T("common.close"),
 		content,

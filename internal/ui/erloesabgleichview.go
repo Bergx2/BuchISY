@@ -365,6 +365,11 @@ func (a *App) showErloesAbgleich() {
 	// Refresh table before showing the dialog.
 	a.loadInvoices()
 
+	// dlg is declared here so the bulk-confirm closure can reference it to
+	// close and reopen the dialog after linking all ★ rows. It is assigned
+	// below after dialog.NewCustom returns.
+	var dlg dialog.Dialog
+
 	// ── Step 6: Build dialog content ──────────────────────────────────────────
 	var content fyne.CanvasObject
 
@@ -437,7 +442,12 @@ func (a *App) showErloesAbgleich() {
 							claimed[key] = true
 						}
 						a.loadInvoices()
-						bulkBtn.Disable()
+						// Rebuild the dialog so the now-linked ★ rows are gone from the
+						// suggestion list and no stale "Bestätigen" buttons remain visible.
+						if dlg != nil {
+							dlg.Hide()
+						}
+						a.showErloesAbgleich()
 					},
 					a.window,
 				)
@@ -760,7 +770,7 @@ func (a *App) showErloesAbgleich() {
 		content = container.NewVScroll(vbox)
 	}
 
-	dlg := dialog.NewCustom(
+	dlg = dialog.NewCustom(
 		a.bundle.T("erloesabgleich.title"),
 		a.bundle.T("common.close"),
 		content,
