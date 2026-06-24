@@ -400,5 +400,11 @@
   "exportpkg.menu": "Export GoBD/StB Package",
   "exportpkg.done": "Export package created: %d receipts attached out of %d rows.",
   "verfahrensdoku.menu": "Procedural Documentation (PDF)",
-  "reconcile.wholeYear": "whole year"
+  "reconcile.wholeYear": "whole year",
+  "reconcile.status": "%s: %d/%d statement lines matched · open %.2f €",
+  "reconcile.complete": "✓ fully reconciled",
+  "reconcile.openLines": "⚠ %d line(s) open",
+  "reconcile.endsaldo": "Closing balance: %.2f €",
+  "reconcile.openLinesHeading": "Open statement lines",
+  "reconcile.truncated": "… and %d more"
 }
