@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"html"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -66,15 +67,32 @@ func ParseLineIsCredit(text string) bool {
 	return false
 }
 
-// ParseStatementBookings scans every page of a bank-statement PDF and
-// returns transaction lines (lines whose visible text starts with
-// DD.MM.). Lines are numbered per page in document order, starting at
-// 1.
+// ParseStatementBookings scans a bank statement file and returns
+// transaction lines. For CAMT.053 XML and MT940 text files the
+// structured parsers are used; for all other formats (PDF) the
+// page-by-page MuPDF heuristic runs as before.
 //
 // The heuristic intentionally only checks the date prefix; "Kontostand
 // am 02.01.2026" rows (which carry a date in the middle) are correctly
 // skipped because they don't start with one.
 func ParseStatementBookings(path string) ([]StatementBooking, error) {
+	// E20.6: detect structured bank-statement formats before attempting PDF parse.
+	data, err := os.ReadFile(path)
+	if err == nil {
+		switch DetectBankFormat(data) {
+		case "camt":
+			return ParseCAMT053(data)
+		case "mt940":
+			return ParseMT940(data)
+		}
+	}
+	// Fall through to PDF parsing (go-fitz).
+	return parseStatementPDF(path)
+}
+
+// parseStatementPDF is the original PDF-only implementation, factored out
+// so the routing above can fall through cleanly.
+func parseStatementPDF(path string) ([]StatementBooking, error) {
 	doc, err := fitz.New(path)
 	if err != nil {
 		return nil, fmt.Errorf("open statement PDF: %w", err)

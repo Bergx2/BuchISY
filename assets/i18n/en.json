@@ -412,5 +412,13 @@
   "autorules.col.kategorie": "Category",
   "autorules.col.autobook": "Auto-Book",
   "autorules.warn": "⚠ Enabled rules book receipts WITHOUT review — only enable for suppliers that consistently deliver reliable data.",
-  "autobook.result": "%d auto-booked · %d for review"
+  "autobook.result": "%d auto-booked · %d for review",
+
+  "bankimport.detected": "Bank format detected: %s",
+
+  "missing.title": "Missing Receipts",
+  "missing.none": "All statement lines are linked to receipts.",
+  "missing.col.date": "Date",
+  "missing.col.amount": "Amount",
+  "missing.col.text": "Transaction text"
 }
