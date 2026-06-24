@@ -129,11 +129,12 @@ type previewHighlight struct {
 	fill        color.NRGBA
 	stroke      color.NRGBA
 	strokeWidth float32
+	fullWidth   bool // expand each rect to the full page width (frame the whole row)
 }
 
 var (
 	hlYellowFill = previewHighlight{fill: color.NRGBA{R: 255, G: 235, B: 0, A: 90}}
-	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 200, B: 0, A: 45}, stroke: color.NRGBA{R: 0, G: 160, B: 0, A: 255}, strokeWidth: 2}
+	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 210, B: 0, A: 55}, stroke: color.NRGBA{R: 0, G: 150, B: 0, A: 255}, strokeWidth: 3, fullWidth: true}
 )
 
 func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) (fyne.CanvasObject, *pdfPreviewStrip) {
@@ -149,6 +150,25 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 			return previewPlaceholder(mainPath, "PDF ohne Seiten"), nil
 		}
 		rectsPerPage, _ := core.HighlightRects(mainPath, highlightValues(meta), previewDPI)
+
+		// Frame the whole booking row (not just the matched value): widen each
+		// rect to the full page width and pad it vertically a touch.
+		if hl.fullWidth {
+			for pi := range rectsPerPage {
+				if pi >= len(images) {
+					continue
+				}
+				pw := float32(images[pi].Bounds().Dx())
+				margin := pw * 0.03
+				for j := range rectsPerPage[pi] {
+					pad := rectsPerPage[pi][j].H * 0.30
+					rectsPerPage[pi][j].X = margin
+					rectsPerPage[pi][j].W = pw - 2*margin
+					rectsPerPage[pi][j].Y -= pad
+					rectsPerPage[pi][j].H += 2 * pad
+				}
+			}
+		}
 
 		strip := newPdfPreviewStrip(images, rectsPerPage, hl)
 		scroll := container.NewScroll(strip)
