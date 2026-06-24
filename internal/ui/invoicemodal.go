@@ -700,11 +700,12 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// refreshWarnings and OnChanged chaining are installed after the currency
 	// OnChanged is fully wired below (near updateCurrencyConversionVisibility).
 
+	// #8: group the source badge, duplicate banner and live warnings into ONE
+	// calm info block at the top (each still shows/hides independently).
+	infoLine := container.NewVBox(quelleLabel, dupBanner, warningsLabel)
 	formItems := []fyne.CanvasObject{
 		widget.NewLabelWithStyle(belegnrText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		quelleLabel,
-		dupBanner,
-		warningsLabel,
+		infoLine,
 		newCopyableLabel(a.bundle, a.bundle.T("modal.originalFile")),
 		container.NewBorder(nil, nil, nil,
 			container.NewHBox(addAttBtn, openOriginalBtn), originalEntry),
