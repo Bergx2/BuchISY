@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"fyne.io/fyne/v2/dialog"
 
@@ -114,10 +116,15 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 		capturedMonat := monat
 		capturedFilePath := filePath
 		capturedData := data
+		undoDone := false // one-shot: the 8s toast can be tapped only once
 		a.showToastWithAction(
 			"✓ Rechnung gelöscht: "+row.Dateiname,
 			a.bundle.T("undo"),
 			func() {
+				if undoDone {
+					return
+				}
+				undoDone = true
 				a.undoDelete(capturedRow, capturedJahr, capturedMonat, capturedFilePath, capturedData)
 			},
 		)
@@ -151,8 +158,12 @@ func (a *App) undoDelete(row core.CSVRow, jahr, monat, filePath string, data []b
 	}
 	a.logger.Info("Undo: re-inserted invoice %s", row.Dateiname)
 
-	// Regenerate the CSV for this month.
-	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	// Regenerate the CSV for the month the invoice BELONGED to (captured at
+	// delete time) — the user may have navigated to another month during the
+	// 8-second undo window, so a.currentYear/Month would be wrong.
+	y, _ := strconv.Atoi(jahr)
+	m, _ := strconv.Atoi(monat)
+	csvPath := a.storageManager.GetCSVPath(y, time.Month(m))
 	if err := a.dbRepo.ExportToCSV(jahr, monat, csvPath, a.csvRepo); err != nil {
 		a.logger.Warn("Undo: Failed to export CSV: %v", err)
 	}
