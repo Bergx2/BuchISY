@@ -468,6 +468,10 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		hl := hlYellowFill
 		if statementPreviewPath != "" && path == statementPreviewPath {
 			hl = hlGreenFrame
+			// Frame ONLY the matched booking: search just its amount (unique on
+			// the statement), not the currency/partner that repeat on every line.
+			dot := fmt.Sprintf("%.2f", row.Bruttobetrag)
+			hl.values = []string{dot, strings.ReplaceAll(dot, ".", ",")}
 		}
 		content, strip := renderPreviewContent(path, meta, hl)
 		preview.Objects = []fyne.CanvasObject{content}

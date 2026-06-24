@@ -129,7 +129,8 @@ type previewHighlight struct {
 	fill        color.NRGBA
 	stroke      color.NRGBA
 	strokeWidth float32
-	fullWidth   bool // expand each rect to the full page width (frame the whole row)
+	fullWidth   bool     // expand each rect to the full page width (frame the whole row)
+	values      []string // when set, search ONLY these (instead of all meta values)
 }
 
 var (
@@ -149,7 +150,11 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 		if len(images) == 0 {
 			return previewPlaceholder(mainPath, "PDF ohne Seiten"), nil
 		}
-		rectsPerPage, _ := core.HighlightRects(mainPath, highlightValues(meta), previewDPI)
+		searchVals := highlightValues(meta)
+		if hl.values != nil {
+			searchVals = hl.values // statement: only the booking amount, so a single line is framed
+		}
+		rectsPerPage, _ := core.HighlightRects(mainPath, searchVals, previewDPI)
 
 		// Frame the whole booking row (not just the matched value): widen each
 		// rect to the full page width and pad it vertically a touch.
