@@ -99,16 +99,84 @@ func parseStatementPDF(path string) ([]StatementBooking, error) {
 	}
 	defer doc.Close()
 
-	var out []StatementBooking
+	// Collect per-page HTML for both Qonto detection and the existing heuristic.
+	pageHTMLs := make([]string, doc.NumPage())
 	for page := 0; page < doc.NumPage(); page++ {
 		htmlStr, err := doc.HTML(page, false)
 		if err != nil {
 			return nil, fmt.Errorf("extract page %d html: %w", page+1, err)
 		}
+		pageHTMLs[page] = htmlStr
+	}
+
+	// Build plain text from the run-extraction in bookingsFromPageHTML so we
+	// can detect Qonto statements without needing a separate doc.Text() method.
+	fullText := buildPlainTextFromHTML(pageHTMLs)
+
+	// Qonto detection: if the document carries Qonto's columnar layout markers,
+	// use the specialised parser instead of the generic heuristic.
+	if strings.Contains(fullText, "Qonto") && strings.Contains(fullText, "Abrechnungstag") {
+		bookings := parseQontoStatement(fullText)
+		if len(bookings) >= 1 {
+			return bookings, nil
+		}
+	}
+
+	// Fall through to the existing page-by-page HTML heuristic.
+	var out []StatementBooking
+	for page, htmlStr := range pageHTMLs {
 		pageBookings := bookingsFromPageHTML(htmlStr, page)
 		out = append(out, pageBookings...)
 	}
 	return out, nil
+}
+
+// buildPlainTextFromHTML converts a slice of MuPDF HTML pages into a single
+// plain-text string, one run per line, sorted by vertical then horizontal
+// position within each page. This reuses the same <p> extraction logic as
+// bookingsFromPageHTML so no additional PDF rendering is required.
+func buildPlainTextFromHTML(pageHTMLs []string) string {
+	var sb strings.Builder
+	for _, htmlStr := range pageHTMLs {
+		type rawLine struct {
+			top, left float64
+			text      string
+		}
+		var lines []rawLine
+		for _, chunk := range splitPTags(htmlStr) {
+			topMatch := pAttrTopRe.FindStringSubmatch(chunk)
+			leftMatch := pAttrLeftRe.FindStringSubmatch(chunk)
+			if topMatch == nil || leftMatch == nil {
+				continue
+			}
+			gt := strings.Index(chunk, ">")
+			end := strings.LastIndex(chunk, "</p>")
+			if gt < 0 || end < 0 || end <= gt {
+				continue
+			}
+			text := chunk[gt+1 : end]
+			text = tagStripRe.ReplaceAllString(text, "")
+			text = html.UnescapeString(text)
+			text = strings.TrimSpace(text)
+			if text == "" {
+				continue
+			}
+			top, _ := strconv.ParseFloat(topMatch[1], 64)
+			left, _ := strconv.ParseFloat(leftMatch[1], 64)
+			lines = append(lines, rawLine{top: top, left: left, text: text})
+		}
+		sort.Slice(lines, func(i, j int) bool {
+			if lines[i].top != lines[j].top {
+				return lines[i].top < lines[j].top
+			}
+			return lines[i].left < lines[j].left
+		})
+		for _, ln := range lines {
+			sb.WriteString(ln.text)
+			sb.WriteByte('\n')
+		}
+	}
+	return sb.String()
 }
 
 // bookingsFromPageHTML extracts numbered transaction lines from a
