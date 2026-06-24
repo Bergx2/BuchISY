@@ -51,6 +51,16 @@ FOR EACH ROW
 BEGIN
 	UPDATE invoices SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+
+CREATE TABLE IF NOT EXISTS audit_log (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+	aktion TEXT NOT NULL,
+	entitaet TEXT,
+	schluessel TEXT,
+	details TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
 `
 
 // CurrentSchemaVersion is the current database schema version.
