@@ -406,5 +406,7 @@
   "reconcile.openLines": "⚠ %d Zeile(n) offen",
   "reconcile.endsaldo": "Endsaldo: %.2f €",
   "reconcile.openLinesHeading": "Offene Auszugszeilen",
-  "reconcile.truncated": "… und %d weitere"
+  "reconcile.truncated": "… und %d weitere",
+  "reconcile.linked": "Bereits zugeordnet",
+  "reconcile.unlink": "Zuordnung aufheben"
 }

@@ -406,5 +406,7 @@
   "reconcile.openLines": "⚠ %d line(s) open",
   "reconcile.endsaldo": "Closing balance: %.2f €",
   "reconcile.openLinesHeading": "Open statement lines",
-  "reconcile.truncated": "… and %d more"
+  "reconcile.truncated": "… and %d more",
+  "reconcile.linked": "Already linked",
+  "reconcile.unlink": "Unlink"
 }

@@ -670,6 +670,76 @@ func (a *App) showBelegabgleich() {
 	// below after dialog.NewCustom returns.
 	var dlg dialog.Dialog
 
+	// buildLinkedBlock produces the "Bereits zugeordnet" section: all year rows
+	// that are already linked to a bank/credit-card statement line, capped at 30.
+	// Each entry has a "Zuordnung aufheben" button that clears BuchungRef and
+	// rebuilds the dialog using the same dlg.Hide() + a.showBelegabgleich() pattern
+	// as the bulk-confirm button.
+	buildLinkedBlock := func() fyne.CanvasObject {
+		var linkedRows []core.CSVRow
+		for _, row := range rows {
+			if row.BuchungRef == "" || row.BuchungRef == core.CashConfirmedRef {
+				continue
+			}
+			at := accountType(row.Bankkonto)
+			if at != core.AccountTypeBank && at != core.AccountTypeCreditCard {
+				continue
+			}
+			linkedRows = append(linkedRows, row)
+		}
+		if len(linkedRows) == 0 {
+			return nil
+		}
+
+		heading := widget.NewLabel(a.bundle.T("reconcile.linked"))
+		heading.TextStyle = fyne.TextStyle{Bold: true}
+		vb := container.NewVBox(heading)
+
+		const maxLinked = 30
+		shown := linkedRows
+		truncated := 0
+		if len(shown) > maxLinked {
+			truncated = len(shown) - maxLinked
+			shown = shown[:maxLinked]
+		}
+
+		for _, lr := range shown {
+			// Capture loop variable for closure safety.
+			linkRow := lr
+
+			bruttoStr := strings.Replace(fmt.Sprintf("%.2f", linkRow.Bruttobetrag), ".", ",", 1)
+			lineDisplay := core.ParseBuchungRef(linkRow.BuchungRef).Display()
+			rowLabel := fmt.Sprintf("%s · %s · %s € · %s",
+				linkRow.Belegnummer,
+				linkRow.Auftraggeber,
+				bruttoStr,
+				lineDisplay,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			unlinkBtn := widget.NewButton(a.bundle.T("reconcile.unlink"), nil)
+			unlinkBtn.OnTapped = func() {
+				linkRow.BuchungRef = ""
+				if err := a.dbRepo.Update(linkRow.Jahr, linkRow.Monat, linkRow.Dateiname, linkRow); err != nil {
+					a.logger.Warn("Belegabgleich unlink Update %s: %v", linkRow.Dateiname, err)
+				}
+				a.loadInvoices()
+				if dlg != nil {
+					dlg.Hide()
+				}
+				a.showBelegabgleich()
+			}
+
+			vb.Add(container.NewBorder(nil, nil, nil, unlinkBtn, lbl))
+		}
+
+		if truncated > 0 {
+			vb.Add(widget.NewLabel(fmt.Sprintf(a.bundle.T("reconcile.truncated"), truncated)))
+		}
+		return vb
+	}
+
 	// Build dialog content.
 	var content fyne.CanvasObject
 
@@ -677,6 +747,9 @@ func (a *App) showBelegabgleich() {
 		vbox := container.NewVBox(widget.NewLabel(a.bundle.T("reconcile.none")))
 		if statusBlock := buildReconcileStatusBlock(); statusBlock != nil {
 			vbox.Add(statusBlock)
+		}
+		if linkedBlock := buildLinkedBlock(); linkedBlock != nil {
+			vbox.Add(linkedBlock)
 		}
 		if cashBox != nil {
 			heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
@@ -1044,6 +1117,11 @@ func (a *App) showBelegabgleich() {
 		// ── Reconciliation status block ───────────────────────────────────────
 		if statusBlock := buildReconcileStatusBlock(); statusBlock != nil {
 			vbox.Add(statusBlock)
+		}
+
+		// ── Already-linked rows (unlink affordance) ───────────────────────────
+		if linkedBlock := buildLinkedBlock(); linkedBlock != nil {
+			vbox.Add(linkedBlock)
 		}
 
 		if cashBox != nil {
