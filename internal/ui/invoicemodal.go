@@ -648,7 +648,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 
 	swapPreview := func(path string) {
 		currentPreviewPath = path
-		content, strip := renderPreviewContent(path, meta)
+		content, strip := renderPreviewContent(path, meta, hlYellowFill)
 		preview.Objects = []fyne.CanvasObject{content}
 		preview.Refresh()
 		previewStrip = strip

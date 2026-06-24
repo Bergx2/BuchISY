@@ -55,7 +55,7 @@ var imagePreviewExtensions = map[string]struct{}{
 // sees the standard concrete type — a previous custom-struct wrapper
 // embedding *fyne.Container appears to have confused some renderers.
 func buildDocumentPreview(mainPath string, meta core.Meta) (*fyne.Container, *pdfPreviewStrip) {
-	content, strip := renderPreviewContent(mainPath, meta)
+	content, strip := renderPreviewContent(mainPath, meta, hlYellowFill)
 	return container.NewStack(content), strip
 }
 
@@ -122,7 +122,21 @@ func buildPreviewToolbar(strip *pdfPreviewStrip) fyne.CanvasObject {
 }
 
 // renderPreviewContent builds the preview content and, for PDFs, the strip.
-func renderPreviewContent(mainPath string, meta core.Meta) (fyne.CanvasObject, *pdfPreviewStrip) {
+// previewHighlight styles the rectangles drawn over matched values in the
+// preview. The default is a soft yellow fill (receipts); a green frame is used
+// for a linked bank statement so the matched booking stands out.
+type previewHighlight struct {
+	fill        color.NRGBA
+	stroke      color.NRGBA
+	strokeWidth float32
+}
+
+var (
+	hlYellowFill = previewHighlight{fill: color.NRGBA{R: 255, G: 235, B: 0, A: 90}}
+	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 200, B: 0, A: 45}, stroke: color.NRGBA{R: 0, G: 160, B: 0, A: 255}, strokeWidth: 2}
+)
+
+func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) (fyne.CanvasObject, *pdfPreviewStrip) {
 	if core.IsPDF(mainPath) {
 		if !core.FileExists(mainPath) {
 			return previewPlaceholder(mainPath, "PDF nicht gefunden:\n"+mainPath), nil
@@ -136,7 +150,7 @@ func renderPreviewContent(mainPath string, meta core.Meta) (fyne.CanvasObject, *
 		}
 		rectsPerPage, _ := core.HighlightRects(mainPath, highlightValues(meta), previewDPI)
 
-		strip := newPdfPreviewStrip(images, rectsPerPage)
+		strip := newPdfPreviewStrip(images, rectsPerPage, hl)
 		scroll := container.NewScroll(strip)
 		strip.scroll = scroll
 		strip.onWidthChange = scroll.Refresh
@@ -246,7 +260,7 @@ func (s *pdfPreviewStrip) scrollToPage(idx int) {
 	s.scroll.ScrollToOffset(fyne.NewPos(0, s.pageOffsets[idx]))
 }
 
-func newPdfPreviewStrip(images []image.Image, rectsPerPage [][]core.Rect) *pdfPreviewStrip {
+func newPdfPreviewStrip(images []image.Image, rectsPerPage [][]core.Rect, hl previewHighlight) *pdfPreviewStrip {
 	s := &pdfPreviewStrip{zoom: 1.0}
 	for i, img := range images {
 		ci := canvas.NewImageFromImage(img)
@@ -264,7 +278,12 @@ func newPdfPreviewStrip(images []image.Image, rectsPerPage [][]core.Rect) *pdfPr
 
 		objs := make([]*canvas.Rectangle, len(rcs))
 		for j := range rcs {
-			objs[j] = canvas.NewRectangle(color.NRGBA{R: 255, G: 235, B: 0, A: 90})
+			r := canvas.NewRectangle(hl.fill)
+			if hl.strokeWidth > 0 {
+				r.StrokeColor = hl.stroke
+				r.StrokeWidth = hl.strokeWidth
+			}
+			objs[j] = r
 		}
 		s.rectObjs = append(s.rectObjs, objs)
 	}

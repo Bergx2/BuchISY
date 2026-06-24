@@ -463,7 +463,13 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	swapPreview := func(path string) {
 		currentPreviewPath = path
-		content, strip := renderPreviewContent(path, meta)
+		// Green frame around the matched booking when showing the linked
+		// statement; soft yellow fill for the receipt/attachments.
+		hl := hlYellowFill
+		if statementPreviewPath != "" && path == statementPreviewPath {
+			hl = hlGreenFrame
+		}
+		content, strip := renderPreviewContent(path, meta, hl)
 		preview.Objects = []fyne.CanvasObject{content}
 		preview.Refresh()
 		previewStrip = strip
