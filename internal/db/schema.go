@@ -61,6 +61,13 @@ CREATE TABLE IF NOT EXISTS audit_log (
 	details TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
+
+CREATE TABLE IF NOT EXISTS period_locks (
+	jahr TEXT NOT NULL,
+	monat TEXT NOT NULL,
+	locked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(jahr, monat)
+);
 `
 
 // CurrentSchemaVersion is the current database schema version.
