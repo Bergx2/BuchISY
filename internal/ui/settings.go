@@ -352,8 +352,10 @@ func (a *App) showSettingsView() {
 				typeSelect.SetSelected("Bank")
 			}
 
-			// SKR04 account picker for this payment account row.
+			// SKR04 account picker for this payment account row. Wrap instead of
+			// truncating so the full "Nr — Name" (or the placeholder) is readable.
 			skr04Display := widget.NewLabel(paymentSKR04Label(a, tempBankAccounts[currentIdx].SKR04Konto))
+			skr04Display.Wrapping = fyne.TextWrapWord
 			skr04Btn := widget.NewButton(a.bundle.T("settings.payment.skr04"), func() {
 				a.showAccountSearch(tempBankAccounts[currentIdx].SKR04Konto, func(n int) {
 					tempBankAccounts[currentIdx].SKR04Konto = n
