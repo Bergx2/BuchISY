@@ -1,14 +1,11 @@
 {
   "app.title": "BuchISY",
   "app.about": "BuchISY — © Bergx2 GmbH",
-
   "menu.openTarget": "Zielordner öffnen",
   "menu.settings": "Einstellungen",
-
   "dd.area": "Datei hier ablegen oder auswählen …",
   "dd.upload": "Beleg hochladen",
   "select.pdf": "Datei auswählen …",
-
   "table.filter.placeholder": "Filtern …",
   "table.col.date": "Rechnungsdatum",
   "table.col.year": "Jahr",
@@ -51,12 +48,10 @@
   "table.delete.confirm.message": "Möchten Sie diese Rechnung wirklich löschen?\n\nDatei: %s\nFirma: %s\nBetrag: %.2f %s\n\nDies löscht sowohl die PDF-Datei als auch den CSV-Eintrag.",
   "table.unlink": "Verknüpfung entfernen",
   "table.unlinkConfirm": "Verknüpfung zu dieser Auszugsposition entfernen?",
-
   "modal.title": "Rechnungsdaten prüfen",
   "modal.originalFile": "Originaldatei",
   "modal.filenamePreview": "Dateiname-Vorschau",
   "modal.openOriginal": "Original öffnen",
-
   "field.company": "Auftraggeber",
   "field.shortdesc": "Verwendungszweck (max. 80 Zeichen)",
   "field.invoicenumber": "Rechnungsnummer",
@@ -84,9 +79,7 @@
   "field.attachments.none": "Keine Anhänge",
   "field.attachments.count.one": "%d Datei ausgewählt",
   "field.attachments.count.multiple": "%d Dateien ausgewählt",
-
   "checkbox.rememberMap": "Diese Zuordnung (Firma→Konto) merken",
-
   "btn.save": "Speichern",
   "btn.skip": "Überspringen",
   "btn.cancel": "Abbrechen",
@@ -96,9 +89,7 @@
   "btn.addAttachments": "Anhänge hinzufügen …",
   "btn.openPDF": "PDF öffnen",
   "btn.openAttachments": "Anhänge öffnen",
-
   "label.fileActions": "Dateiaktionen",
-
   "error.noText": "Kein Text erkennbar. OCR wird derzeit nicht unterstützt.",
   "error.needApiKey": "Claude API-Schlüssel fehlt. Bitte in den Einstellungen konfigurieren.",
   "error.apiError": "Fehler bei der API-Anfrage",
@@ -109,7 +100,6 @@
   "error.processing.message": "Fehler beim Verarbeiten der PDF: %s",
   "error.openOriginal": "Originaldatei konnte nicht geöffnet werden: %s",
   "error.openFile": "Datei konnte nicht geöffnet werden: %s",
-
   "processing.title": "Verarbeite PDF",
   "processing.message": "Bitte warten ...",
   "processing.batch.title": "Verarbeite PDFs",
@@ -119,7 +109,6 @@
   "processing.complete.success": "%d Dateien erfolgreich verarbeitet",
   "processing.saved.title": "Rechnung gespeichert",
   "processing.saved.message": "Rechnung wurde gespeichert und ist jetzt in der Tabelle sichtbar.",
-
   "settings.title": "Einstellungen",
   "settings.saved": "Einstellungen gespeichert.",
   "settings.storage": "Ablage",
@@ -129,18 +118,15 @@
   "settings.templateHelp": "Verfügbare Tokens: ${YYYY}, ${MM}, ${DD}, ${Company}, ${Kurzbez8}, ${InvoiceNumber}, ${GrossAmount}, ${Currency}, usw.",
   "settings.decimal": "Dezimaltrennzeichen",
   "settings.currencyDefault": "Standardwährung",
-
   "settings.csv": "CSV-Format",
   "settings.csvSeparator": "CSV-Trennzeichen",
   "settings.csvEncoding": "CSV-Zeichenkodierung",
-
   "settings.processing": "Verarbeitung",
   "settings.mode.label": "Verarbeitungsmodus",
   "settings.mode.claude": "Claude API",
   "settings.mode.local": "Lokal (heuristisch)",
   "settings.model": "Modell",
   "settings.apiKey": "Claude API-Schlüssel",
-
   "settings.accounts": "Konten",
   "settings.defaultAccount": "Standard-Gegenkonto",
   "settings.accountCode": "Code",
@@ -148,36 +134,30 @@
   "settings.accountsNote": "Zuordnungen Firma→Konto werden automatisch gemerkt.",
   "settings.rememberCompanyAccount": "Firma→Konto-Zuordnungen merken",
   "settings.autoSelectAccount": "Gemerktes Konto automatisch vorauswählen",
-
   "settings.language": "Sprache",
   "settings.language.de": "Deutsch",
   "settings.language.en": "Englisch",
-
   "settings.columns": "Spalten",
   "settings.columns.title": "Spaltenreihenfolge (CSV & Tabelle)",
   "settings.columns.hint": "Sortieren Sie die Spalten nach Wunsch. Diese Reihenfolge gilt für CSV-Export und Tabellenanzeige.",
   "settings.columns.moveUp": "↑",
   "settings.columns.moveDown": "↓",
   "settings.columns.rewriteError": "Spalten konnten nicht neu angeordnet werden: %s",
-
   "settings.debug": "Erweitert",
   "settings.debugMode": "Debug-Modus (ausführliches Logging)",
   "settings.debugMode.hint": "Aktiviert detaillierte Logs inkl. API-Kommunikation. Nützlich für Fehlersuche.",
-
   "settings.database": "Datenbank",
   "settings.wipeDatabase": "Datenbank löschen",
   "settings.wipeDatabase.hint": "⚠️ ACHTUNG: Löscht ALLE Rechnungsdaten aus der Datenbank! CSV-Dateien bleiben erhalten.",
   "settings.wipeDatabase.confirm.title": "Datenbank wirklich löschen?",
   "settings.wipeDatabase.confirm.message": "⚠️ WARNUNG: Diese Aktion löscht ALLE Rechnungen aus der Datenbank!\n\nDie PDF-Dateien und CSV-Dateien bleiben auf der Festplatte erhalten, aber alle Datenbankeinträge gehen verloren.\n\nMöchten Sie wirklich fortfahren?",
   "settings.wipeDatabase.success": "Datenbank wurde geleert. Alle Rechnungsdaten wurden gelöscht.",
-
   "settings.skr04.import": "SKR04 importieren…",
   "settings.skr04.section": "SKR04 Kontenrahmen",
   "settings.skr04.readError": "Datei konnte nicht gelesen werden: %v",
   "settings.skr04.parseError": "SKR04-Datei konnte nicht verarbeitet werden: %v",
   "settings.skr04.saveError": "SKR04 konnte nicht gespeichert werden: %v",
   "settings.skr04.imported": "%d Konten importiert",
-
   "picker.account.search": "Konto suchen…",
   "picker.account.title": "Konto auswählen",
   "picker.account.choose": "Konto wählen…",
@@ -188,7 +168,6 @@
   "settings.restoreDefaults": "Standardwerte wiederherstellen",
   "settings.payment.skr04": "SKR04-Konto…",
   "settings.payment.skr04.none": "— (Standard nach Typ)",
-
   "month.01": "Januar",
   "month.02": "Februar",
   "month.03": "März",
@@ -201,7 +180,6 @@
   "month.10": "Oktober",
   "month.11": "November",
   "month.12": "Dezember",
-
   "booking.editor.title": "Buchung manuell bearbeiten",
   "booking.editor.add": "+ Zeile",
   "booking.editor.diff": "Differenz: %s €",
@@ -217,7 +195,6 @@
   "booking.auto": "Automatisch",
   "booking.manual.adjust": "Manuell anpassen…",
   "booking.manual.hint": "Manuell bearbeitete Buchung",
-
   "export.bookings": "Buchungen exportieren",
   "export.month": "Aktuellen Monat",
   "export.year": "Ganzes Jahr",
@@ -228,15 +205,12 @@
   "export.preview": "%d buchbar, %d bereits exportiert, %d übersprungen.",
   "export.includeExported": "Auch bereits exportierte einbeziehen",
   "export.done": "%d Buchungszeilen exportiert.",
-
   "undo": "Rückgängig",
   "undo.done": "Löschen rückgängig gemacht",
-
   "settings.datev.berater": "DATEV Berater-Nr.",
   "settings.datev.mandant": "DATEV Mandanten-Nr.",
   "settings.datev.wj": "Wirtschaftsjahr-Beginn (TTMMJJJJ)",
   "settings.datev.hint": "Optional — leer lassen, falls noch nicht bekannt.",
-
   "settings.rules.section": "Buchungsregeln",
   "settings.rules.pick": "Konto…",
   "settings.rules.vst19": "Vorsteuer 19 %",
@@ -250,17 +224,14 @@
   "settings.rules.geschnicht": "Geschenke nicht abziehbar",
   "settings.rules.reise": "Reisekosten-Konto",
   "settings.rules.kfz": "Kfz-Konto",
-
   "report.pdf": "PDF",
   "report.xml": "XML",
-
   "controlling.title": "Controlling",
   "controlling.heading": "Gebuchte Summen je Konto",
   "controlling.total": "Summe: %s €",
   "controlling.einnahmen": "Einnahmen",
   "controlling.ausgaben": "Ausgaben",
   "controlling.saldo": "Saldo: %s €",
-
   "ustva.title": "USt-Voranmeldung",
   "ustva.heading": "Umsatzsteuer-Voranmeldung",
   "ustva.vorsteuer": "Vorsteuer",
@@ -283,13 +254,10 @@
   "ustva.sectionE": "E. Nicht steuerbare Umsätze",
   "ustva.sectionD": "D. § 13b (Reverse Charge)",
   "ustva.sectionF": "F. Vorsteuer",
-
   "backup.title": "Backup",
   "backup.done": "Backup erstellt (%d Dateien).",
-
   "warnings.title": "Plausibilitätswarnungen",
   "warnings.intro": "Bitte prüfen — trotzdem speichern?",
-
   "reconcile.title": "Belegabgleich",
   "reconcile.summary": "Bitte jede Zuordnung bestätigen — %d Vorschlag/Vorschläge.",
   "reconcile.confirm": "Bestätigen",
@@ -301,7 +269,6 @@
   "reconcile.group": "%d Belege",
   "reconcile.linkAll": "Alle verknüpfen",
   "reconcile.partial": "Teilzahlung",
-
   "status.cashCovered": "Bar gedeckt",
   "status.cashUncovered": "Bar nicht gedeckt",
   "status.cashConfirmed": "Barkasse bestätigt",
@@ -310,7 +277,6 @@
   "status.partial": "Teilzahlung",
   "status.outgoing": "Ausgangsrechnung",
   "status.attachment": "Hat Anhänge",
-
   "legend.title": "Symbollegende",
   "legend.linked": "Abgeglichen (Kontoauszug verknüpft)",
   "legend.cashConfirmed": "Barkasse bestätigt",
@@ -320,44 +286,35 @@
   "legend.partial": "Teilzahlung",
   "legend.outgoing": "Ausgangsrechnung",
   "legend.attachment": "Hat Anhänge",
-
   "settings.matchWindow": "Abgleich: Datumsfenster (Tage)",
   "settings.matchTolerance": "Abgleich: Fremdwährungs-Toleranz (%)",
-
   "reconcile.lineTaken": "Auszugsposition bereits verknüpft",
   "reconcile.cashConfirm": "Bestätigen",
   "reconcile.cashCoveredHint": "✓ gedeckt",
   "reconcile.cashUncoveredHint": "⚠ nicht gedeckt",
   "reconcile.confirmAllStar": "Alle eindeutigen (★) bestätigen — %d",
   "reconcile.confirmAllAsk": "%d Belege jetzt verknüpfen?",
-
   "modal.erloeskonto": "Erlöskonto",
-
   "zm.title": "Zusammenfassende Meldung",
   "zm.heading": "Zusammenfassende Meldung",
   "zm.kontrollsumme": "Kontrollsumme: %s €",
   "zm.art.sonstige": "Sonstige Leistung",
   "zm.quarter": "Quartal",
   "zm.empty": "Keine EU-Umsätze im Zeitraum",
-
   "erloesabgleich.title": "Erlös-Abgleich",
   "erloesabgleich.heading": "Ausgangsrechnungen ↔ Gutschriften",
   "erloesabgleich.autolinked": "%d automatisch verknüpft",
   "erloesabgleich.summary": "Bitte jede Zuordnung bestätigen — %d Vorschlag/Vorschläge.",
   "erloesabgleich.none": "Keine offenen Ausgangsrechnungen mit passender Gutschrift",
   "erloesabgleich.confirm": "Verknüpfen",
-
   "hint.no_api_key": "Kein Claude-API-Key hinterlegt — in den Einstellungen ergänzen, um KI-Extraktion zu nutzen.",
   "hint.no_storage": "Kein Speicherpfad gesetzt — in den Einstellungen wählen, wo Belege abgelegt werden.",
   "hint.dismiss": "Ausblenden",
-
   "empty.title": "Noch keine Belege in diesem Monat",
   "empty.hint": "PDFs hierher ziehen oder einen Beleg hinzufügen",
   "empty.add": "Beleg hinzufügen",
-
   "search.results": "%d Treffer",
   "search.none": "Keine Treffer",
-
   "overview.title": "Übersicht %d",
   "overview.col.month": "Monat",
   "overview.col.count": "Anzahl",
@@ -366,7 +323,6 @@
   "overview.col.warnings": "#Warn.",
   "overview.total": "Gesamt",
   "overview.close": "Schließen",
-
   "audit.title": "Änderungsprotokoll",
   "audit.col.time": "Zeit",
   "audit.col.action": "Aktion",
@@ -377,7 +333,6 @@
   "audit.delete": "Gelöscht",
   "audit.lock": "Gesperrt",
   "audit.unlock": "Entsperrt",
-
   "period.lock": "Monat abschließen",
   "period.unlock": "Monat öffnen",
   "period.lockConfirm": "Monat %04d/%02d abschließen?\n\nDanach können keine Belege mehr bearbeitet oder gelöscht werden (GoBD-Festschreibung). Zum Aufheben: »Monat öffnen«.",
@@ -385,7 +340,6 @@
   "period.locked.indicator": "🔒 Periode festgeschrieben",
   "period.locked.title": "Periode festgeschrieben",
   "period.locked.msg": "Dieser Monat ist abgeschlossen. Bearbeiten und Löschen sind gesperrt.\n\nZum Ändern: »Monat öffnen« im Menü (⋮).",
-
   "opos.title": "Offene Posten %d",
   "opos.debitoren": "Debitoren (Forderungen)",
   "opos.kreditoren": "Kreditoren (Verbindlichkeiten)",
@@ -407,7 +361,6 @@
   "guv.erloese": "Erlöse",
   "guv.aufwand": "Aufwand",
   "guv.ergebnis": "Ergebnis",
-
   "autorules.title": "Auto-Buchungs-Regeln",
   "autorules.col.supplier": "Lieferant",
   "autorules.col.konto": "Konto",
@@ -415,15 +368,12 @@
   "autorules.col.autobook": "Auto-Buchen",
   "autorules.warn": "⚠ Aktivierte Regeln buchen Belege OHNE Prüfung — nur aktivieren, wenn der Lieferant verlässlich bekannte Daten liefert.",
   "autobook.result": "%d automatisch gebucht · %d zur Prüfung",
-
   "bankimport.detected": "Bank-Format erkannt: %s",
-
   "missing.title": "Fehlende Belege",
   "missing.none": "Alle Kontoauszugspositionen sind mit Belegen verknüpft.",
   "missing.col.date": "Datum",
   "missing.col.amount": "Betrag",
   "missing.col.text": "Buchungstext",
-
   "anlagen.title": "Anlagen / AfA",
   "anlagen.col.bezeichnung": "Bezeichnung",
   "anlagen.col.anschaffung": "Anschaffung",
@@ -447,9 +397,8 @@
   "anlagen.form.err.bezeichnung": "Bitte eine Bezeichnung eingeben.",
   "anlagen.form.err.wert": "Bitte einen gültigen Anschaffungswert eingeben.",
   "anlagen.form.err.nd": "Bitte eine gültige Nutzungsdauer eingeben.",
-
   "exportpkg.menu": "GoBD-/StB-Paket exportieren",
   "exportpkg.done": "Exportpaket erstellt: %d Belege von %d Zeilen beigelegt.",
-
-  "verfahrensdoku.menu": "Verfahrensdokumentation (PDF)"
+  "verfahrensdoku.menu": "Verfahrensdokumentation (PDF)",
+  "reconcile.wholeYear": "ganzes Jahr"
 }

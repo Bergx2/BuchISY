@@ -81,14 +81,13 @@ func (a *App) matchConfig() core.MatchConfig {
 	return cfg
 }
 
-// showBelegabgleich runs the reconciliation for the current month:
-// auto-links unambiguous matches and presents the rest as a confirm-list.
+// showBelegabgleich runs the reconciliation for the WHOLE current year:
+// it presents every unlinked bank/credit-card receipt of the year as a
+// confirm-list against that account's statement lines (which already span all
+// months in the account folder). The ±date-window in the matcher keeps a
+// receipt from matching a same-amount line in a different month.
 func (a *App) showBelegabgleich() {
-	rows, err := a.dbRepo.List(fmt.Sprintf("%04d", a.currentYear), fmt.Sprintf("%02d", int(a.currentMonth)))
-	if err != nil {
-		a.showError("Belegabgleich", err.Error())
-		return
-	}
+	rows := a.collectInvoiceRows(a.currentYear, 1, a.currentYear, 12)
 
 	accountType := func(name string) string {
 		for _, ba := range a.settings.BankAccounts {
@@ -930,7 +929,7 @@ func (a *App) showBelegabgleich() {
 	}
 
 	dlg = dialog.NewCustom(
-		a.bundle.T("reconcile.title"),
+		fmt.Sprintf("%s — %d (%s)", a.bundle.T("reconcile.title"), a.currentYear, a.bundle.T("reconcile.wholeYear")),
 		a.bundle.T("common.close"),
 		content,
 		a.window,

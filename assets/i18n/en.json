@@ -1,14 +1,11 @@
 {
   "app.title": "BuchISY",
   "app.about": "BuchISY — © Bergx2 GmbH",
-
   "menu.openTarget": "Open Target Folder",
   "menu.settings": "Settings",
-
   "dd.area": "Drop file here or select …",
   "dd.upload": "Upload receipt",
   "select.pdf": "Select File …",
-
   "table.filter.placeholder": "Filter …",
   "table.col.date": "Invoice Date",
   "table.col.year": "Year",
@@ -51,12 +48,10 @@
   "table.delete.confirm.message": "Do you really want to delete this invoice?\n\nFile: %s\nCompany: %s\nAmount: %.2f %s\n\nThis will delete both the PDF file and the CSV entry.",
   "table.unlink": "Remove link",
   "table.unlinkConfirm": "Remove the link to this statement line?",
-
   "modal.title": "Review Invoice Data",
   "modal.originalFile": "Original File",
   "modal.filenamePreview": "Filename Preview",
   "modal.openOriginal": "Open Original",
-
   "field.company": "Client",
   "field.shortdesc": "Purpose (max. 80 chars)",
   "field.invoicenumber": "Invoice Number",
@@ -84,9 +79,7 @@
   "field.attachments.none": "No attachments",
   "field.attachments.count.one": "%d file selected",
   "field.attachments.count.multiple": "%d files selected",
-
   "checkbox.rememberMap": "Remember this mapping (Company→Account)",
-
   "btn.save": "Save",
   "btn.skip": "Skip",
   "btn.cancel": "Cancel",
@@ -96,9 +89,7 @@
   "btn.addAttachments": "Add Attachments …",
   "btn.openPDF": "Open PDF",
   "btn.openAttachments": "Open Attachments",
-
   "label.fileActions": "File Actions",
-
   "error.noText": "No text detected. OCR is not currently supported.",
   "error.needApiKey": "Claude API key missing. Please configure in settings.",
   "error.apiError": "API request error",
@@ -109,7 +100,6 @@
   "error.processing.message": "Error processing PDF: %s",
   "error.openOriginal": "Could not open original file: %s",
   "error.openFile": "Could not open file: %s",
-
   "processing.title": "Processing PDF",
   "processing.message": "Please wait ...",
   "processing.batch.title": "Processing PDFs",
@@ -119,7 +109,6 @@
   "processing.complete.success": "%d files processed successfully",
   "processing.saved.title": "Invoice Saved",
   "processing.saved.message": "Invoice has been saved and is now visible in the table.",
-
   "settings.title": "Settings",
   "settings.saved": "Settings saved.",
   "settings.storage": "Storage",
@@ -129,18 +118,15 @@
   "settings.templateHelp": "Available tokens: ${YYYY}, ${MM}, ${DD}, ${Company}, ${Kurzbez8}, ${InvoiceNumber}, ${GrossAmount}, ${Currency}, etc.",
   "settings.decimal": "Decimal Separator",
   "settings.currencyDefault": "Default Currency",
-
   "settings.csv": "CSV Format",
   "settings.csvSeparator": "CSV Separator",
   "settings.csvEncoding": "CSV Encoding",
-
   "settings.processing": "Processing",
   "settings.mode.label": "Processing Mode",
   "settings.mode.claude": "Claude API",
   "settings.mode.local": "Local (heuristics)",
   "settings.model": "Model",
   "settings.apiKey": "Claude API Key",
-
   "settings.accounts": "Accounts",
   "settings.defaultAccount": "Default Account",
   "settings.accountCode": "Code",
@@ -148,36 +134,30 @@
   "settings.accountsNote": "Company→Account mappings are automatically remembered.",
   "settings.rememberCompanyAccount": "Remember Company→Account mappings",
   "settings.autoSelectAccount": "Auto-select remembered account",
-
   "settings.language": "Language",
   "settings.language.de": "German",
   "settings.language.en": "English",
-
   "settings.columns": "Columns",
   "settings.columns.title": "Column Order (CSV & Table)",
   "settings.columns.hint": "Arrange columns as desired. This order applies to CSV export and table display.",
   "settings.columns.moveUp": "↑",
   "settings.columns.moveDown": "↓",
   "settings.columns.rewriteError": "Failed to reorder CSV columns: %s",
-
   "settings.debug": "Advanced",
   "settings.debugMode": "Debug Mode (verbose logging)",
   "settings.debugMode.hint": "Enables detailed logs including API communication. Useful for troubleshooting.",
-
   "settings.database": "Database",
   "settings.wipeDatabase": "Wipe Database",
   "settings.wipeDatabase.hint": "⚠️ WARNING: Deletes ALL invoice data from the database! CSV files will remain.",
   "settings.wipeDatabase.confirm.title": "Really wipe database?",
   "settings.wipeDatabase.confirm.message": "⚠️ WARNING: This action will delete ALL invoices from the database!\n\nPDF files and CSV files will remain on disk, but all database entries will be lost.\n\nDo you really want to proceed?",
   "settings.wipeDatabase.success": "Database has been wiped. All invoice data has been deleted.",
-
   "settings.skr04.import": "Import SKR04…",
   "settings.skr04.section": "SKR04 chart of accounts",
   "settings.skr04.readError": "Could not read file: %v",
   "settings.skr04.parseError": "Could not parse file: %v",
   "settings.skr04.saveError": "Could not save SKR04: %v",
   "settings.skr04.imported": "%d accounts imported",
-
   "picker.account.search": "Search account…",
   "picker.account.title": "Select account",
   "picker.account.choose": "Choose account…",
@@ -188,7 +168,6 @@
   "settings.restoreDefaults": "Restore Defaults",
   "settings.payment.skr04": "SKR04 account…",
   "settings.payment.skr04.none": "— (default by type)",
-
   "month.01": "January",
   "month.02": "February",
   "month.03": "March",
@@ -201,7 +180,6 @@
   "month.10": "October",
   "month.11": "November",
   "month.12": "December",
-
   "booking.editor.title": "Edit booking manually",
   "booking.editor.add": "+ Line",
   "booking.editor.diff": "Difference: %s €",
@@ -217,7 +195,6 @@
   "booking.auto": "Automatic",
   "booking.manual.adjust": "Adjust manually…",
   "booking.manual.hint": "Manually edited booking",
-
   "export.bookings": "Export bookings",
   "export.month": "Current month",
   "export.year": "Whole year",
@@ -228,15 +205,12 @@
   "export.preview": "%d bookable, %d already exported, %d skipped.",
   "export.includeExported": "Include already exported",
   "export.done": "%d booking rows exported.",
-
   "undo": "Undo",
   "undo.done": "Deletion undone",
-
   "settings.datev.berater": "DATEV Berater-Nr.",
   "settings.datev.mandant": "DATEV Mandanten-Nr.",
   "settings.datev.wj": "Fiscal year start (DDMMYYYY)",
   "settings.datev.hint": "Optional — leave blank if unknown.",
-
   "settings.rules.section": "Booking rules",
   "settings.rules.pick": "Account…",
   "settings.rules.vst19": "Input VAT 19%",
@@ -250,17 +224,14 @@
   "settings.rules.geschnicht": "Gifts non-deductible",
   "settings.rules.reise": "Travel expenses account",
   "settings.rules.kfz": "Vehicle costs account",
-
   "report.pdf": "PDF",
   "report.xml": "XML",
-
   "controlling.title": "Controlling",
   "controlling.heading": "Booked sums per account",
   "controlling.total": "Total: %s €",
   "controlling.einnahmen": "Revenue",
   "controlling.ausgaben": "Expenses",
   "controlling.saldo": "Balance: %s €",
-
   "ustva.title": "VAT return",
   "ustva.heading": "VAT return",
   "ustva.vorsteuer": "Input VAT",
@@ -283,13 +254,10 @@
   "ustva.sectionE": "E. Non-taxable supplies",
   "ustva.sectionD": "D. § 13b (Reverse charge)",
   "ustva.sectionF": "F. Input VAT",
-
   "backup.title": "Backup",
   "backup.done": "Backup created (%d files).",
-
   "warnings.title": "Plausibility warnings",
   "warnings.intro": "Please review — save anyway?",
-
   "reconcile.title": "Reconciliation",
   "reconcile.summary": "Please confirm each match — %d suggestion(s).",
   "reconcile.confirm": "Confirm",
@@ -301,7 +269,6 @@
   "reconcile.group": "%d receipts",
   "reconcile.linkAll": "Link all",
   "reconcile.partial": "Partial payment",
-
   "status.cashCovered": "Cash covered",
   "status.cashUncovered": "Cash uncovered",
   "status.cashConfirmed": "Cash confirmed",
@@ -310,7 +277,6 @@
   "status.partial": "Partial payment",
   "status.outgoing": "Outgoing invoice",
   "status.attachment": "Has attachments",
-
   "legend.title": "Symbol legend",
   "legend.linked": "Reconciled (bank statement linked)",
   "legend.cashConfirmed": "Cash register confirmed",
@@ -320,44 +286,35 @@
   "legend.partial": "Partial payment",
   "legend.outgoing": "Outgoing invoice",
   "legend.attachment": "Has attachments",
-
   "settings.matchWindow": "Reconciliation: date window (days)",
   "settings.matchTolerance": "Reconciliation: foreign tolerance (%)",
-
   "reconcile.lineTaken": "Statement line already linked",
   "reconcile.cashConfirm": "Confirm",
   "reconcile.cashCoveredHint": "✓ covered",
   "reconcile.cashUncoveredHint": "⚠ uncovered",
   "reconcile.confirmAllStar": "Confirm all unambiguous (★) — %d",
   "reconcile.confirmAllAsk": "Link %d receipts now?",
-
   "modal.erloeskonto": "Revenue account",
-
   "zm.title": "EC Sales List",
   "zm.heading": "EC Sales List",
   "zm.kontrollsumme": "Control total: %s €",
   "zm.art.sonstige": "Services",
   "zm.quarter": "Quarter",
   "zm.empty": "No intra-EU sales in this period",
-
   "erloesabgleich.title": "Revenue reconciliation",
   "erloesabgleich.heading": "Outgoing invoices ↔ credits",
   "erloesabgleich.autolinked": "%d auto-linked",
   "erloesabgleich.summary": "Please confirm each match — %d suggestion(s).",
   "erloesabgleich.none": "No open outgoing invoices with a matching credit",
   "erloesabgleich.confirm": "Link",
-
   "hint.no_api_key": "No Claude API key set — add one in Settings to use AI extraction.",
   "hint.no_storage": "No storage folder set — choose one in Settings.",
   "hint.dismiss": "Dismiss",
-
   "empty.title": "No receipts in this month yet",
   "empty.hint": "Drag PDFs here or add a receipt",
   "empty.add": "Add receipt",
-
   "search.results": "%d results",
   "search.none": "No results",
-
   "overview.title": "Overview %d",
   "overview.col.month": "Month",
   "overview.col.count": "Count",
@@ -366,7 +323,6 @@
   "overview.col.warnings": "#warn.",
   "overview.total": "Total",
   "overview.close": "Close",
-
   "audit.title": "Change log",
   "audit.col.time": "Time",
   "audit.col.action": "Action",
@@ -377,7 +333,6 @@
   "audit.delete": "Deleted",
   "audit.lock": "Locked",
   "audit.unlock": "Unlocked",
-
   "period.lock": "Close month",
   "period.unlock": "Reopen month",
   "period.lockConfirm": "Close month %04d/%02d?\n\nAfter locking, invoices in this month can no longer be edited or deleted (GoBD period lock). Use »Reopen month« to undo.",
@@ -385,7 +340,6 @@
   "period.locked.indicator": "🔒 Period locked",
   "period.locked.title": "Period locked",
   "period.locked.msg": "This month is closed. Editing and deleting are disabled.\n\nTo make changes: use »Reopen month« in the menu (⋮).",
-
   "opos.title": "Open Items %d",
   "opos.debitoren": "Debtors (Receivables)",
   "opos.kreditoren": "Creditors (Payables)",
@@ -407,7 +361,6 @@
   "guv.erloese": "Revenue",
   "guv.aufwand": "Expenses",
   "guv.ergebnis": "Net Result",
-
   "autorules.title": "Auto-Booking Rules",
   "autorules.col.supplier": "Supplier",
   "autorules.col.konto": "Account",
@@ -415,15 +368,12 @@
   "autorules.col.autobook": "Auto-Book",
   "autorules.warn": "⚠ Enabled rules book receipts WITHOUT review — only enable for suppliers that consistently deliver reliable data.",
   "autobook.result": "%d auto-booked · %d for review",
-
   "bankimport.detected": "Bank format detected: %s",
-
   "missing.title": "Missing Receipts",
   "missing.none": "All statement lines are linked to receipts.",
   "missing.col.date": "Date",
   "missing.col.amount": "Amount",
   "missing.col.text": "Transaction text",
-
   "anlagen.title": "Assets / Depreciation",
   "anlagen.col.bezeichnung": "Description",
   "anlagen.col.anschaffung": "Acquisition",
@@ -447,9 +397,8 @@
   "anlagen.form.err.bezeichnung": "Please enter a description.",
   "anlagen.form.err.wert": "Please enter a valid acquisition cost.",
   "anlagen.form.err.nd": "Please enter a valid useful life.",
-
   "exportpkg.menu": "Export GoBD/StB Package",
   "exportpkg.done": "Export package created: %d receipts attached out of %d rows.",
-
-  "verfahrensdoku.menu": "Procedural Documentation (PDF)"
+  "verfahrensdoku.menu": "Procedural Documentation (PDF)",
+  "reconcile.wholeYear": "whole year"
 }
