@@ -443,6 +443,20 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	// Click swaps the preview content. The switcher is rebuildable so
 	// it picks up freshly added attachments without closing the dialog.
 	attPaths := a.invoiceAttachmentPaths(row)
+
+	// If this invoice is reconciled to a bank statement, resolve that
+	// statement's PDF so the preview switcher can show it ("Kontoauszug")
+	// at the matching booking — the amount is highlighted like on the receipt.
+	var statementPreviewPath string
+	if row.BuchungRef != "" && row.BuchungRef != core.CashConfirmedRef {
+		if ref := core.ParseBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
+			p := filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename)
+			if core.FileExists(p) {
+				statementPreviewPath = p
+			}
+		}
+	}
+
 	currentPreviewPath := originalPath
 	previewSwitcher := container.NewHBox()
 	var rebuildSwitcher func()
@@ -471,6 +485,9 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		previewSwitcher.Add(makeSwitcherBtn("Original", originalPath))
 		for i, p := range attPaths {
 			previewSwitcher.Add(makeSwitcherBtn(fmt.Sprintf("Anhang %d", i+1), p))
+		}
+		if statementPreviewPath != "" {
+			previewSwitcher.Add(makeSwitcherBtn("Kontoauszug", statementPreviewPath))
 		}
 		previewSwitcher.Refresh()
 	}
