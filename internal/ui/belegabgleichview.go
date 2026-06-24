@@ -508,10 +508,22 @@ func (a *App) showBelegabgleich() {
 		for _, acct := range cashAccounts {
 			books, _ := core.LoadCashBooks(filepath.Join(a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth), "kassenbuch.json"))
 			var book core.CashBook
+			found := false
 			for _, b := range books {
 				if b.Konto == acct {
 					book = b
+					found = true
 					break
+				}
+			}
+			if !found {
+				// No stored cash book for THIS month → carry the opening balance
+				// forward from the last month that has one (matches the
+				// Kassenbuch / Jahresübersicht). Without this the summary showed
+				// 0,00 € whenever the balance was only entered in an earlier month.
+				book = core.CashBook{Konto: acct}
+				if carry, ok := a.cashCarryIn(acct, a.currentYear, a.currentMonth); ok {
+					book.Anfangsbestand = carry
 				}
 			}
 			unc, closing := core.CashCoverage(book, a.cashInvoicesForMonth(acct, a.currentYear, a.currentMonth))
