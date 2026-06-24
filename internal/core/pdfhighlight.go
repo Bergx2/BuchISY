@@ -2,10 +2,39 @@ package core
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ledongthuc/pdf"
 )
+
+// amountRe matches a money amount with exactly two decimal places, allowing
+// thousands separators in the integer part: "1234.56", "1.234,56", "573,15".
+var amountRe = regexp.MustCompile(`^(\d[\d.,]*)[.,](\d{2})$`)
+
+// numTokenRe finds numeric tokens (digits with . , separators) within a row.
+var numTokenRe = regexp.MustCompile(`\d[\d.,]*\d|\d`)
+
+// nonDigitRe strips everything that is not a digit.
+var nonDigitRe = regexp.MustCompile(`\D`)
+
+// amountDigits returns the digit signature of a 2-decimal money amount
+// (integer digits + the two cents digits), independent of thousands separators
+// or which decimal mark is used. It returns ok=false for anything that is not a
+// 2-decimal amount (e.g. invoice numbers, dates, plain integers), so tolerant
+// matching never confuses an amount with a same-digit identifier.
+func amountDigits(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	m := amountRe.FindStringSubmatch(s)
+	if m == nil {
+		return "", false
+	}
+	intPart := nonDigitRe.ReplaceAllString(m[1], "")
+	if intPart == "" {
+		return "", false
+	}
+	return intPart + m[2], true
+}
 
 // Rect is a rectangle in image pixels (origin top-left).
 type Rect struct {
@@ -49,11 +78,28 @@ func valueBoxInRow(frags []pdf.Text, value string) (box pdfBox, ok bool) {
 		ends[i] = sb.Len()
 	}
 
-	idx := strings.Index(strings.ToLower(sb.String()), strings.ToLower(value))
-	if idx < 0 {
-		return pdfBox{}, false
+	full := sb.String()
+	var matchStart, matchEnd int
+	matched := false
+	// If the search value is a money amount, match it tolerantly: any numeric
+	// token in the row with the same digit signature (so "1234.56" matches
+	// "1.234,56", "573,15 €", etc.). Non-amounts fall back to a literal search.
+	if vd, isAmt := amountDigits(value); isAmt {
+		for _, loc := range numTokenRe.FindAllStringIndex(full, -1) {
+			if td, ok := amountDigits(full[loc[0]:loc[1]]); ok && td == vd {
+				matchStart, matchEnd = loc[0], loc[1]
+				matched = true
+				break
+			}
+		}
 	}
-	matchStart, matchEnd := idx, idx+len(value)
+	if !matched {
+		idx := strings.Index(strings.ToLower(full), strings.ToLower(value))
+		if idx < 0 {
+			return pdfBox{}, false
+		}
+		matchStart, matchEnd = idx, idx+len(value)
+	}
 
 	first := true
 	var minX, minY, maxX, maxY float64
