@@ -919,6 +919,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Kassenbuch", func() { a.showCashBookView() }),
 			fyne.NewMenuItem("CSV-Export", func() { a.showCSVExportDialog() }),
 			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),
+			fyne.NewMenuItem(a.bundle.T("exportpkg.menu"), func() { a.showExportPackage() }),
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
 			fyne.NewMenuItem(a.bundle.T("autorules.title"), func() { a.showAutoRulesDialog() }),
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
