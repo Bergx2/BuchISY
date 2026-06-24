@@ -938,6 +938,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem(a.bundle.T("anlagen.title"), func() { a.showAnlagen() }),
 			fyne.NewMenuItem("Belegnummern neu vergeben", func() { a.renumberBelegnummern() }),
 			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),
+			fyne.NewMenuItem(a.bundle.T("verfahrensdoku.menu"), func() { a.showVerfahrensdokuPDF() }),
 		)
 		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)
 		pos.Y += overflowBtn.Size().Height
@@ -1220,6 +1221,18 @@ func (a *App) showSalesJournalPDF() {
 		return
 	}
 	a.savePDF("Rechnungsausgangsbuch_"+period+".pdf", data)
+}
+
+// showVerfahrensdokuPDF generates the GoBD Verfahrensdokumentation PDF for
+// the active profile and opens a save dialog.
+func (a *App) showVerfahrensdokuPDF() {
+	datum := time.Now().Format("02.01.2006")
+	data, err := core.BuildVerfahrensdokumentationPDF(a.settings, len(a.chart.All()), a.profile, datum)
+	if err != nil {
+		a.showError(a.bundle.T("error.processing.title"), err.Error())
+		return
+	}
+	a.savePDF("Verfahrensdokumentation.pdf", data)
 }
 
 // contextMenuWrap wraps any CanvasObject and forwards right-clicks to

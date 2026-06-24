@@ -447,5 +447,7 @@
   "anlagen.form.err.nd": "Please enter a valid useful life.",
 
   "exportpkg.menu": "Export GoBD/StB Package",
-  "exportpkg.done": "Export package created: %d receipts attached out of %d rows."
+  "exportpkg.done": "Export package created: %d receipts attached out of %d rows.",
+
+  "verfahrensdoku.menu": "Procedural Documentation (PDF)"
 }
