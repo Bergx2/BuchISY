@@ -97,6 +97,10 @@ type App struct {
 	// stepInProgress guards stepMonth from being double-triggered by the
 	// yearSelect/monthSelect OnChanged callbacks firing during SetSelected.
 	stepInProgress bool
+
+	// currentMonthLocked is true when the currently viewed year/month has been
+	// locked via LockPeriod (GoBD-Festschreibung). Updated in loadInvoices.
+	currentMonthLocked bool
 }
 
 // New creates the BuchISY application and shows the profile picker.
@@ -776,6 +780,9 @@ func (a *App) buildStatusBar() fyne.CanvasObject {
 		count = len(a.invoiceTable.filtered)
 	}
 	text := fmt.Sprintf("  %s   •   %s   •   %d Belege", prof, period, count)
+	if a.currentMonthLocked {
+		text += "   •   " + a.bundle.T("period.locked.indicator")
+	}
 	lbl := widget.NewLabel(text)
 
 	bg := canvas.NewRectangle(cardBackgroundColor())
@@ -907,6 +914,8 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Änderungsprotokoll", func() { a.showAuditLog() }),
+			fyne.NewMenuItem(a.bundle.T("period.lock"), func() { a.lockCurrentMonth() }),
+			fyne.NewMenuItem(a.bundle.T("period.unlock"), func() { a.unlockCurrentMonth() }),
 			fyne.NewMenuItem("Rechnungsausgangsbuch (PDF)", func() { a.showSalesJournalPDF() }),
 			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
 			fyne.NewMenuItem("Erlös-Abgleich", func() { a.showErloesAbgleich() }),
@@ -1306,6 +1315,46 @@ func (a *App) onMonthChanged() {
 	a.loadInvoices()
 }
 
+// lockCurrentMonth shows a confirmation dialog and then locks the current month,
+// preventing any further edits or deletions (GoBD-Festschreibung).
+func (a *App) lockCurrentMonth() {
+	jahr := fmt.Sprintf("%04d", a.currentYear)
+	monat := fmt.Sprintf("%02d", int(a.currentMonth))
+	msg := fmt.Sprintf(a.bundle.T("period.lockConfirm"), a.currentYear, int(a.currentMonth))
+	dialog.ShowConfirm(a.bundle.T("period.lock"), msg, func(ok bool) {
+		if !ok {
+			return
+		}
+		if err := a.dbRepo.LockPeriod(jahr, monat); err != nil {
+			a.showError(a.bundle.T("error.processing.title"), err.Error())
+			return
+		}
+		a.loadInvoices()
+		a.showMainView()
+		a.showToast(a.bundle.T("period.locked.indicator"))
+	}, a.window)
+}
+
+// unlockCurrentMonth shows a confirmation dialog and then removes the lock from
+// the current month, re-enabling edits and deletions.
+func (a *App) unlockCurrentMonth() {
+	jahr := fmt.Sprintf("%04d", a.currentYear)
+	monat := fmt.Sprintf("%02d", int(a.currentMonth))
+	msg := fmt.Sprintf(a.bundle.T("period.unlockConfirm"), a.currentYear, int(a.currentMonth))
+	dialog.ShowConfirm(a.bundle.T("period.unlock"), msg, func(ok bool) {
+		if !ok {
+			return
+		}
+		if err := a.dbRepo.UnlockPeriod(jahr, monat); err != nil {
+			a.showError(a.bundle.T("error.processing.title"), err.Error())
+			return
+		}
+		a.loadInvoices()
+		a.showMainView()
+		a.showToast(a.bundle.T("period.unlock"))
+	}, a.window)
+}
+
 // renumberBelegnummern reassigns all receipt numbers chronologically per year
 // (gap-free), after a confirmation — for backfilling legacy invoices and closing
 // gaps left by deletions.
@@ -1343,6 +1392,9 @@ func (a *App) loadInvoices() {
 	jahr := fmt.Sprintf("%04d", a.currentYear)
 
 	if a.viewWholeYear {
+		// Whole-year view: lock indicator is not meaningful for a multi-month range.
+		a.currentMonthLocked = false
+
 		var all []core.CSVRow
 		for m := time.January; m <= time.December; m++ {
 			monat := fmt.Sprintf("%02d", int(m))
@@ -1385,6 +1437,14 @@ func (a *App) loadInvoices() {
 		a.invoiceTable.SetData([]core.CSVRow{})
 		a.refreshCenterContent()
 		return
+	}
+
+	// Update locked state for the currently viewed month.
+	if locked, lockErr := a.dbRepo.IsPeriodLocked(jahr, monat); lockErr != nil {
+		a.logger.Warn("IsPeriodLocked %s-%s: %v", jahr, monat, lockErr)
+		a.currentMonthLocked = false
+	} else {
+		a.currentMonthLocked = locked
 	}
 
 	a.annotateAttachments(rows)

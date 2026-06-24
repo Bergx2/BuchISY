@@ -374,5 +374,13 @@
   "audit.update": "Geändert",
   "audit.delete": "Gelöscht",
   "audit.lock": "Gesperrt",
-  "audit.unlock": "Entsperrt"
+  "audit.unlock": "Entsperrt",
+
+  "period.lock": "Monat abschließen",
+  "period.unlock": "Monat öffnen",
+  "period.lockConfirm": "Monat %04d/%02d abschließen?\n\nDanach können keine Belege mehr bearbeitet oder gelöscht werden (GoBD-Festschreibung). Zum Aufheben: »Monat öffnen«.",
+  "period.unlockConfirm": "Monat %04d/%02d wieder öffnen?\n\nDie Festschreibung wird aufgehoben. Dieser Vorgang wird protokolliert.",
+  "period.locked.indicator": "🔒 Periode festgeschrieben",
+  "period.locked.title": "Periode festgeschrieben",
+  "period.locked.msg": "Dieser Monat ist abgeschlossen. Bearbeiten und Löschen sind gesperrt.\n\nZum Ändern: »Monat öffnen« im Menü (⋮)."
 }
