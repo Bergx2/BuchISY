@@ -430,6 +430,134 @@ func (a *App) showBelegabgleich() {
 	// Refresh table (in case any rows changed state before the dialog opens).
 	a.loadInvoices()
 
+	// ── Reconciliation status: per-account tie-out (#2 + #5) ────────────────
+	// Build the set of all currently-linked statement-line keys from the year's rows.
+	linkedSet := map[string]bool{}
+	for _, row := range rows {
+		if row.BuchungRef != "" {
+			linkedSet[row.BuchungRef] = true
+		}
+	}
+
+	// For every bank/credit-card account whose cache was populated above,
+	// compute the ReconcileSummary and collect the open (unlinked) lines.
+	type acctStatus struct {
+		acct   string
+		result core.ReconcileResult
+		open   []stmtLine // statement lines NOT in linkedSet
+	}
+	var acctStatuses []acctStatus
+	{
+		// Visit accounts in deterministic order (sorted by name).
+		seen := map[string]bool{}
+		var acctOrder []string
+		for _, row := range rows {
+			at := accountType(row.Bankkonto)
+			if at != core.AccountTypeBank && at != core.AccountTypeCreditCard {
+				continue
+			}
+			if !seen[row.Bankkonto] {
+				seen[row.Bankkonto] = true
+				acctOrder = append(acctOrder, row.Bankkonto)
+			}
+		}
+		sort.Strings(acctOrder)
+
+		for _, acct := range acctOrder {
+			// ensureCache was already called for all accounts that had unlinked rows,
+			// but an account may have ALL rows already linked — ensure cache anyway.
+			ensureCache(acct)
+			cached := stmtCache[acct]
+			if len(cached) == 0 {
+				continue
+			}
+			lines := make([]core.LineRef, len(cached))
+			var open []stmtLine
+			for i, sl := range cached {
+				key := refKey(sl.File, sl.Line.Page, sl.Line.LineIdx)
+				lines[i] = core.LineRef{
+					Key:           key,
+					Betrag:        sl.Line.Betrag,
+					IstGutschrift: sl.Line.IstGutschrift,
+				}
+				if !linkedSet[key] {
+					open = append(open, sl)
+				}
+			}
+			res := core.ReconcileSummary(lines, linkedSet)
+			acctStatuses = append(acctStatuses, acctStatus{acct: acct, result: res, open: open})
+		}
+	}
+
+	// buildReconcileStatusBlock produces the status section widget (one line per
+	// account + open-line list). Returns nil when there are no bank/cc accounts.
+	buildReconcileStatusBlock := func() fyne.CanvasObject {
+		if len(acctStatuses) == 0 {
+			return nil
+		}
+		vb := container.NewVBox()
+		heading := widget.NewLabel(a.bundle.T("reconcile.openLinesHeading"))
+		heading.TextStyle = fyne.TextStyle{Bold: true}
+		vb.Add(heading)
+
+		for _, as := range acctStatuses {
+			res := as.result
+			openTotal := res.OpenBelastung + res.OpenGutschrift
+			statusLine := fmt.Sprintf(a.bundle.T("reconcile.status"), as.acct, res.LinesMatched, res.LinesTotal, openTotal)
+
+			// Best-effort: try to load the account's closing balance from metadata.json.
+			acctFolder := a.statementFolder(as.acct)
+			if metaMap, err := core.LoadStatementMeta(acctFolder); err == nil {
+				// Find the maximum (most recent) closing balance across all statement files.
+				var maxClosing float64
+				hasClosing := false
+				for _, m := range metaMap {
+					if m.ClosingBalance != 0 || hasClosing {
+						if !hasClosing || m.ClosingBalance > maxClosing {
+							maxClosing = m.ClosingBalance
+							hasClosing = true
+						}
+					}
+				}
+				if hasClosing {
+					statusLine += "  " + fmt.Sprintf(a.bundle.T("reconcile.endsaldo"), maxClosing)
+				}
+			}
+
+			var completionText string
+			if res.LinesOpen == 0 {
+				completionText = a.bundle.T("reconcile.complete")
+			} else {
+				completionText = fmt.Sprintf(a.bundle.T("reconcile.openLines"), res.LinesOpen)
+			}
+			statusLine += "  " + completionText
+
+			statusLbl := widget.NewLabel(statusLine)
+			statusLbl.Wrapping = fyne.TextWrapWord
+			vb.Add(statusLbl)
+
+			// List open lines (cap at 30).
+			const maxOpenLines = 30
+			shown := as.open
+			truncated := 0
+			if len(shown) > maxOpenLines {
+				truncated = len(shown) - maxOpenLines
+				shown = shown[:maxOpenLines]
+			}
+			for _, sl := range shown {
+				betragStr := strings.Replace(fmt.Sprintf("%.2f", sl.Line.Betrag), ".", ",", 1)
+				lineText := fmt.Sprintf("%s · %s € · %s", sl.Line.Date, betragStr, sl.Line.Text)
+				lbl := newCopyableLabel(a.bundle, lineText)
+				lbl.Wrapping = fyne.TextWrapWord
+				vb.Add(lbl)
+			}
+			if truncated > 0 {
+				vb.Add(widget.NewLabel(fmt.Sprintf(a.bundle.T("reconcile.truncated"), truncated)))
+			}
+		}
+		return vb
+	}
+
 	// ── Barkasse: collect unconfirmed cash receipts ──────────────────────────
 	// Cash accounts have no external statement; a sentinel BuchungRef marks
 	// a receipt as reconciled without needing a new DB column.
@@ -542,11 +670,87 @@ func (a *App) showBelegabgleich() {
 	// below after dialog.NewCustom returns.
 	var dlg dialog.Dialog
 
+	// buildLinkedBlock produces the "Bereits zugeordnet" section: all year rows
+	// that are already linked to a bank/credit-card statement line, capped at 30.
+	// Each entry has a "Zuordnung aufheben" button that clears BuchungRef and
+	// rebuilds the dialog using the same dlg.Hide() + a.showBelegabgleich() pattern
+	// as the bulk-confirm button.
+	buildLinkedBlock := func() fyne.CanvasObject {
+		var linkedRows []core.CSVRow
+		for _, row := range rows {
+			if row.BuchungRef == "" || row.BuchungRef == core.CashConfirmedRef {
+				continue
+			}
+			at := accountType(row.Bankkonto)
+			if at != core.AccountTypeBank && at != core.AccountTypeCreditCard {
+				continue
+			}
+			linkedRows = append(linkedRows, row)
+		}
+		if len(linkedRows) == 0 {
+			return nil
+		}
+
+		heading := widget.NewLabel(a.bundle.T("reconcile.linked"))
+		heading.TextStyle = fyne.TextStyle{Bold: true}
+		vb := container.NewVBox(heading)
+
+		const maxLinked = 30
+		shown := linkedRows
+		truncated := 0
+		if len(shown) > maxLinked {
+			truncated = len(shown) - maxLinked
+			shown = shown[:maxLinked]
+		}
+
+		for _, lr := range shown {
+			// Capture loop variable for closure safety.
+			linkRow := lr
+
+			bruttoStr := strings.Replace(fmt.Sprintf("%.2f", linkRow.Bruttobetrag), ".", ",", 1)
+			lineDisplay := core.ParseBuchungRef(linkRow.BuchungRef).Display()
+			rowLabel := fmt.Sprintf("%s · %s · %s € · %s",
+				linkRow.Belegnummer,
+				linkRow.Auftraggeber,
+				bruttoStr,
+				lineDisplay,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			unlinkBtn := widget.NewButton(a.bundle.T("reconcile.unlink"), nil)
+			unlinkBtn.OnTapped = func() {
+				linkRow.BuchungRef = ""
+				if err := a.dbRepo.Update(linkRow.Jahr, linkRow.Monat, linkRow.Dateiname, linkRow); err != nil {
+					a.logger.Warn("Belegabgleich unlink Update %s: %v", linkRow.Dateiname, err)
+				}
+				a.loadInvoices()
+				if dlg != nil {
+					dlg.Hide()
+				}
+				a.showBelegabgleich()
+			}
+
+			vb.Add(container.NewBorder(nil, nil, nil, unlinkBtn, lbl))
+		}
+
+		if truncated > 0 {
+			vb.Add(widget.NewLabel(fmt.Sprintf(a.bundle.T("reconcile.truncated"), truncated)))
+		}
+		return vb
+	}
+
 	// Build dialog content.
 	var content fyne.CanvasObject
 
 	if len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 && len(cashConfirmRows) == 0 {
 		vbox := container.NewVBox(widget.NewLabel(a.bundle.T("reconcile.none")))
+		if statusBlock := buildReconcileStatusBlock(); statusBlock != nil {
+			vbox.Add(statusBlock)
+		}
+		if linkedBlock := buildLinkedBlock(); linkedBlock != nil {
+			vbox.Add(linkedBlock)
+		}
 		if cashBox != nil {
 			heading := widget.NewLabel(a.bundle.T("reconcile.cashHeading"))
 			heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -908,6 +1112,16 @@ func (a *App) showBelegabgleich() {
 				rowWidget = container.NewBorder(nil, nil, nil, confirmBtn, lbl)
 			}
 			vbox.Add(rowWidget)
+		}
+
+		// ── Reconciliation status block ───────────────────────────────────────
+		if statusBlock := buildReconcileStatusBlock(); statusBlock != nil {
+			vbox.Add(statusBlock)
+		}
+
+		// ── Already-linked rows (unlink affordance) ───────────────────────────
+		if linkedBlock := buildLinkedBlock(); linkedBlock != nil {
+			vbox.Add(linkedBlock)
 		}
 
 		if cashBox != nil {
