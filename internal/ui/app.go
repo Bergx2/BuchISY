@@ -1,4 +1,4 @@
-// Package ui provides the Fyne-based user interface for BuchISY.
+﻿// Package ui provides the Fyne-based user interface for BuchISY.
 package ui
 
 import (
@@ -912,6 +912,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
 			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
 			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),
+				fyne.NewMenuItem("Offene Posten", func() { a.showOpenItems() }),
 			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
 			fyne.NewMenuItem("Änderungsprotokoll", func() { a.showAuditLog() }),
 			fyne.NewMenuItem(a.bundle.T("period.lock"), func() { a.lockCurrentMonth() }),

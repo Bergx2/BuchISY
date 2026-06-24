@@ -382,5 +382,16 @@
   "period.unlockConfirm": "Reopen month %04d/%02d?\n\nThe period lock will be removed. This action is audited.",
   "period.locked.indicator": "🔒 Period locked",
   "period.locked.title": "Period locked",
-  "period.locked.msg": "This month is closed. Editing and deleting are disabled.\n\nTo make changes: use »Reopen month« in the menu (⋮)."
+  "period.locked.msg": "This month is closed. Editing and deleting are disabled.\n\nTo make changes: use »Reopen month« in the menu (⋮).",
+
+  "opos.title": "Open Items %d",
+  "opos.debitoren": "Debtors (Receivables)",
+  "opos.kreditoren": "Creditors (Payables)",
+  "opos.col.belegnr": "Doc. No.",
+  "opos.col.datum": "Date",
+  "opos.col.partner": "Partner",
+  "opos.col.betrag": "Amount",
+  "opos.col.alter": "Age (days)",
+  "opos.col.bucket": "Aging",
+  "opos.total": "Total"
 }

@@ -382,5 +382,16 @@
   "period.unlockConfirm": "Monat %04d/%02d wieder öffnen?\n\nDie Festschreibung wird aufgehoben. Dieser Vorgang wird protokolliert.",
   "period.locked.indicator": "🔒 Periode festgeschrieben",
   "period.locked.title": "Periode festgeschrieben",
-  "period.locked.msg": "Dieser Monat ist abgeschlossen. Bearbeiten und Löschen sind gesperrt.\n\nZum Ändern: »Monat öffnen« im Menü (⋮)."
+  "period.locked.msg": "Dieser Monat ist abgeschlossen. Bearbeiten und Löschen sind gesperrt.\n\nZum Ändern: »Monat öffnen« im Menü (⋮).",
+
+  "opos.title": "Offene Posten %d",
+  "opos.debitoren": "Debitoren (Forderungen)",
+  "opos.kreditoren": "Kreditoren (Verbindlichkeiten)",
+  "opos.col.belegnr": "Beleg-Nr.",
+  "opos.col.datum": "Datum",
+  "opos.col.partner": "Partner",
+  "opos.col.betrag": "Betrag",
+  "opos.col.alter": "Alter (Tage)",
+  "opos.col.bucket": "Fälligkeit",
+  "opos.total": "Gesamt"
 }
