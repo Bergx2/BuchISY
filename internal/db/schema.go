@@ -42,7 +42,10 @@ CREATE INDEX IF NOT EXISTS idx_invoices_datum ON invoices(rechnungsdatum);
 CREATE INDEX IF NOT EXISTS idx_invoices_auftraggeber ON invoices(auftraggeber);
 CREATE INDEX IF NOT EXISTS idx_invoices_rechnungsnummer ON invoices(rechnungsnummer);
 CREATE INDEX IF NOT EXISTS idx_invoices_dateiname ON invoices(dateiname);
-CREATE INDEX IF NOT EXISTS idx_invoices_belegnummer ON invoices(belegnummer);
+-- NOTE: the index on belegnummer is created in initSchema AFTER the ALTER-TABLE
+-- migrations add that column. Pre-belegnummer databases (created before E14)
+-- would otherwise fail here with "no such column: belegnummer", because
+-- CREATE TABLE IF NOT EXISTS is a no-op on the existing (older) table.
 
 -- Trigger to auto-update updated_at timestamp
 CREATE TRIGGER IF NOT EXISTS update_invoices_timestamp

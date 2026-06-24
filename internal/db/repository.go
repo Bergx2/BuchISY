@@ -92,6 +92,14 @@ func (r *Repository) initSchema() error {
 			return fmt.Errorf("failed to add column: %w", err)
 		}
 	}
+
+	// Indexes on migration-added columns must be created AFTER the ALTERs above,
+	// otherwise opening a pre-belegnummer database fails with
+	// "no such column: belegnummer".
+	if _, err := r.db.Exec(
+		"CREATE INDEX IF NOT EXISTS idx_invoices_belegnummer ON invoices(belegnummer)"); err != nil {
+		return fmt.Errorf("failed to create belegnummer index: %w", err)
+	}
 	return nil
 }
 
