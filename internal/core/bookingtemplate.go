@@ -12,6 +12,7 @@ import (
 type BookingTemplate struct {
 	Kategorie    string `json:"kategorie"`
 	ExpenseKonto int    `json:"expense_konto"`
+	Autobook     bool   `json:"autobook,omitempty"`
 }
 
 // BookingTemplateStore persists company→BookingTemplate per profile.
