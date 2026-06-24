@@ -448,6 +448,60 @@ func BuildGuVPDF(g GuV, title string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// BuildAnlagenspiegelPDF renders the Anlagenspiegel (asset register) for a given
+// year as a landscape PDF. Columns: Bezeichnung · Anschaffung · AK · ND · AfA(Jahr)
+// · Restbuchwert · GWG. A totals row for AfA and Restbuchwert is appended.
+func BuildAnlagenspiegelPDF(rows []AnlagenRow, jahr int, title string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "L")
+
+	headers := []string{"Bezeichnung", "Anschaffung", "AK (€)", "ND (J)", "AfA " + fmt.Sprintf("%d", jahr), "Restbuchwert", "GWG"}
+	widths := []float64{70, 26, 28, 18, 30, 32, 14}
+	pdfTableHeader(pdf, tr, headers, widths)
+
+	var totalAfa, totalRbw float64
+	for _, row := range rows {
+		pdfPageBreak(pdf, tr, headers, widths, 6)
+		gwgLabel := ""
+		if row.GWG {
+			gwgLabel = "J"
+		}
+		cells := []struct {
+			w     float64
+			txt   string
+			align string
+		}{
+			{widths[0], truncate(row.Asset.Bezeichnung, 40), "L"},
+			{widths[1], row.Asset.Anschaffungsdatum, "L"},
+			{widths[2], pdfAmount(row.Asset.Anschaffungswert), "R"},
+			{widths[3], fmt.Sprintf("%d", row.Asset.NutzungsdauerJahre), "R"},
+			{widths[4], pdfAmount(row.AfaJahr), "R"},
+			{widths[5], pdfAmount(row.Restbuchwert), "R"},
+			{widths[6], gwgLabel, "C"},
+		}
+		for _, c := range cells {
+			pdf.CellFormat(c.w, 6, tr(c.txt), "1", 0, c.align, false, 0, "")
+		}
+		pdf.Ln(6)
+		totalAfa += row.AfaJahr
+		totalRbw += row.Restbuchwert
+	}
+
+	pdfPageBreak(pdf, tr, headers, widths, 7)
+	pdf.SetFont("Arial", "B", 9)
+	spanW := widths[0] + widths[1] + widths[2] + widths[3]
+	pdf.CellFormat(spanW, 7, tr("Summe"), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[4], 7, tr(pdfAmount(round2(totalAfa))), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[5], 7, tr(pdfAmount(round2(totalRbw))), "1", 0, "R", false, 0, "")
+	pdf.CellFormat(widths[6], 7, tr(""), "1", 0, "L", false, 0, "")
+	pdf.Ln(7)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // BuildSalesJournalPDF renders the Rechnungsausgangsbuch — a landscape table of
 // all outgoing invoices (Ausgangsrechnungen) in the period with Belegnummer,
 // date, customer, revenue account, net, VAT and gross, plus net/gross totals.
