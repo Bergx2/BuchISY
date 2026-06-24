@@ -42,10 +42,10 @@ func (a *App) showUStVADialog() {
 				continue
 			}
 			label := a.bundle.T(l.kzKey)
-			body.Add(widget.NewLabel(fmt.Sprintf("    %s  %s   %s €", l.kzNum, label, fmtAmt(l.val))))
+			body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("    %s  %s   %s €", l.kzNum, label, fmtAmt(l.val))))
 			if l.ustKey != "" && l.ustVal != 0 {
 				ustLabel := a.bundle.T("ustva.ust")
-				body.Add(widget.NewLabel(fmt.Sprintf("        → %s: %s €", ustLabel, fmtAmt(l.ustVal))))
+				body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("        → %s: %s €", ustLabel, fmtAmt(l.ustVal))))
 			}
 		}
 		body.Add(widget.NewSeparator())

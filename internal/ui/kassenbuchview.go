@@ -151,7 +151,7 @@ func (a *App) showCashBookView() {
 	body := container.NewVBox()
 
 	if len(accounts) == 0 {
-		body.Add(widget.NewLabel(
+		body.Add(newCopyableLabel(a.bundle,
 			"Kein Konto vom Typ \"Barkasse\" vorhanden. Lege in den Einstellungen unter Konten ein Zahlungskonto mit Typ \"Barkasse\" an.",
 		))
 		header := container.NewBorder(nil, nil, container.NewPadded(titleLabel),
@@ -236,7 +236,7 @@ func (a *App) showCashBookView() {
 				e.Datum, e.Beschreibung,
 				formatDecimal(e.Ausgabe, a.settings.DecimalSeparator), e.Beleg)
 			if !ok {
-				outflowList.Add(widget.NewLabel("  " + label))
+				outflowList.Add(newCopyableLabel(a.bundle, "  "+label))
 				continue
 			}
 			btn := widget.NewButton(label, func() {
@@ -247,7 +247,7 @@ func (a *App) showCashBookView() {
 			outflowList.Add(btn)
 		}
 		if len(outflowList.Objects) == 0 {
-			outflowList.Add(widget.NewLabel("  (keine Bar-Ausgaben in diesem Monat)"))
+			outflowList.Add(newCopyableLabel(a.bundle, "  (keine Bar-Ausgaben in diesem Monat)"))
 		}
 
 		editArea.Add(widget.NewForm(
@@ -386,16 +386,16 @@ func (a *App) showCashYearView(account string, year int) {
 				a.showCashBookView()
 			})
 			monthBtn.Importance = widget.LowImportance
+			anfLbl := newCopyableLabel(a.bundle, formatDecimal(s.Anfangsbestand, a.settings.DecimalSeparator))
+			anfLbl.Alignment = fyne.TextAlignTrailing
+			einLbl := newCopyableLabel(a.bundle, formatDecimal(s.Einnahmen, a.settings.DecimalSeparator))
+			einLbl.Alignment = fyne.TextAlignTrailing
+			ausLbl := newCopyableLabel(a.bundle, formatDecimal(s.Ausgaben, a.settings.DecimalSeparator))
+			ausLbl.Alignment = fyne.TextAlignTrailing
+			endLbl := newCopyableLabel(a.bundle, formatDecimal(s.Endbestand, a.settings.DecimalSeparator))
+			endLbl.Alignment = fyne.TextAlignTrailing
 			tableArea.Add(container.NewGridWithColumns(5,
-				monthBtn,
-				widget.NewLabelWithStyle(formatDecimal(s.Anfangsbestand, a.settings.DecimalSeparator),
-					fyne.TextAlignTrailing, fyne.TextStyle{}),
-				widget.NewLabelWithStyle(formatDecimal(s.Einnahmen, a.settings.DecimalSeparator),
-					fyne.TextAlignTrailing, fyne.TextStyle{}),
-				widget.NewLabelWithStyle(formatDecimal(s.Ausgaben, a.settings.DecimalSeparator),
-					fyne.TextAlignTrailing, fyne.TextStyle{}),
-				widget.NewLabelWithStyle(formatDecimal(s.Endbestand, a.settings.DecimalSeparator),
-					fyne.TextAlignTrailing, fyne.TextStyle{}),
+				monthBtn, anfLbl, einLbl, ausLbl, endLbl,
 			))
 		}
 		tableArea.Refresh()

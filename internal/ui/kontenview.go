@@ -768,7 +768,7 @@ func (a *App) buildKontenStatusBar() fyne.CanvasObject {
 	}
 	count := len(a.listStatements(a.kontenAccount))
 	text := fmt.Sprintf("  %s   •   %s   •   %d Kontoauszüge", prof, acct, count)
-	lbl := widget.NewLabel(text)
+	lbl := newCopyableLabel(a.bundle, text)
 
 	bg := canvas.NewRectangle(cardBackgroundColor())
 	bar := container.NewStack(bg, container.NewPadded(lbl))
@@ -1203,7 +1203,7 @@ func (a *App) showStatementEditDialog(folder, rel string, current core.Statement
 	noteEntry.SetPlaceHolder("Optionaler Vermerk")
 
 	items := []*widget.FormItem{
-		widget.NewFormItem("Datei", widget.NewLabel(rel)),
+		widget.NewFormItem("Datei", newCopyableLabel(a.bundle, rel)),
 		widget.NewFormItem("Zeitraum von", fromEntry),
 		widget.NewFormItem("Zeitraum bis", toEntry),
 		widget.NewFormItem("Auszugsnummer", numEntry),
@@ -1314,7 +1314,7 @@ func (a *App) showMissingReceipts(account string) {
 	var content fyne.CanvasObject
 	if len(missing) == 0 {
 		content = container.NewVScroll(container.NewVBox(
-			widget.NewLabel(a.bundle.T("missing.none")),
+			newCopyableLabel(a.bundle, a.bundle.T("missing.none")),
 		))
 	} else {
 		// Header row
@@ -1330,9 +1330,10 @@ func (a *App) showMissingReceipts(account string) {
 		for _, m := range missing {
 			m := m // capture
 			amtStr := formatDecimal(m.Betrag, sep)
-			lDate := widget.NewLabel(m.Date)
-			lAmt := widget.NewLabelWithStyle(amtStr, fyne.TextAlignTrailing, fyne.TextStyle{})
-			lText := widget.NewLabel(m.Text)
+			lDate := newCopyableLabel(a.bundle, m.Date)
+			lAmt := newCopyableLabel(a.bundle, amtStr)
+			lAmt.Alignment = fyne.TextAlignTrailing
+			lText := newCopyableLabel(a.bundle, m.Text)
 			lText.Wrapping = fyne.TextWrapWord
 			vbox.Add(container.NewGridWithColumns(3, lDate, lAmt, lText))
 		}

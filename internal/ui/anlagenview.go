@@ -43,13 +43,17 @@ func (a *App) showAnlagen() {
 			rbw := core.Restbuchwert(asset, year)
 			ndText := fmt.Sprintf("%d", asset.NutzungsdauerJahre)
 
-			bezeichnung := widget.NewLabel(asset.Bezeichnung)
+			bezeichnung := newCopyableLabel(a.bundle, asset.Bezeichnung)
 			bezeichnung.Wrapping = fyne.TextWrapWord
-			anschaffung := widget.NewLabel(asset.Anschaffungsdatum)
-			akLbl := widget.NewLabelWithStyle(fmtAmt(asset.Anschaffungswert), fyne.TextAlignTrailing, fyne.TextStyle{})
-			ndLbl := widget.NewLabelWithStyle(ndText, fyne.TextAlignCenter, fyne.TextStyle{})
-			afaLbl := widget.NewLabelWithStyle(fmtAmt(afa), fyne.TextAlignTrailing, fyne.TextStyle{})
-			rbwLbl := widget.NewLabelWithStyle(fmtAmt(rbw), fyne.TextAlignTrailing, fyne.TextStyle{})
+			anschaffung := newCopyableLabel(a.bundle, asset.Anschaffungsdatum)
+			akLbl := newCopyableLabel(a.bundle, fmtAmt(asset.Anschaffungswert))
+			akLbl.Alignment = fyne.TextAlignTrailing
+			ndLbl := newCopyableLabel(a.bundle, ndText)
+			ndLbl.Alignment = fyne.TextAlignCenter
+			afaLbl := newCopyableLabel(a.bundle, fmtAmt(afa))
+			afaLbl.Alignment = fyne.TextAlignTrailing
+			rbwLbl := newCopyableLabel(a.bundle, fmtAmt(rbw))
+			rbwLbl.Alignment = fyne.TextAlignTrailing
 
 			editBtn := widget.NewButton(a.bundle.T("anlagen.edit"), func() {
 				a.showAssetForm(win, idx, refresh)

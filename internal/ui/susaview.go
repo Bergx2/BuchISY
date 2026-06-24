@@ -158,7 +158,7 @@ func (a *App) showGuV() {
 		))
 		for _, b := range items {
 			line := fmt.Sprintf("    %d  %s", b.Konto, b.Name)
-			body.Add(widget.NewLabel(line))
+			body.Add(newCopyableLabel(a.bundle, line))
 		}
 		total := widget.NewLabelWithStyle(
 			fmt.Sprintf("    %s: %s €", a.bundle.T("susa.total"), fmtAmt(gesamt)),

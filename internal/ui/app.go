@@ -794,7 +794,7 @@ func (a *App) buildStatusBar() fyne.CanvasObject {
 	if a.currentMonthLocked {
 		text += "   •   " + a.bundle.T("period.locked.indicator")
 	}
-	lbl := widget.NewLabel(text)
+	lbl := newCopyableLabel(a.bundle, text)
 
 	bg := canvas.NewRectangle(cardBackgroundColor())
 	bar := container.NewStack(bg, container.NewPadded(lbl))

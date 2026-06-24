@@ -43,11 +43,11 @@ func (a *App) showZMDialog() {
 		body.Objects = nil
 
 		if len(zm.Zeilen) == 0 {
-			body.Add(widget.NewLabel(a.bundle.T("zm.empty")))
+			body.Add(newCopyableLabel(a.bundle, a.bundle.T("zm.empty")))
 		} else {
 			sonstige := a.bundle.T("zm.art.sonstige")
 			for _, z := range zm.Zeilen {
-				body.Add(widget.NewLabel(fmt.Sprintf("    %s    %s €    %s", z.UStIdNr, fmtAmt(z.Netto), sonstige)))
+				body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("    %s    %s €    %s", z.UStIdNr, fmtAmt(z.Netto), sonstige)))
 			}
 			body.Add(widget.NewSeparator())
 			body.Add(widget.NewLabelWithStyle(
@@ -114,7 +114,7 @@ func (a *App) showZMDialog() {
 	headingLabel := widget.NewLabelWithStyle(a.bundle.T("zm.heading"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	headerItems := []fyne.CanvasObject{headingLabel}
 	if a.settings.OwnVATID != "" {
-		headerItems = append(headerItems, widget.NewLabel("USt-IdNr: "+a.settings.OwnVATID))
+		headerItems = append(headerItems, newCopyableLabel(a.bundle, "USt-IdNr: "+a.settings.OwnVATID))
 	}
 	headerItems = append(headerItems, container.NewBorder(nil, nil, nil, container.NewHBox(xmlBtn, pdfBtn), toggle))
 	header := container.NewVBox(headerItems...)

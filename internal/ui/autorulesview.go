@@ -26,7 +26,7 @@ func (a *App) showAutoRulesDialog() {
 	warnLabel.Wrapping = fyne.TextWrapWord
 
 	if len(entries) == 0 {
-		msg := widget.NewLabel("Noch keine Buchungs-Regeln gelernt.\nBuche Rechnungen über das Modal — die Regeln werden dabei automatisch gespeichert.")
+		msg := newCopyableLabel(a.bundle, "Noch keine Buchungs-Regeln gelernt.\nBuche Rechnungen über das Modal — die Regeln werden dabei automatisch gespeichert.")
 		msg.Wrapping = fyne.TextWrapWord
 		content := container.NewVBox(warnLabel, msg)
 		win.SetContent(container.NewPadded(content))
@@ -55,11 +55,11 @@ func (a *App) showAutoRulesDialog() {
 			kontoText = accountLabel(acc)
 		}
 
-		companyLbl := widget.NewLabel(company)
+		companyLbl := newCopyableLabel(a.bundle, company)
 		companyLbl.Wrapping = fyne.TextWrapWord
-		kontoLbl := widget.NewLabel(kontoText)
+		kontoLbl := newCopyableLabel(a.bundle, kontoText)
 		kontoLbl.Wrapping = fyne.TextWrapWord
-		kategorieLbl := widget.NewLabel(tpl.Kategorie)
+		kategorieLbl := newCopyableLabel(a.bundle, tpl.Kategorie)
 
 		check := widget.NewCheck("", nil)
 		check.SetChecked(tpl.Autobook)
