@@ -71,6 +71,8 @@
   "field.bankAccount": "Zahlungskonto",
   "field.paymentDate": "Bezahldatum",
   "field.partialPayment": "Teilzahlung",
+  "field.cashpaid": "Bar bezahlt",
+  "info.cashpaid.nocashaccount": "Kein Barkasse-Konto gefunden. Bitte unter Einstellungen → Zahlungskonten ein Konto mit Typ 'Barkasse' anlegen.",
   "field.comment": "Kommentar",
   "field.net_eur": "Betrag netto (EUR)",
   "field.fee": "Gebühr",

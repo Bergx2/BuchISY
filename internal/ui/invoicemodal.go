@@ -238,7 +238,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Suggestion chips: shown only when Claude returned account hints.
 	suggestionBox := container.NewHBox()
 	if len(meta.KontoVorschlaege) > 0 {
-		suggestionBox.Add(widget.NewLabel(a.bundle.T("field.suggestions")))
+		suggestionBox.Add(newCopyableLabel(a.bundle, a.bundle.T("field.suggestions")))
 		for _, k := range meta.KontoVorschlaege {
 			k := k
 			label := fmt.Sprintf("%d", k)
@@ -298,6 +298,36 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Ausgangsrechnung checkbox
 	ausgangsrechnungCheck := widget.NewCheck("Ausgangsrechnung", nil)
 	ausgangsrechnungCheck.SetChecked(meta.Ausgangsrechnung)
+
+	// Bar-bezahlt checkbox — pre-checked when the extractor detected cash payment.
+	// When checked: selects the first cash account + fills payment date from invoice date (if empty).
+	// When unchecked: leaves values as-is.
+	var barCheck *widget.Check
+	applyBarBezahlt := func() {
+		cashAccs := a.cashAccounts()
+		if len(cashAccs) == 0 {
+			a.showInfo("Bar bezahlt", a.bundle.T("info.cashpaid.nocashaccount"))
+			barCheck.SetChecked(false)
+			return
+		}
+		bankAccountSelect.SetSelected(cashAccs[0])
+		if strings.TrimSpace(paymentDateEntry.Text) == "" {
+			paymentDateEntry.SetText(dateEntry.Text)
+		}
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	}
+	barCheck = widget.NewCheck(a.bundle.T("field.cashpaid"), func(checked bool) {
+		if checked {
+			applyBarBezahlt()
+		}
+	})
+	if meta.BarBezahlt {
+		// Pre-check and apply: done after bankAccountSelect is set up.
+		barCheck.SetChecked(true)
+		applyBarBezahlt()
+	}
 
 	// Comment field (multiline)
 	commentEntry := widget.NewMultiLineEntry()
@@ -707,8 +737,10 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// #8: group the source badge, duplicate banner and live warnings into ONE
 	// calm info block at the top (each still shows/hides independently).
 	infoLine := container.NewVBox(quelleLabel, dupBanner, warningsLabel)
+	belegnrLabel := newCopyableLabel(a.bundle, belegnrText)
+	belegnrLabel.TextStyle = fyne.TextStyle{Bold: true}
 	formItems := []fyne.CanvasObject{
-		widget.NewLabelWithStyle(belegnrText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		belegnrLabel,
 		infoLine,
 		newCopyableLabel(a.bundle, a.bundle.T("modal.originalFile")),
 		container.NewBorder(nil, nil, nil,
@@ -755,6 +787,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			fi("Ablage (Jahr/Monat)", container.NewGridWithColumns(2, yearSelect, monthSelect)),
 			fi("", partialPaymentCheck),
 			fi("", ausgangsrechnungCheck),
+			fi("", barCheck),
 		)),
 		// Currency conversion fields (shown only for non-default currency).
 		currencyConversionContainer,

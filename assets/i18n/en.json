@@ -71,6 +71,8 @@
   "field.bankAccount": "Payment Account",
   "field.paymentDate": "Payment Date",
   "field.partialPayment": "Partial Payment",
+  "field.cashpaid": "Paid in cash",
+  "info.cashpaid.nocashaccount": "No cash account found. Please add an account with type 'Cash register' under Settings → Payment Accounts.",
   "field.comment": "Comment",
   "field.net_eur": "Net Amount (EUR)",
   "field.fee": "Fee",
