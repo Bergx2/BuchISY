@@ -404,5 +404,13 @@
   "guv.title": "P&L / BWA",
   "guv.erloese": "Revenue",
   "guv.aufwand": "Expenses",
-  "guv.ergebnis": "Net Result"
+  "guv.ergebnis": "Net Result",
+
+  "autorules.title": "Auto-Booking Rules",
+  "autorules.col.supplier": "Supplier",
+  "autorules.col.konto": "Account",
+  "autorules.col.kategorie": "Category",
+  "autorules.col.autobook": "Auto-Book",
+  "autorules.warn": "⚠ Enabled rules book receipts WITHOUT review — only enable for suppliers that consistently deliver reliable data.",
+  "autobook.result": "%d auto-booked · %d for review"
 }

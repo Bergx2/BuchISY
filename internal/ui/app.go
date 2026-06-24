@@ -68,9 +68,10 @@ type App struct {
 	kontenSortAsc bool   // sort direction
 
 	// Batch entry queue (E17.3): sequential processing of multiple files.
-	pendingFiles []string
-	batchTotal   int
-	batchDone    int
+	pendingFiles    []string
+	batchTotal      int
+	batchDone       int
+	batchAutoBooked int // E20.5: files silently auto-booked in this batch
 
 	// UI components
 	yearSelect   *highlightedSelect
@@ -909,6 +910,7 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 			fyne.NewMenuItem("CSV-Export", func() { a.showCSVExportDialog() }),
 			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),
 			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
+			fyne.NewMenuItem(a.bundle.T("autorules.title"), func() { a.showAutoRulesDialog() }),
 			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
 			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
 			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),

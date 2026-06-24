@@ -12,6 +12,7 @@ import (
 type BookingTemplate struct {
 	Kategorie    string `json:"kategorie"`
 	ExpenseKonto int    `json:"expense_konto"`
+	Autobook     bool   `json:"autobook,omitempty"`
 }
 
 // BookingTemplateStore persists company→BookingTemplate per profile.
@@ -46,6 +47,31 @@ func (s *BookingTemplateStore) Load() error {
 func (s *BookingTemplateStore) Get(company string) (BookingTemplate, bool) {
 	t, ok := s.templates[company]
 	return t, ok
+}
+
+// List returns a snapshot of all stored company→BookingTemplate pairs,
+// sorted by company name.
+func (s *BookingTemplateStore) List() []struct {
+	Company string
+	Tpl     BookingTemplate
+} {
+	out := make([]struct {
+		Company string
+		Tpl     BookingTemplate
+	}, 0, len(s.templates))
+	for company, tpl := range s.templates {
+		out = append(out, struct {
+			Company string
+			Tpl     BookingTemplate
+		}{Company: company, Tpl: tpl})
+	}
+	// Stable sort by company name.
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].Company < out[j-1].Company; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out
 }
 
 // Set remembers and persists a template for company.
