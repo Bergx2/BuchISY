@@ -1228,6 +1228,97 @@ func (a *App) saveInvoice(
 	return completeSave()
 }
 
+// autoBookInvoice books an invoice programmatically without opening the
+// confirmation modal. It mirrors saveInvoice's argument construction: the
+// account is taken from tpl.ExpenseKonto, the booking is computed via the
+// same computeInvoiceBooking helper the modal uses, the filename is built
+// from the naming template, and the Belegnummer is read from the database.
+// rememberMapping and partialPayment are always false for silent booking.
+func (a *App) autoBookInvoice(mainPath string, attachments []string, meta core.Meta, tpl core.BookingTemplate) error {
+	// Determine the target year/month from the extracted meta (fall back to
+	// current view when the invoice date is missing/unparseable).
+	targetYear := a.currentYear
+	targetMonth := a.currentMonth
+	parts := strings.Split(meta.Rechnungsdatum, ".")
+	if len(parts) == 3 {
+		var y, m int
+		fmt.Sscanf(parts[2], "%d", &y)
+		fmt.Sscanf(parts[1], "%d", &m)
+		if y > 0 {
+			targetYear = y
+		}
+		if m >= 1 && m <= 12 {
+			targetMonth = time.Month(m)
+		}
+	}
+
+	// Next Belegnummer (read-only peek, same as the modal).
+	nextBelegnr, err := a.dbRepo.NextBelegnummer(fmt.Sprintf("%04d", targetYear))
+	if err != nil {
+		a.logger.Warn("autoBookInvoice: NextBelegnummer: %v", err)
+		nextBelegnr = ""
+	}
+
+	// Build the booking using the same helper the modal uses.
+	account := tpl.ExpenseKonto
+	if account == 0 {
+		account = a.settings.DefaultAccount
+	}
+	bankAccount := a.settings.DefaultBankAccount
+	booking, _, _ := a.computeInvoiceBooking(
+		tpl.Kategorie,
+		meta.TaxLines,
+		meta.Trinkgeld,
+		account,
+		bankAccount,
+	)
+
+	// Build the filename via the naming template, mirroring updateFilenamePreview.
+	tplMeta := meta
+	tplMeta.Belegnummer = nextBelegnr
+	if len(parts) == 3 {
+		tplMeta.Jahr = parts[2]
+		tplMeta.Monat = parts[1]
+	}
+	filename, err := core.ApplyTemplate(
+		a.settings.NamingTemplate,
+		tplMeta,
+		core.TemplateOpts{DecimalSeparator: a.settings.DecimalSeparator},
+	)
+	if err != nil || strings.TrimSpace(filename) == "" {
+		return fmt.Errorf("autobook: filename template error: %w", err)
+	}
+
+	return a.saveInvoice(
+		mainPath,
+		attachments,
+		meta.Auftraggeber,
+		meta.Verwendungszweck,
+		meta.Rechnungsnummer,
+		meta.VATID,
+		meta.Rechnungsdatum,
+		meta.Bezahldatum,
+		meta.TaxLines,
+		meta.Trinkgeld,
+		meta.Waehrung,
+		account,
+		bankAccount,
+		false, // partialPayment
+		meta.Kommentar,
+		meta.BetragNetto_EUR,
+		meta.Gebuehr,
+		meta.Wechselkurs,
+		meta.GebuehrProzent,
+		false, // rememberMapping
+		filename,
+		false, // ausgangsrechnung
+		targetYear,
+		targetMonth,
+		booking,
+		nextBelegnr,
+	)
+}
+
 // parseFloat parses a user-entered amount, tolerating thousands separators.
 // The thousands separator is whichever of "." / "," is not decimalSep.
 func parseFloat(s string, decimalSep string) float64 {

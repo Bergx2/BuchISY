@@ -404,5 +404,13 @@
   "guv.title": "GuV / BWA",
   "guv.erloese": "Erlöse",
   "guv.aufwand": "Aufwand",
-  "guv.ergebnis": "Ergebnis"
+  "guv.ergebnis": "Ergebnis",
+
+  "autorules.title": "Auto-Buchungs-Regeln",
+  "autorules.col.supplier": "Lieferant",
+  "autorules.col.konto": "Konto",
+  "autorules.col.kategorie": "Kategorie",
+  "autorules.col.autobook": "Auto-Buchen",
+  "autorules.warn": "⚠ Aktivierte Regeln buchen Belege OHNE Prüfung — nur aktivieren, wenn der Lieferant verlässlich bekannte Daten liefert.",
+  "autobook.result": "%d automatisch gebucht · %d zur Prüfung"
 }

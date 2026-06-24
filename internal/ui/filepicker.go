@@ -234,6 +234,31 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 			return
 		}
 
+		// E20.5: attempt silent auto-booking when a matching rule is opt-in,
+		// the receipt is plausible, and no duplicate exists.
+		if tpl, ok := core.MatchAutobookRule(meta.Auftraggeber, a.bookingTemplates); ok && core.AutobookPlausible(meta) {
+			// Quick duplicate pre-check using available fields (same logic saveInvoice will redo).
+			dupRow := core.CSVRow{
+				Auftraggeber:    meta.Auftraggeber,
+				Rechnungsnummer: meta.Rechnungsnummer,
+			}
+			_, isDup, _ := a.dbRepo.FindDuplicate(dupRow)
+			if !isDup {
+				a.logger.Info("Auto-booking: %s (%s)", meta.Auftraggeber, filepath.Base(mainPath))
+				if err := a.autoBookInvoice(mainPath, attachments, meta, tpl); err != nil {
+					a.logger.Warn("Auto-book failed for %s: %v — opening modal", filepath.Base(mainPath), err)
+					// Fall through to modal on error.
+				} else {
+					a.batchAutoBooked++
+					a.loadInvoices()
+					if onComplete != nil {
+						onComplete()
+					}
+					return
+				}
+			}
+		}
+
 		a.logger.Info("Showing confirmation modal for: %s", filepath.Base(mainPath))
 		a.showConfirmationModal(mainPath, attachments, meta, onComplete)
 	}()
@@ -262,6 +287,7 @@ func (a *App) enqueueSubmissions(paths []string) {
 	a.pendingFiles = files
 	a.batchTotal = len(files)
 	a.batchDone = 0
+	a.batchAutoBooked = 0
 	a.processNextPending()
 }
 
@@ -269,7 +295,15 @@ func (a *App) enqueueSubmissions(paths []string) {
 // back to itself so the queue advances when each modal closes.
 func (a *App) processNextPending() {
 	if len(a.pendingFiles) == 0 {
-		a.batchTotal, a.batchDone = 0, 0
+		// Batch complete: show result toast when at least one file was processed.
+		if a.batchTotal > 0 {
+			autoN := a.batchAutoBooked
+			reviewN := a.batchTotal - autoN
+			if autoN > 0 {
+				a.showToast(a.bundle.T("autobook.result", autoN, reviewN))
+			}
+		}
+		a.batchTotal, a.batchDone, a.batchAutoBooked = 0, 0, 0
 		return
 	}
 	path := a.pendingFiles[0]
