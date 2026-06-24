@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -130,6 +131,16 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		return 0, fmt.Errorf("failed to get last insert id: %w", err)
 	}
 
+	// Best-effort audit log: log a warning on failure but never fail the Insert.
+	if auditErr := r.LogAudit(core.AuditEntry{
+		Aktion:     "create",
+		Entitaet:   "invoice",
+		Schluessel: row.Belegnummer + " " + row.Dateiname,
+		Details:    "",
+	}); auditErr != nil {
+		log.Printf("[WARN] audit_log create failed: %v", auditErr)
+	}
+
 	return id, nil
 }
 
@@ -138,6 +149,14 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 // moving an invoice to a different month in a single statement (no
 // delete-and-reinsert needed).
 func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CSVRow) error {
+	// Fetch the before-image for the audit diff (best-effort; silently skip on failure).
+	var oldRow core.CSVRow
+	var hasOld bool
+	if before, found, fetchErr := r.getByKey(jahr, monat, oldDateiname); fetchErr == nil {
+		oldRow = before
+		hasOld = found
+	}
+
 	query := `
 		UPDATE invoices SET
 			dateiname = ?,
@@ -207,6 +226,20 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 
 	if err != nil {
 		return fmt.Errorf("failed to update invoice: %w", err)
+	}
+
+	// Best-effort audit log.
+	diff := "{}"
+	if hasOld {
+		diff = core.DiffFields(oldRow, row)
+	}
+	if auditErr := r.LogAudit(core.AuditEntry{
+		Aktion:     "update",
+		Entitaet:   "invoice",
+		Schluessel: row.Belegnummer + " " + oldDateiname,
+		Details:    diff,
+	}); auditErr != nil {
+		log.Printf("[WARN] audit_log update failed: %v", auditErr)
 	}
 
 	return nil
@@ -291,6 +324,16 @@ func (r *Repository) Delete(jahr, monat, dateiname string) error {
 
 	if rows == 0 {
 		return fmt.Errorf("invoice not found")
+	}
+
+	// Best-effort audit log.
+	if auditErr := r.LogAudit(core.AuditEntry{
+		Aktion:     "delete",
+		Entitaet:   "invoice",
+		Schluessel: dateiname,
+		Details:    "",
+	}); auditErr != nil {
+		log.Printf("[WARN] audit_log delete failed: %v", auditErr)
 	}
 
 	return nil
@@ -494,6 +537,85 @@ func (r *Repository) MarkExported(jahr, monat, dateiname string) error {
 		return fmt.Errorf("failed to mark exported: %w", err)
 	}
 	return nil
+}
+
+// getByKey fetches a single invoice by (jahr, monat, dateiname). Returns
+// (row, true, nil) when found, (zero, false, nil) when not found, or
+// (zero, false, err) on a query error.
+func (r *Repository) getByKey(jahr, monat, dateiname string) (core.CSVRow, bool, error) {
+	query := `
+		SELECT
+			dateiname, rechnungsdatum, jahr, monat,
+			auftraggeber, verwendungszweck, rechnungsnummer,
+			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
+			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
+			kommentar, betrag_netto_eur, gebuehr, hat_anhaenge, ustidnr,
+			trinkgeld, steuerzeilen, buchung, exportiert,
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
+		FROM invoices
+		WHERE jahr = ? AND monat = ? AND dateiname = ?
+		LIMIT 1
+	`
+	rows, err := r.db.Query(query, jahr, monat, dateiname)
+	if err != nil {
+		return core.CSVRow{}, false, fmt.Errorf("getByKey query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	results, err := scanInvoiceRows(rows)
+	if err != nil {
+		return core.CSVRow{}, false, err
+	}
+	if len(results) == 0 {
+		return core.CSVRow{}, false, nil
+	}
+	return results[0], true, nil
+}
+
+// LogAudit appends an entry to the audit_log table. It is best-effort: callers
+// log a warning and continue on error rather than propagating the failure.
+func (r *Repository) LogAudit(e core.AuditEntry) error {
+	_, err := r.db.Exec(
+		`INSERT INTO audit_log (aktion, entitaet, schluessel, details) VALUES (?, ?, ?, ?)`,
+		e.Aktion, e.Entitaet, e.Schluessel, e.Details,
+	)
+	if err != nil {
+		return fmt.Errorf("audit_log insert: %w", err)
+	}
+	return nil
+}
+
+// AuditLog returns up to limit audit entries ordered newest-first.
+func (r *Repository) AuditLog(limit int) ([]core.AuditEntry, error) {
+	rows, err := r.db.Query(
+		`SELECT ts, aktion, entitaet, schluessel, details
+		 FROM audit_log
+		 ORDER BY ts DESC, id DESC
+		 LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("audit_log query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var entries []core.AuditEntry
+	for rows.Next() {
+		var e core.AuditEntry
+		var ts, entitaet, schluessel, details sql.NullString
+		if err := rows.Scan(&ts, &e.Aktion, &entitaet, &schluessel, &details); err != nil {
+			return nil, fmt.Errorf("audit_log scan: %w", err)
+		}
+		e.TS = ts.String
+		e.Entitaet = entitaet.String
+		e.Schluessel = schluessel.String
+		e.Details = details.String
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("audit_log iterate: %w", err)
+	}
+	return entries, nil
 }
 
 // ensureDir ensures a directory exists.

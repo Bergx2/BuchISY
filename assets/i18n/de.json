@@ -363,5 +363,16 @@
   "overview.col.open": "#offen",
   "overview.col.warnings": "#Warn.",
   "overview.total": "Gesamt",
-  "overview.close": "Schließen"
+  "overview.close": "Schließen",
+
+  "audit.title": "Änderungsprotokoll",
+  "audit.col.time": "Zeit",
+  "audit.col.action": "Aktion",
+  "audit.col.beleg": "Beleg",
+  "audit.col.details": "Details",
+  "audit.create": "Erstellt",
+  "audit.update": "Geändert",
+  "audit.delete": "Gelöscht",
+  "audit.lock": "Gesperrt",
+  "audit.unlock": "Entsperrt"
 }
