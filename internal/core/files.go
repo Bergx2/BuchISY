@@ -26,6 +26,28 @@ func IsSupportedFile(name string) bool {
 	return ok
 }
 
+// statementExtensions is the set of file extensions accepted as bank
+// statements (superset of invoices: adds XML, MT940, and STA formats).
+var statementExtensions = map[string]struct{}{
+	".pdf": {}, ".xml": {}, ".sta": {}, ".txt": {}, ".940": {},
+	".jpg": {}, ".jpeg": {}, ".png": {},
+}
+
+// IsSupportedStatementFile reports whether name has an extension BuchISY
+// accepts as a bank statement: PDF, CAMT.053 XML, MT940 (.sta/.txt/.940),
+// and common image formats.
+func IsSupportedStatementFile(name string) bool {
+	_, ok := statementExtensions[strings.ToLower(filepath.Ext(name))]
+	return ok
+}
+
+// IsStructuredStatement reports whether the given file bytes contain a
+// recognised machine-readable bank-statement format (CAMT.053 or MT940).
+// Returns false for PDF and images.
+func IsStructuredStatement(data []byte) bool {
+	return DetectBankFormat(data) != ""
+}
+
 // IsPDF reports whether the file name is a PDF.
 func IsPDF(name string) bool {
 	return strings.ToLower(filepath.Ext(name)) == ".pdf"

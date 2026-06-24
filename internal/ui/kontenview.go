@@ -33,8 +33,33 @@ func base64StdEncode(b []byte) string {
 // extractStatementMetadata runs Claude Vision on the given statement
 // file and merges the extracted period/balances into metadata.json
 // (preserving the user's Reviewed flag and Note).
+// For CAMT.053 XML and MT940 files the vision step is skipped because
+// all transaction data is already extracted structurally by ParseStatementBookings.
 func (a *App) extractStatementMetadata(folder, rel string) error {
 	fullPath := filepath.Join(folder, rel)
+
+	// E20.6: structured bank-statement files (CAMT.053, MT940) do not need
+	// Claude Vision — their bookings are parsed directly from bytes.
+	// We still need to touch metadata.json so the row appears in the list.
+	{
+		data, readErr := os.ReadFile(fullPath)
+		if readErr == nil && core.DetectBankFormat(data) != "" {
+			format := core.DetectBankFormat(data)
+			a.logger.Info("Structured bank statement detected (%s): %s — skipping Vision extraction", format, rel)
+			// Ensure the entry exists in metadata.json (with empty period/balance).
+			// We only add it when absent so we don't overwrite a previously edited entry.
+			metaMap, _ := core.LoadStatementMeta(folder)
+			if metaMap == nil {
+				metaMap = core.StatementMetadataMap{}
+			}
+			if _, exists := metaMap[rel]; !exists {
+				metaMap[rel] = core.StatementMetadata{}
+				_ = core.SaveStatementMeta(folder, metaMap)
+			}
+			return nil
+		}
+	}
+
 	var (
 		images    []string
 		mediaType string
@@ -626,9 +651,21 @@ func (a *App) buildKontenUI() fyne.CanvasObject {
 		})
 	autoFillAllBtn.Importance = widget.LowImportance
 
+	// E20.6: "Fehlende Belege" — lists debit statement lines with no linked invoice.
+	missingBtn := widget.NewButtonWithIcon(a.bundle.T("missing.title"),
+		theme.WarningIcon(), func() {
+			if a.kontenAccount == "" {
+				dialog.ShowInformation(a.bundle.T("missing.title"),
+					"Bitte zuerst ein Zahlungskonto auswählen.", a.window)
+				return
+			}
+			a.showMissingReceipts(a.kontenAccount)
+		})
+	missingBtn.Importance = widget.LowImportance
+
 	topBar := container.NewBorder(nil, nil,
 		container.NewHBox(belegeBtn, kontenBtn, widget.NewSeparator(), accountPicker),
-		container.NewHBox(autoFillAllBtn, uploadBtn, widget.NewSeparator(), settingsBtn))
+		container.NewHBox(missingBtn, autoFillAllBtn, uploadBtn, widget.NewSeparator(), settingsBtn))
 
 	switch {
 	case len(accounts) == 0:
@@ -1202,4 +1239,112 @@ func (a *App) showStatementEditDialog(folder, rel string, current core.Statement
 			}
 			a.window.SetContent(a.buildUI())
 		}, a.window)
+}
+
+// showMissingReceipts lists DEBIT statement lines for the given account
+// that are not linked to any invoice via BuchungRef. This surfaces
+// unmatched bank transactions so the user can find missing receipts.
+//
+// E20.6: uses the same parse-once approach as showBelegabgleich — every
+// statement file for the account is scanned; debit lines whose ref key
+// does not appear in any invoice's BuchungRef are collected and shown.
+func (a *App) showMissingReceipts(account string) {
+	// ── collect linked BuchungRef keys from ALL invoices across ALL months ──
+	// We pull all rows from the database and build a set of claimed keys.
+	// Using ListAll (or iterating all months) is overkill; instead we scan the
+	// current year ± one for simplicity — the debit lines are also from the
+	// currently stored statements.
+	linkedKeys := map[string]bool{}
+	for yr := a.currentYear - 1; yr <= a.currentYear+1; yr++ {
+		for mo := 1; mo <= 12; mo++ {
+			rows, err := a.dbRepo.List(fmt.Sprintf("%04d", yr), fmt.Sprintf("%02d", mo))
+			if err != nil {
+				continue
+			}
+			for _, row := range rows {
+				if row.BuchungRef != "" {
+					linkedKeys[row.BuchungRef] = true
+				}
+			}
+		}
+	}
+
+	// ── parse all statement files for this account ──
+	folder := a.statementFolder(account)
+	type missingLine struct {
+		Date   string
+		Betrag float64
+		Text   string
+	}
+	var missing []missingLine
+
+	for _, name := range a.listStatements(account) {
+		fullPath := filepath.Join(folder, name)
+		lines, err := core.ParseStatementBookings(fullPath)
+		if err != nil {
+			a.logger.Warn("showMissingReceipts: parse %s: %v", name, err)
+			continue
+		}
+		for _, l := range lines {
+			if l.IstGutschrift {
+				continue // only debit (expense) lines
+			}
+			key := core.BuchungRef{
+				StatementFilename: name,
+				Page:              l.Page,
+				LineIdx:           l.LineIdx,
+			}.String()
+			if linkedKeys[key] {
+				continue // already linked to an invoice
+			}
+			missing = append(missing, missingLine{
+				Date:   l.Date,
+				Betrag: l.Betrag,
+				Text:   l.Text,
+			})
+		}
+	}
+
+	// ── build dialog ──
+	sep := a.settings.DecimalSeparator
+	if sep == "" {
+		sep = ","
+	}
+
+	var content fyne.CanvasObject
+	if len(missing) == 0 {
+		content = container.NewVScroll(container.NewVBox(
+			widget.NewLabel(a.bundle.T("missing.none")),
+		))
+	} else {
+		// Header row
+		hDate := widget.NewLabelWithStyle(a.bundle.T("missing.col.date"),
+			fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		hAmt := widget.NewLabelWithStyle(a.bundle.T("missing.col.amount"),
+			fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})
+		hText := widget.NewLabelWithStyle(a.bundle.T("missing.col.text"),
+			fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		headerRow := container.NewGridWithColumns(3, hDate, hAmt, hText)
+
+		vbox := container.NewVBox(headerRow, widget.NewSeparator())
+		for _, m := range missing {
+			m := m // capture
+			amtStr := formatDecimal(m.Betrag, sep)
+			lDate := widget.NewLabel(m.Date)
+			lAmt := widget.NewLabelWithStyle(amtStr, fyne.TextAlignTrailing, fyne.TextStyle{})
+			lText := widget.NewLabel(m.Text)
+			lText.Wrapping = fyne.TextWrapWord
+			vbox.Add(container.NewGridWithColumns(3, lDate, lAmt, lText))
+		}
+		content = container.NewVScroll(vbox)
+	}
+
+	dlg := dialog.NewCustom(
+		a.bundle.T("missing.title"),
+		a.bundle.T("common.close"),
+		content,
+		a.window,
+	)
+	dlg.Resize(fyne.NewSize(700, 420))
+	dlg.Show()
 }

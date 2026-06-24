@@ -412,5 +412,13 @@
   "autorules.col.kategorie": "Kategorie",
   "autorules.col.autobook": "Auto-Buchen",
   "autorules.warn": "⚠ Aktivierte Regeln buchen Belege OHNE Prüfung — nur aktivieren, wenn der Lieferant verlässlich bekannte Daten liefert.",
-  "autobook.result": "%d automatisch gebucht · %d zur Prüfung"
+  "autobook.result": "%d automatisch gebucht · %d zur Prüfung",
+
+  "bankimport.detected": "Bank-Format erkannt: %s",
+
+  "missing.title": "Fehlende Belege",
+  "missing.none": "Alle Kontoauszugspositionen sind mit Belegen verknüpft.",
+  "missing.col.date": "Datum",
+  "missing.col.amount": "Betrag",
+  "missing.col.text": "Buchungstext"
 }
