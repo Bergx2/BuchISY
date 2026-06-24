@@ -39,6 +39,7 @@ type App struct {
 	settings           core.Settings
 	settingsMgr        *core.SettingsManager
 	companyMap         *core.CompanyAccountMap
+	accountPrefs       *core.AccountPrefs
 	statementAliases   *core.StatementAliasStore
 	pdfExtractor       *core.PDFTextExtractor
 	localExtractor     *core.LocalExtractor
@@ -188,6 +189,11 @@ func (a *App) startProfile(profile string) {
 		logger.Warn("Failed to load company account map: %v", err)
 	}
 
+	accountPrefs := core.NewAccountPrefs(configDir)
+	if err := accountPrefs.Load(); err != nil {
+		logger.Warn("Failed to load account prefs: %v", err)
+	}
+
 	statementAliases := core.NewStatementAliasStore(configDir)
 	if _, err := statementAliases.Load(); err != nil {
 		logger.Warn("Failed to load statement aliases: %v", err)
@@ -251,6 +257,7 @@ func (a *App) startProfile(profile string) {
 	a.settings = settings
 	a.settingsMgr = settingsMgr
 	a.companyMap = companyMap
+	a.accountPrefs = accountPrefs
 	a.statementAliases = statementAliases
 	a.pdfExtractor = pdfExtractor
 	a.localExtractor = localExtractor
