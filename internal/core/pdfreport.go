@@ -305,6 +305,62 @@ func BuildZMPDF(z ZM, ownVatID, title string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// BuildOpenItemsPDF renders the Offene-Posten-Liste as a portrait PDF with two
+// sections: Debitoren (Forderungen) and Kreditoren (Verbindlichkeiten). Each
+// section lists Belegnr, Datum, Partner, Betrag, Alter (Tage) and Bucket, and
+// closes with a section total.
+func BuildOpenItemsPDF(oi OpenItems, title string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "L")
+
+	headers := []string{"Belegnr.", "Datum", "Partner", "Betrag", "Alter (Tage)", "Bucket"}
+	widths := []float64{30, 22, 90, 28, 28, 20}
+
+	renderSection := func(heading string, items []OpenItem, total float64) {
+		pdf.SetFont("Arial", "B", 10)
+		pdf.CellFormat(0, 8, tr(heading), "", 1, "L", false, 0, "")
+		pdf.SetFont("Arial", "", 9)
+		pdfTableHeader(pdf, tr, headers, widths)
+
+		for _, it := range items {
+			pdfPageBreak(pdf, tr, headers, widths, 6)
+			cells := []struct {
+				w     float64
+				txt   string
+				align string
+			}{
+				{widths[0], truncate(it.Belegnummer, 18), "L"},
+				{widths[1], it.Datum, "L"},
+				{widths[2], truncate(it.Partner, 52), "L"},
+				{widths[3], pdfAmount(it.Betrag), "R"},
+				{widths[4], fmt.Sprintf("%d", it.AgeDays), "R"},
+				{widths[5], it.Bucket, "L"},
+			}
+			for _, c := range cells {
+				pdf.CellFormat(c.w, 6, tr(c.txt), "1", 0, c.align, false, 0, "")
+			}
+			pdf.Ln(6)
+		}
+
+		pdfPageBreak(pdf, tr, headers, widths, 7)
+		pdf.SetFont("Arial", "B", 9)
+		spanW := widths[0] + widths[1] + widths[2] + widths[4] + widths[5]
+		pdf.CellFormat(spanW, 7, tr("Summe"), "1", 0, "R", false, 0, "")
+		pdf.CellFormat(widths[3], 7, tr(pdfAmount(round2(total))), "1", 0, "R", false, 0, "")
+		pdf.Ln(7)
+		pdf.SetFont("Arial", "", 9)
+		pdf.Ln(3)
+	}
+
+	renderSection("Debitoren (Forderungen)", oi.Forderungen, oi.ForderungenGesamt)
+	renderSection("Kreditoren (Verbindlichkeiten)", oi.Verbindlichkeiten, oi.VerbindlichkeitenGesamt)
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // BuildSalesJournalPDF renders the Rechnungsausgangsbuch — a landscape table of
 // all outgoing invoices (Ausgangsrechnungen) in the period with Belegnummer,
 // date, customer, revenue account, net, VAT and gross, plus net/gross totals.
