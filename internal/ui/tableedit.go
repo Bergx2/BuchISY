@@ -63,6 +63,11 @@ func (a *App) resolveInvoicePath(row core.CSVRow) string {
 // showEditDialog shows a resizable window to edit an existing invoice,
 // with a document preview on the right.
 func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
+	if a.currentMonthLocked {
+		a.showInfo(a.bundle.T("period.locked.title"), a.bundle.T("period.locked.msg"))
+		return
+	}
+
 	meta := row.ToMeta()
 
 	originalPath := a.resolveInvoicePath(row)

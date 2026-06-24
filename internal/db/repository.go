@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,9 @@ import (
 
 	"github.com/bergx2/buchisy/internal/core"
 )
+
+// ErrPeriodLocked is returned when a mutation is attempted on a locked period.
+var ErrPeriodLocked = errors.New("Periode ist festgeschrieben")
 
 // Repository manages invoice data in SQLite database.
 type Repository struct {
@@ -93,6 +97,12 @@ func (r *Repository) initSchema() error {
 
 // Insert adds a new invoice to the database.
 func (r *Repository) Insert(row core.CSVRow) (int64, error) {
+	if locked, err := r.IsPeriodLocked(row.Jahr, row.Monat); err != nil {
+		return 0, fmt.Errorf("period lock check: %w", err)
+	} else if locked {
+		return 0, ErrPeriodLocked
+	}
+
 	query := `
 		INSERT INTO invoices (
 			dateiname, rechnungsdatum, jahr, monat,
@@ -149,6 +159,21 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 // moving an invoice to a different month in a single statement (no
 // delete-and-reinsert needed).
 func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CSVRow) error {
+	// Block if the OLD period is locked.
+	if locked, err := r.IsPeriodLocked(jahr, monat); err != nil {
+		return fmt.Errorf("period lock check (old): %w", err)
+	} else if locked {
+		return ErrPeriodLocked
+	}
+	// Block if the NEW period (may differ on cross-month move) is also locked.
+	if row.Jahr != jahr || row.Monat != monat {
+		if locked, err := r.IsPeriodLocked(row.Jahr, row.Monat); err != nil {
+			return fmt.Errorf("period lock check (new): %w", err)
+		} else if locked {
+			return ErrPeriodLocked
+		}
+	}
+
 	// Fetch the before-image for the audit diff (best-effort; silently skip on failure).
 	var oldRow core.CSVRow
 	var hasOld bool
@@ -310,6 +335,12 @@ func (r *Repository) Count() (int, error) {
 
 // Delete removes an invoice from the database.
 func (r *Repository) Delete(jahr, monat, dateiname string) error {
+	if locked, err := r.IsPeriodLocked(jahr, monat); err != nil {
+		return fmt.Errorf("period lock check: %w", err)
+	} else if locked {
+		return ErrPeriodLocked
+	}
+
 	query := `DELETE FROM invoices WHERE jahr = ? AND monat = ? AND dateiname = ?`
 
 	result, err := r.db.Exec(query, jahr, monat, dateiname)
@@ -616,6 +647,83 @@ func (r *Repository) AuditLog(limit int) ([]core.AuditEntry, error) {
 		return nil, fmt.Errorf("audit_log iterate: %w", err)
 	}
 	return entries, nil
+}
+
+// LockPeriod marks a filing period (jahr/monat) as locked (festgeschrieben).
+// Subsequent Insert/Update/Delete calls on this period will return ErrPeriodLocked.
+// The action is recorded in the audit log.
+func (r *Repository) LockPeriod(jahr, monat string) error {
+	_, err := r.db.Exec(
+		`INSERT OR IGNORE INTO period_locks (jahr, monat) VALUES (?, ?)`,
+		jahr, monat,
+	)
+	if err != nil {
+		return fmt.Errorf("lock period: %w", err)
+	}
+	if auditErr := r.LogAudit(core.AuditEntry{
+		Aktion:   "lock",
+		Entitaet: "period",
+		Schluessel: jahr + "-" + monat,
+	}); auditErr != nil {
+		log.Printf("[WARN] audit_log lock failed: %v", auditErr)
+	}
+	return nil
+}
+
+// UnlockPeriod removes the lock on a filing period (jahr/monat).
+// The action is recorded in the audit log.
+func (r *Repository) UnlockPeriod(jahr, monat string) error {
+	_, err := r.db.Exec(
+		`DELETE FROM period_locks WHERE jahr = ? AND monat = ?`,
+		jahr, monat,
+	)
+	if err != nil {
+		return fmt.Errorf("unlock period: %w", err)
+	}
+	if auditErr := r.LogAudit(core.AuditEntry{
+		Aktion:   "unlock",
+		Entitaet: "period",
+		Schluessel: jahr + "-" + monat,
+	}); auditErr != nil {
+		log.Printf("[WARN] audit_log unlock failed: %v", auditErr)
+	}
+	return nil
+}
+
+// IsPeriodLocked reports whether the given filing period is currently locked.
+func (r *Repository) IsPeriodLocked(jahr, monat string) (bool, error) {
+	var count int
+	if err := r.db.QueryRow(
+		`SELECT COUNT(*) FROM period_locks WHERE jahr = ? AND monat = ?`,
+		jahr, monat,
+	).Scan(&count); err != nil {
+		return false, fmt.Errorf("is period locked: %w", err)
+	}
+	return count > 0, nil
+}
+
+// LockedPeriods returns the list of locked periods formatted as "YYYY-MM".
+func (r *Repository) LockedPeriods() ([]string, error) {
+	rows, err := r.db.Query(
+		`SELECT jahr, monat FROM period_locks ORDER BY jahr, monat`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("locked periods: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var periods []string
+	for rows.Next() {
+		var jahr, monat string
+		if err := rows.Scan(&jahr, &monat); err != nil {
+			return nil, fmt.Errorf("locked periods scan: %w", err)
+		}
+		periods = append(periods, jahr+"-"+monat)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("locked periods iterate: %w", err)
+	}
+	return periods, nil
 }
 
 // ensureDir ensures a directory exists.

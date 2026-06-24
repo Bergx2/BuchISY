@@ -33,6 +33,10 @@ func (a *App) unlinkInvoice(row core.CSVRow) {
 
 // showDeleteConfirmation shows a confirmation dialog before deleting an invoice.
 func (a *App) showDeleteConfirmation(row core.CSVRow) {
+	if a.currentMonthLocked {
+		a.showInfo(a.bundle.T("period.locked.title"), a.bundle.T("period.locked.msg"))
+		return
+	}
 	message := a.bundle.T(
 		"table.delete.confirm.message",
 		row.Dateiname,

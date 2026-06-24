@@ -374,5 +374,13 @@
   "audit.update": "Updated",
   "audit.delete": "Deleted",
   "audit.lock": "Locked",
-  "audit.unlock": "Unlocked"
+  "audit.unlock": "Unlocked",
+
+  "period.lock": "Close month",
+  "period.unlock": "Reopen month",
+  "period.lockConfirm": "Close month %04d/%02d?\n\nAfter locking, invoices in this month can no longer be edited or deleted (GoBD period lock). Use »Reopen month« to undo.",
+  "period.unlockConfirm": "Reopen month %04d/%02d?\n\nThe period lock will be removed. This action is audited.",
+  "period.locked.indicator": "🔒 Period locked",
+  "period.locked.title": "Period locked",
+  "period.locked.msg": "This month is closed. Editing and deleting are disabled.\n\nTo make changes: use »Reopen month« in the menu (⋮)."
 }
