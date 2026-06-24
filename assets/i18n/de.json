@@ -393,5 +393,16 @@
   "opos.col.betrag": "Betrag",
   "opos.col.alter": "Alter (Tage)",
   "opos.col.bucket": "Fälligkeit",
-  "opos.total": "Gesamt"
+  "opos.total": "Gesamt",
+  "susa.title": "Summen-/Saldenliste",
+  "susa.col.konto": "Konto",
+  "susa.col.name": "Bezeichnung",
+  "susa.col.soll": "Soll",
+  "susa.col.haben": "Haben",
+  "susa.col.saldo": "Saldo",
+  "susa.total": "Gesamt",
+  "guv.title": "GuV / BWA",
+  "guv.erloese": "Erlöse",
+  "guv.aufwand": "Aufwand",
+  "guv.ergebnis": "Ergebnis"
 }
