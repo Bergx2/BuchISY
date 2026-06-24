@@ -23,14 +23,9 @@ import (
 // This mirrors showBelegabgleich but is filtered to Ausgangsrechnungen and
 // bank CREDIT lines (IstGutschrift==true).
 func (a *App) showErloesAbgleich() {
-	year := fmt.Sprintf("%04d", a.currentYear)
-	month := fmt.Sprintf("%02d", int(a.currentMonth))
-
-	rows, err := a.dbRepo.List(year, month)
-	if err != nil {
-		a.showError(a.bundle.T("erloesabgleich.title"), err.Error())
-		return
-	}
+	// Reconcile the WHOLE current year (consistent with showBelegabgleich); the
+	// matcher's date window keeps same-amount credits in different months apart.
+	rows := a.collectInvoiceRows(a.currentYear, 1, a.currentYear, 12)
 
 	// accountType returns the AccountType string for a named bank/cash account.
 	accountType := func(name string) string {
@@ -771,7 +766,7 @@ func (a *App) showErloesAbgleich() {
 	}
 
 	dlg = dialog.NewCustom(
-		a.bundle.T("erloesabgleich.title"),
+		fmt.Sprintf("%s — %d (%s)", a.bundle.T("erloesabgleich.title"), a.currentYear, a.bundle.T("reconcile.wholeYear")),
 		a.bundle.T("common.close"),
 		content,
 		a.window,
