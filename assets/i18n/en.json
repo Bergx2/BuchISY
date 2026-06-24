@@ -363,5 +363,16 @@
   "overview.col.open": "#open",
   "overview.col.warnings": "#warn.",
   "overview.total": "Total",
-  "overview.close": "Close"
+  "overview.close": "Close",
+
+  "audit.title": "Change log",
+  "audit.col.time": "Time",
+  "audit.col.action": "Action",
+  "audit.col.beleg": "Document",
+  "audit.col.details": "Details",
+  "audit.create": "Created",
+  "audit.update": "Updated",
+  "audit.delete": "Deleted",
+  "audit.lock": "Locked",
+  "audit.unlock": "Unlocked"
 }
