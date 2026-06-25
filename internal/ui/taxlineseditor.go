@@ -38,6 +38,9 @@ type taxLinesEditor struct {
 	rows        []taxLineRow
 	trinkEntry  *widget.Entry
 	bruttoLabel *widget.Label
+	currency    string       // ISO code shown on the read-only Brutto labels + headers
+	nettoHdr    *widget.Label // "Netto (CUR)" column header
+	bruttoHdr   *widget.Label // "Brutto (CUR)" column header
 
 	rowsBox   *fyne.Container // VBox holding the line rows
 	container *fyne.Container // outer VBox (the full widget)
@@ -46,10 +49,11 @@ type taxLinesEditor struct {
 // newTaxLinesEditor creates a TaxLines editor pre-filled with lines and
 // trinkgeld. If lines is empty, one empty row is provided. onChange is
 // called (nil-safe) after every structural or value change.
-func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange func()) *taxLinesEditor {
+func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, currency string, onChange func()) *taxLinesEditor {
 	e := &taxLinesEditor{
 		app:      a,
 		onChange: onChange,
+		currency: currency,
 	}
 
 	sep := a.settings.DecimalSeparator
@@ -90,11 +94,17 @@ func newTaxLinesEditor(a *App, lines []core.TaxLine, trinkgeld float64, onChange
 	}
 	e.seeding = false
 
-	// Column header (above the rows).
+	// Column header (above the rows) — Netto/Brutto carry the currency code.
+	cur := e.currency
+	if cur == "" {
+		cur = "EUR"
+	}
+	e.nettoHdr = columnHeader("Netto (" + cur + ")")
+	e.bruttoHdr = columnHeader("Brutto (" + cur + ")")
 	header := container.NewBorder(nil, nil, nil, rowRightSpacer(),
 		container.NewGridWithColumns(4,
-			columnHeader("Netto"), columnHeader("Satz %"),
-			columnHeader("MwSt."), columnHeader("Brutto"),
+			e.nettoHdr, columnHeader("Satz %"),
+			columnHeader("MwSt."), e.bruttoHdr,
 		),
 	)
 
@@ -246,16 +256,34 @@ func (e *taxLinesEditor) rebuildRowsBox() {
 }
 
 // refresh updates each row's Brutto, the total Brutto, then calls onChange.
+// Read-only Brutto labels show the currency code (e.g. "USD 200,00").
 func (e *taxLinesEditor) refresh() {
 	sep := e.app.settings.DecimalSeparator
 	for _, r := range e.rows {
 		rowBrutto := parseFloat(r.netto.Text, sep) + parseFloat(r.mwst.Text, sep)
-		r.brutto.SetText(formatDecimal(rowBrutto, sep))
+		r.brutto.SetText(formatMoney(rowBrutto, e.currency, sep))
 	}
-	e.bruttoLabel.SetText(formatDecimal(core.ComputeBrutto(e.Lines(), e.Trinkgeld()), sep))
+	e.bruttoLabel.SetText(formatMoney(core.ComputeBrutto(e.Lines(), e.Trinkgeld()), e.currency, sep))
 	if e.onChange != nil {
 		e.onChange()
 	}
+}
+
+// SetCurrency updates the currency code shown on the Brutto labels + the
+// Netto/Brutto column headers, then refreshes.
+func (e *taxLinesEditor) SetCurrency(code string) {
+	e.currency = code
+	cur := code
+	if cur == "" {
+		cur = "EUR"
+	}
+	if e.nettoHdr != nil {
+		e.nettoHdr.SetText("Netto (" + cur + ")")
+	}
+	if e.bruttoHdr != nil {
+		e.bruttoHdr.SetText("Brutto (" + cur + ")")
+	}
+	e.refresh()
 }
 
 // round2 rounds v to two decimal places.

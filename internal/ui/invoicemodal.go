@@ -572,7 +572,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// recomputeBooking is forward-declared at the top of this function so
 	// both this closure and the account/bank-account closures above can
 	// reference it safely via the nil guard.
-	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, func() {
+	ed = newTaxLinesEditor(a, meta.TaxLines, meta.Trinkgeld, core.CurrencyCodeFromOption(currencySelect.Selected), func() {
 		updateFilenamePreview()
 		if recomputeBooking != nil {
 			recomputeBooking()
@@ -835,7 +835,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 						nil, vatIDEntry),
 				)),
 		)),
-		section("Beträge & Datum", selectableForm(a.bundle,
+		section("Beträge und Datum", selectableForm(a.bundle,
 			fi(a.bundle.T("field.invoiceDate"),
 				container.NewGridWithColumns(2,
 					container.NewBorder(nil, nil, nil, dateCalendarBtn, dateEntry),
@@ -907,6 +907,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Rebuild the conversion fields and refresh the filename preview when
 	// the currency changes.
 	currencySelect.OnChanged = func(string) {
+		ed.SetCurrency(core.CurrencyCodeFromOption(currencySelect.Selected))
 		updateCurrencyConversionVisibility()
 		updateFilenamePreview()
 		refreshWarnings()
