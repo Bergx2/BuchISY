@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS invoices (
 	bezahldatum TEXT,
 	teilzahlung BOOLEAN DEFAULT 0,
 	kommentar TEXT,
+	bewirtung_anlass TEXT,
+	bewirtung_teilnehmer TEXT,
 	betrag_netto_eur REAL,
 	gebuehr REAL,
 	rabatt REAL DEFAULT 0,

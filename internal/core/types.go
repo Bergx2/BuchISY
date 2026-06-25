@@ -31,9 +31,11 @@ type Meta struct {
 	Teilzahlung       bool       // Partial payment flag
 	Ausgangsrechnung  bool       // true = outgoing/revenue invoice (Erlös)
 	Dateiname         string     // Final filename
-	Kommentar         string     // Comment/note for this invoice
-	BetragNetto_EUR   float64    // Net amount in default currency (EUR) for foreign currency invoices
-	Gebuehr           float64    // Fee (e.g., currency exchange fee)
+	Kommentar           string  // Comment/note for this invoice
+	BewirtungAnlass     string  // Occasion/purpose for entertainment expenses (§ 4 Abs. 5 EStG)
+	BewirtungTeilnehmer string  // Participants for entertainment expenses (§ 4 Abs. 5 EStG)
+	BetragNetto_EUR     float64 // Net amount in default currency (EUR) for foreign currency invoices
+	Gebuehr             float64 // Fee (e.g., currency exchange fee)
 	Rabatt            float64    // Third-party rebate / platform voucher (gross rebate deducted from payment)
 	Wechselkurs       float64    // Exchange rate used for currency conversion
 	GebuehrProzent    float64    // Fee rate in percent (e.g., currency exchange fee %)
@@ -204,8 +206,10 @@ type CSVRow struct {
 	Bezahldatum       string
 	Teilzahlung       bool
 	Ausgangsrechnung  bool
-	Kommentar         string
-	BetragNetto_EUR   float64
+	Kommentar           string
+	BewirtungAnlass     string
+	BewirtungTeilnehmer string
+	BetragNetto_EUR     float64
 	Gebuehr           float64
 	Rabatt            float64 // Third-party rebate / platform voucher (gross rebate deducted from payment)
 	Wechselkurs       float64
@@ -248,8 +252,10 @@ func (m Meta) ToCSVRow() CSVRow {
 		Bezahldatum:       m.Bezahldatum,
 		Teilzahlung:       m.Teilzahlung,
 		Ausgangsrechnung:  m.Ausgangsrechnung,
-		Kommentar:         m.Kommentar,
-		BetragNetto_EUR:   m.BetragNetto_EUR,
+		Kommentar:           m.Kommentar,
+		BewirtungAnlass:     m.BewirtungAnlass,
+		BewirtungTeilnehmer: m.BewirtungTeilnehmer,
+		BetragNetto_EUR:     m.BetragNetto_EUR,
 		Gebuehr:           m.Gebuehr,
 		Rabatt:            m.Rabatt,
 		Wechselkurs:       m.Wechselkurs,
@@ -285,8 +291,10 @@ func (r CSVRow) ToMeta() Meta {
 		Bezahldatum:       r.Bezahldatum,
 		Teilzahlung:       r.Teilzahlung,
 		Ausgangsrechnung:  r.Ausgangsrechnung,
-		Kommentar:         r.Kommentar,
-		BetragNetto_EUR:   r.BetragNetto_EUR,
+		Kommentar:           r.Kommentar,
+		BewirtungAnlass:     r.BewirtungAnlass,
+		BewirtungTeilnehmer: r.BewirtungTeilnehmer,
+		BetragNetto_EUR:     r.BetragNetto_EUR,
 		Gebuehr:           r.Gebuehr,
 		Rabatt:            r.Rabatt,
 		Wechselkurs:       r.Wechselkurs,

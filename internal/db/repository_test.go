@@ -426,6 +426,56 @@ func TestSearchInvoicesGlobal(t *testing.T) {
 	}
 }
 
+// TestBewirtungRoundTrip verifies that BewirtungAnlass and BewirtungTeilnehmer
+// are persisted via Insert, survive a List read-back, and are correctly updated
+// via Update (§ 4 Abs. 5 EStG entertainment expense fields).
+func TestBewirtungRoundTrip(t *testing.T) {
+	repo := newTestRepo(t)
+
+	// Insert with both Bewirtung fields set to non-empty strings.
+	if _, err := repo.Insert(core.CSVRow{
+		Dateiname:           "bewirtung.pdf",
+		Jahr:                "2026",
+		Monat:               "07",
+		BewirtungAnlass:     "Kundengespräch Projekt Alpha",
+		BewirtungTeilnehmer: "Max Mustermann, Anna Schmidt",
+	}); err != nil {
+		t.Fatalf("Insert with Bewirtung: %v", err)
+	}
+
+	rows, err := repo.List("2026", "07")
+	if err != nil {
+		t.Fatalf("List after Insert: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].BewirtungAnlass != "Kundengespräch Projekt Alpha" {
+		t.Errorf("BewirtungAnlass not persisted via Insert/List: %q", rows[0].BewirtungAnlass)
+	}
+	if rows[0].BewirtungTeilnehmer != "Max Mustermann, Anna Schmidt" {
+		t.Errorf("BewirtungTeilnehmer not persisted via Insert/List: %q", rows[0].BewirtungTeilnehmer)
+	}
+
+	// Update: change both fields.
+	rows[0].BewirtungAnlass = "Jahresabschlussfeier"
+	rows[0].BewirtungTeilnehmer = "Team Berlin (5 Personen)"
+	if err := repo.Update("2026", "07", "bewirtung.pdf", rows[0]); err != nil {
+		t.Fatalf("Update with Bewirtung: %v", err)
+	}
+
+	rows, err = repo.List("2026", "07")
+	if err != nil {
+		t.Fatalf("List after Update: %v", err)
+	}
+	if rows[0].BewirtungAnlass != "Jahresabschlussfeier" {
+		t.Errorf("BewirtungAnlass not persisted via Update: %q", rows[0].BewirtungAnlass)
+	}
+	if rows[0].BewirtungTeilnehmer != "Team Berlin (5 Personen)" {
+		t.Errorf("BewirtungTeilnehmer not persisted via Update: %q", rows[0].BewirtungTeilnehmer)
+	}
+}
+
 // TestRabattRoundTrip verifies that the Rabatt field is persisted via Insert,
 // survives a List read-back, and is correctly updated via Update.
 func TestRabattRoundTrip(t *testing.T) {

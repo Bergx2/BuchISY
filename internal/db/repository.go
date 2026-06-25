@@ -87,6 +87,8 @@ func (r *Repository) initSchema() error {
 		"ALTER TABLE invoices ADD COLUMN buchung_ref TEXT DEFAULT ''",
 		"ALTER TABLE invoices ADD COLUMN belegnummer TEXT DEFAULT ''",
 		"ALTER TABLE invoices ADD COLUMN ausgangsrechnung INTEGER DEFAULT 0",
+		"ALTER TABLE invoices ADD COLUMN bewirtung_anlass TEXT DEFAULT ''",
+		"ALTER TABLE invoices ADD COLUMN bewirtung_teilnehmer TEXT DEFAULT ''",
 	} {
 		if _, err := r.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -118,7 +120,8 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			auftraggeber, verwendungszweck, rechnungsnummer,
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
-			kommentar, betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
+			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
+			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
 			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
 		) VALUES (
@@ -126,7 +129,8 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?
 		)
@@ -137,7 +141,8 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.Auftraggeber, row.Verwendungszweck, row.Rechnungsnummer,
 		row.BetragNetto, row.SteuersatzProzent, row.SteuersatzBetrag, row.Bruttobetrag,
 		row.Waehrung, row.Gegenkonto, row.Bankkonto, row.Bezahldatum, row.Teilzahlung,
-		row.Kommentar, row.BetragNetto_EUR, row.Gebuehr, row.Rabatt, row.HatAnhaenge, row.VATID,
+		row.Kommentar, row.BewirtungAnlass, row.BewirtungTeilnehmer,
+		row.BetragNetto_EUR, row.Gebuehr, row.Rabatt, row.HatAnhaenge, row.VATID,
 		row.Trinkgeld, core.MarshalTaxLines(row.TaxLines), core.MarshalBooking(row.Buchung), 0,
 		row.Wechselkurs, row.GebuehrProzent, row.BuchungRef, row.Belegnummer, row.Ausgangsrechnung,
 	)
@@ -208,6 +213,8 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			bezahldatum = ?,
 			teilzahlung = ?,
 			kommentar = ?,
+			bewirtung_anlass = ?,
+			bewirtung_teilnehmer = ?,
 			betrag_netto_eur = ?,
 			gebuehr = ?,
 			rabatt = ?,
@@ -243,6 +250,8 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.Bezahldatum,
 		row.Teilzahlung,
 		row.Kommentar,
+		row.BewirtungAnlass,
+		row.BewirtungTeilnehmer,
 		row.BetragNetto_EUR,
 		row.Gebuehr,
 		row.Rabatt,
@@ -402,12 +411,15 @@ func scanInvoiceRows(rows *sql.Rows) ([]core.CSVRow, error) {
 		var belegnummer sql.NullString
 		var ausgangsrechnung sql.NullInt64
 		var rabatt sql.NullFloat64
+		var bewirtungAnlass sql.NullString
+		var bewirtungTeilnehmer sql.NullString
 		err := rows.Scan(
 			&row.Dateiname, &row.Rechnungsdatum, &row.Jahr, &row.Monat,
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
 			&row.BetragNetto, &row.SteuersatzProzent, &row.SteuersatzBetrag, &row.Bruttobetrag,
 			&row.Waehrung, &row.Gegenkonto, &row.Bankkonto, &row.Bezahldatum, &row.Teilzahlung,
-			&row.Kommentar, &row.BetragNetto_EUR, &row.Gebuehr, &rabatt, &row.HatAnhaenge, &row.VATID,
+			&row.Kommentar, &bewirtungAnlass, &bewirtungTeilnehmer,
+			&row.BetragNetto_EUR, &row.Gebuehr, &rabatt, &row.HatAnhaenge, &row.VATID,
 			&trinkgeld, &steuerzeilen, &buchung, &exportiert,
 			&wechselkurs, &gebuehrProzent, &buchungRef, &belegnummer, &ausgangsrechnung,
 		)
@@ -422,6 +434,8 @@ func scanInvoiceRows(rows *sql.Rows) ([]core.CSVRow, error) {
 		row.BuchungRef = buchungRef.String
 		row.Belegnummer = belegnummer.String
 		row.Ausgangsrechnung = ausgangsrechnung.Int64 != 0
+		row.BewirtungAnlass = bewirtungAnlass.String
+		row.BewirtungTeilnehmer = bewirtungTeilnehmer.String
 
 		row.TaxLines = core.ParseTaxLines(steuerzeilen.String)
 		if len(row.TaxLines) == 0 {
@@ -448,7 +462,8 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			auftraggeber, verwendungszweck, rechnungsnummer,
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
-			kommentar, betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
+			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
+			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
 			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
 		FROM invoices
@@ -482,7 +497,8 @@ func (r *Repository) SearchInvoices(query string) ([]core.CSVRow, error) {
 			auftraggeber, verwendungszweck, rechnungsnummer,
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
-			kommentar, betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
+			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
+			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
 			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
 		FROM invoices
@@ -593,7 +609,8 @@ func (r *Repository) getByKey(jahr, monat, dateiname string) (core.CSVRow, bool,
 			auftraggeber, verwendungszweck, rechnungsnummer,
 			betrag_netto, steuersatz_prozent, steuersatz_betrag, bruttobetrag,
 			waehrung, gegenkonto, bankkonto, bezahldatum, teilzahlung,
-			kommentar, betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
+			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
+			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
 			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
 		FROM invoices
