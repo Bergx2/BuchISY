@@ -43,6 +43,16 @@ func TestInvoiceWarnings(t *testing.T) {
 	if hasWarn(InvoiceWarnings(zmOk), "ZM-Eintrag") {
 		t.Error("must not warn when the customer VAT-ID is present")
 	}
+	// GWG account (4855) but net > 800 € → not a GWG, warn.
+	gwgOver := CSVRow{BetragNetto: 1116.85, SteuersatzBetrag: 212.20, Bruttobetrag: 1329.05, Gegenkonto: 4855, Waehrung: "EUR"}
+	if !hasWarn(InvoiceWarnings(gwgOver), "Netto > 800") {
+		t.Error("expected a GWG-over-limit warning for net > 800 on account 4855")
+	}
+	// GWG account with net ≤ 800 € → fine, no warning.
+	gwgOk := CSVRow{BetragNetto: 165.55, SteuersatzBetrag: 31.45, Bruttobetrag: 197.00, Gegenkonto: 4855, Waehrung: "EUR"}
+	if hasWarn(InvoiceWarnings(gwgOk), "Netto > 800") {
+		t.Error("must not warn for a genuine GWG (net ≤ 800)")
+	}
 }
 
 func TestInvoiceWarningsAsOf(t *testing.T) {

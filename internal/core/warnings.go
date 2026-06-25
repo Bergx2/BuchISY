@@ -46,6 +46,13 @@ func InvoiceWarningsAsOf(row CSVRow, today time.Time) []string {
 		w = append(w, "Bruttobetrag fehlt oder ist 0")
 	}
 
+	// GWG account (Sofortabschreibung GWG: SKR03 4855, SKR04 6260) but net > 800 €:
+	// over the GWG limit, so it is NOT a geringwertiges Wirtschaftsgut — it must be
+	// capitalised as a fixed asset and depreciated (AfA), not written off at once.
+	if (row.Gegenkonto == 4855 || row.Gegenkonto == 6260) && row.BetragNetto > 800.0 {
+		w = append(w, "GWG-Konto, aber Netto > 800 € — kein GWG: als Anlagegut aktivieren und abschreiben (AfA)")
+	}
+
 	// VAT-ID format check
 	if vatID := strings.TrimSpace(row.VATID); vatID != "" {
 		// Normalize: remove spaces, uppercase
