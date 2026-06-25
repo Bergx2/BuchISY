@@ -404,10 +404,15 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	updateFilenamePreview()
 	updatePaidActual()
 
-	// Booking category: learned template for this company, else "standard".
+	// Booking category: inferred from the stored booking (so reopening a
+	// reverse-charge / Bewirtung invoice doesn't reset to "standard" and
+	// overwrite the booking on save), else a learned template, else "standard".
 	category := "standard"
 	if tmpl, ok := a.bookingTemplates.Get(meta.Auftraggeber); ok {
 		category = tmpl.Kategorie
+	}
+	if inferred := core.InferBookingCategory(row.Buchung); inferred != "" {
+		category = inferred
 	}
 	catOptions, catKeyByLabel := a.bookingCategoryOptions()
 	categorySelect := widget.NewSelect(catOptions, nil)
