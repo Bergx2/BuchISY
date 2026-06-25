@@ -580,23 +580,46 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	var rebuildSwitcher func()
 	var delAttBtn *widget.Button // forward-declared so rebuildSwitcher can toggle it
 
+	// statementMatchAmount is the value to frame green on the linked statement:
+	// the matched line's OWN amount (from BuchungRef) — so it works for
+	// foreign-currency invoices (the statement is in EUR, not the invoice
+	// currency). Falls back to the invoice's EUR amount.
+	statementMatchAmount := func() float64 {
+		if ref := core.ParseBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
+			if lines, err := core.ParseStatementBookings(
+				filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename)); err == nil {
+				for _, l := range lines {
+					if l.Page == ref.Page && l.LineIdx == ref.LineIdx {
+						return l.Betrag
+					}
+				}
+			}
+		}
+		return core.InvoiceEURAmount(row)
+	}
+
 	swapPreview := func(path string) {
 		currentPreviewPath = path
 		// Green frame around the matched booking when showing the linked
 		// statement; soft yellow fill for the receipt/attachments.
 		hl := hlYellowFill
-		if statementPreviewPath != "" && path == statementPreviewPath {
+		isStatement := statementPreviewPath != "" && path == statementPreviewPath
+		if isStatement {
 			hl = hlGreenFrame
-			// Frame ONLY the matched booking: search just its amount (unique on
-			// the statement), not the currency/partner that repeat on every line.
-			dot := fmt.Sprintf("%.2f", row.Bruttobetrag)
+			// Frame ONLY the matched line: search its exact amount on the
+			// (EUR) statement, not the invoice's foreign-currency gross.
+			dot := fmt.Sprintf("%.2f", statementMatchAmount())
 			hl.values = []string{dot, strings.ReplaceAll(dot, ".", ",")}
 		}
 		content, strip := renderPreviewContent(path, meta, hl)
 		preview.Objects = []fyne.CanvasObject{content}
 		preview.Refresh()
 		previewStrip = strip
-		a.visionHighlight(strip, path, fmt.Sprintf("%.2f", row.Bruttobetrag), hl)
+		// Vision highlight only for the receipt/attachments (scanned PDFs); the
+		// statement is a text-layer PDF handled by the green text-match above.
+		if !isStatement {
+			a.visionHighlight(strip, path, fmt.Sprintf("%.2f", row.Bruttobetrag), hl)
+		}
 		rebuildSwitcher()
 	}
 
