@@ -460,6 +460,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	currentPreviewPath := originalPath
 	previewSwitcher := container.NewHBox()
 	var rebuildSwitcher func()
+	var delAttBtn *widget.Button // forward-declared so rebuildSwitcher can toggle it
 
 	swapPreview := func(path string) {
 		currentPreviewPath = path
@@ -501,6 +502,23 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			previewSwitcher.Add(makeSwitcherBtn("Kontoauszug", statementPreviewPath))
 		}
 		previewSwitcher.Refresh()
+
+		// "Anhang löschen" is only offered while an attachment is the active
+		// preview (not Original / Kontoauszug).
+		if delAttBtn != nil {
+			isAtt := false
+			for _, p := range attPaths {
+				if p == currentPreviewPath {
+					isAtt = true
+					break
+				}
+			}
+			if isAtt {
+				delAttBtn.Show()
+			} else {
+				delAttBtn.Hide()
+			}
+		}
 	}
 
 	addAttBtn := widget.NewButtonWithIcon("+ Anhang",
@@ -523,22 +541,22 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	// Delete the attachment currently shown in the preview (Original /
 	// Kontoauszug cannot be deleted). Confirm first — attachments can be large.
-	delAttBtn := widget.NewButtonWithIcon("Anhang löschen", theme.DeleteIcon(), func() {
+	delAttBtn = widget.NewButtonWithIcon("Anhang löschen", theme.DeleteIcon(), func() {
 		target := currentPreviewPath
-		isAtt := false
-		for _, p := range attPaths {
+		attNum := 0
+		for i, p := range attPaths {
 			if p == target {
-				isAtt = true
+				attNum = i + 1
 				break
 			}
 		}
-		if !isAtt {
+		if attNum == 0 {
 			a.showInfo("Anhang löschen",
 				"Bitte zuerst oben den zu löschenden Anhang auswählen — Original und Kontoauszug können nicht gelöscht werden.")
 			return
 		}
 		dialog.ShowConfirm("Anhang löschen",
-			fmt.Sprintf("Anhang \"%s\" wirklich unwiderruflich löschen?", filepath.Base(target)),
+			fmt.Sprintf("Anhang %d wirklich unwiderruflich löschen?\n\nDatei: %s", attNum, filepath.Base(target)),
 			func(ok bool) {
 				if !ok {
 					return
