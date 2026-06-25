@@ -63,3 +63,18 @@ func TestPdfBoxToPixelTopOrigin(t *testing.T) {
 		t.Errorf("top-origin H mapping off: got %.1f, want ~14", r.H)
 	}
 }
+
+func TestStmtDateRe(t *testing.T) {
+	dated := []string{"11/05CLAUDE.AI", "11.05 Qonto", "2/05 TESTRAIL", "31/12"}
+	for _, s := range dated {
+		if !stmtDateRe.MatchString(s) {
+			t.Errorf("expected %q to be detected as a dated booking row", s)
+		}
+	}
+	undated := []string{"1.17198945209493 USD = 1.00 EUR", "Karte **6868", "- 200.00 USD", "Abonnement / Zusatzgebühren"}
+	for _, s := range undated {
+		if stmtDateRe.MatchString(s) {
+			t.Errorf("expected %q NOT to be detected as a dated booking row", s)
+		}
+	}
+}

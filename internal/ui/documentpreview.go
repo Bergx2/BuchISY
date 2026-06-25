@@ -130,12 +130,13 @@ type previewHighlight struct {
 	stroke      color.NRGBA
 	strokeWidth float32
 	fullWidth   bool     // expand each rect to the full page width (frame the whole row)
+	blockMode   bool     // frame the whole statement booking block (all its lines), not one row
 	values      []string // when set, search ONLY these (instead of all meta values)
 }
 
 var (
 	hlYellowFill = previewHighlight{fill: color.NRGBA{R: 255, G: 235, B: 0, A: 90}}
-	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 210, B: 0, A: 55}, stroke: color.NRGBA{R: 0, G: 150, B: 0, A: 255}, strokeWidth: 3, fullWidth: true}
+	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 210, B: 0, A: 55}, stroke: color.NRGBA{R: 0, G: 150, B: 0, A: 255}, strokeWidth: 3, fullWidth: true, blockMode: true}
 )
 
 func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) (fyne.CanvasObject, *pdfPreviewStrip) {
@@ -154,11 +155,22 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 		if hl.values != nil {
 			searchVals = hl.values // statement: only the booking amount, so a single line is framed
 		}
-		rectsPerPage, _ := core.HighlightRects(mainPath, searchVals, previewDPI)
+		var rectsPerPage [][]core.Rect
+		if hl.blockMode {
+			// Statement: frame the entire booking block (date row + detail rows).
+			rectsPerPage, _ = core.StatementBlockRects(mainPath, searchVals, previewDPI)
+		} else {
+			rectsPerPage, _ = core.HighlightRects(mainPath, searchVals, previewDPI)
+		}
 
-		// Frame the whole booking row (not just the matched value): widen each
-		// rect to the full page width and pad it vertically a touch.
+		// Frame the whole booking (not just the matched value): widen each rect to
+		// the full page width and pad it vertically. A single matched row needs
+		// generous padding; a whole block is already tall, so pad it only lightly.
 		if hl.fullWidth {
+			padFrac := float32(0.30)
+			if hl.blockMode {
+				padFrac = 0.06
+			}
 			for pi := range rectsPerPage {
 				if pi >= len(images) {
 					continue
@@ -166,7 +178,7 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 				pw := float32(images[pi].Bounds().Dx())
 				margin := pw * 0.03
 				for j := range rectsPerPage[pi] {
-					pad := rectsPerPage[pi][j].H * 0.30
+					pad := rectsPerPage[pi][j].H * padFrac
 					rectsPerPage[pi][j].X = margin
 					rectsPerPage[pi][j].W = pw - 2*margin
 					rectsPerPage[pi][j].Y -= pad

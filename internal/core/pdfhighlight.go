@@ -2,11 +2,17 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/ledongthuc/pdf"
 )
+
+// stmtDateRe matches a leading transaction date like "11/05" or "11.05" — the
+// marker that starts a new statement booking block (detail lines have none).
+var stmtDateRe = regexp.MustCompile(`^\d{1,2}[/.]\d{1,2}(\D|$)`)
 
 // amountRe matches a money amount with exactly two decimal places, allowing
 // thousands separators in the integer part: "1234.56", "1.234,56", "573,15".
@@ -209,6 +215,129 @@ func HighlightRects(path string, values []string, dpi float64) ([][]Rect, error)
 						rects = append(rects, pdfBoxToPixel(box, pageHeight, dpi))
 					}
 				}
+			}
+		}
+		result = append(result, rects)
+	}
+	return result, nil
+}
+
+// StatementBlockRects returns, per page, full-height rects covering the ENTIRE
+// transaction block (the dated row plus its following undated detail rows) for
+// each row where one of values matches. Bank statements render a booking as a
+// dated line followed by detail lines (currency conversion, card number); this
+// frames the whole block, not just the amount line. X/W are left at 0 (the
+// caller widens to full page width); only the vertical extent is meaningful.
+func StatementBlockRects(path string, values []string, dpi float64) ([][]Rect, error) {
+	f, r, err := pdf.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open PDF for highlighting: %w", err)
+	}
+	defer f.Close()
+
+	total := r.NumPage()
+	result := make([][]Rect, 0, total)
+	for pageNum := 1; pageNum <= total; pageNum++ {
+		page := r.Page(pageNum)
+		if page.V.IsNull() {
+			result = append(result, nil)
+			continue
+		}
+		rows, err := page.GetTextByRow()
+		if err != nil {
+			result = append(result, nil)
+			continue
+		}
+		pageHeight := pageHeightPoints(page)
+
+		// Per-row visual extent (top/bottom Y in PDF coords), whether it starts a
+		// new booking (dated), and whether it matches a search value.
+		type rinfo struct {
+			loY, hiY float64 // min f.Y, max f.Y+fontSize
+			dated    bool
+			match    bool
+		}
+		maxY := 0.0
+		infos := make([]rinfo, len(rows))
+		for i, row := range rows {
+			frags := []pdf.Text(row.Content)
+			var sb strings.Builder
+			loY, hiY := math.Inf(1), math.Inf(-1)
+			for _, fr := range frags {
+				sb.WriteString(fr.S)
+				fh := fr.FontSize
+				if fh <= 0 {
+					fh = 8
+				}
+				if fr.Y < loY {
+					loY = fr.Y
+				}
+				if fr.Y+fh > hiY {
+					hiY = fr.Y + fh
+				}
+			}
+			if hiY > maxY {
+				maxY = hiY
+			}
+			matched := false
+			for _, v := range values {
+				if _, ok := valueBoxInRow(frags, v); ok {
+					matched = true
+					break
+				}
+			}
+			infos[i] = rinfo{loY: loY, hiY: hiY, dated: stmtDateRe.MatchString(strings.TrimSpace(sb.String())), match: matched}
+		}
+		topOrigin := maxY > pageHeight*1.02
+
+		// Order rows visually top→bottom (GetTextByRow's order can be reversed
+		// for top-origin/scaled PDFs, so sort explicitly).
+		order := make([]int, len(infos))
+		for i := range order {
+			order[i] = i
+		}
+		sort.SliceStable(order, func(a, b int) bool {
+			if topOrigin {
+				return infos[order[a]].loY < infos[order[b]].loY // smaller Y = higher
+			}
+			return infos[order[a]].hiY > infos[order[b]].hiY // larger Y = higher
+		})
+		vis := make([]rinfo, len(order))
+		for k, idx := range order {
+			vis[k] = infos[idx]
+		}
+
+		var rects []Rect
+		for k := range vis {
+			if !vis[k].match {
+				continue
+			}
+			start := k // walk up to the dated row that starts this booking
+			for start > 0 && !vis[start].dated {
+				start--
+			}
+			end := k // extend down across undated detail rows
+			for end+1 < len(vis) && !vis[end+1].dated {
+				end++
+			}
+			if topOrigin {
+				// Center the frame edges in the gaps to neighbouring bookings: it
+				// fully contains the block and absorbs the proportional-mapping
+				// error, without overlapping the next/previous booking.
+				vTop := vis[start].loY
+				if start > 0 {
+					vTop = (vis[start-1].hiY + vis[start].loY) / 2
+				}
+				vBot := vis[end].hiY
+				if end+1 < len(vis) {
+					vBot = (vis[end].hiY + vis[end+1].loY) / 2
+				} else {
+					vBot += (vis[end].hiY - vis[end].loY) * 0.5
+				}
+				rects = append(rects, pdfBoxToPixelTopOrigin(pdfBox{y: vTop, h: vBot - vTop}, pageHeight, maxY, dpi))
+			} else {
+				vTop, vBot := vis[start].hiY, vis[end].loY // top-most edge, bottom-most edge
+				rects = append(rects, pdfBoxToPixel(pdfBox{y: vBot, h: vTop - vBot}, pageHeight, dpi))
 			}
 		}
 		result = append(result, rects)
