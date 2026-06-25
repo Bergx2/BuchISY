@@ -20,6 +20,7 @@ type UStVAOfficial struct {
 // ComputeUStVAOfficial classifies each invoice into its Kennzahl from the
 // Ausgangsrechnung flag, the tax lines, and the counterparty VAT-ID.
 func ComputeUStVAOfficial(rows []CSVRow, rules *BookingRules) UStVAOfficial {
+	rows = RowsEUR(rows)
 	rcSatz := 19.0
 	if rc, ok := rules.Rule("reverse_charge"); ok && rc.RcSatz > 0 {
 		rcSatz = rc.RcSatz

@@ -20,6 +20,7 @@ type AccountBalance struct {
 // slice (ascending by Konto). Name is resolved via chart.Find; if chart is
 // nil or the account is not found, Name falls back to the number string.
 func ComputeSuSa(rows []CSVRow, chart *ChartOfAccounts) []AccountBalance {
+	rows = RowsEUR(rows)
 	type sums struct{ soll, haben float64 }
 	acc := make(map[int]*sums)
 

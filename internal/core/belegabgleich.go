@@ -22,13 +22,13 @@ type ScoredLine struct {
 }
 
 // InvoiceEURAmount returns the amount that should appear on the statement: the
-// gross in EUR. For a foreign-currency invoice that is the converted gross plus
-// the credit-card fee; otherwise the Bruttobetrag.
+// gross in EUR minus any discount. Uses RowEUR for conversion so all foreign
+// money fields (including Gebuehr, which RowEUR already converts) are consistent.
+// For a foreign row with a missing rate the face-value gross − rabatt is returned
+// (RowEUR passes amounts through unchanged in that case).
 func InvoiceEURAmount(row CSVRow) float64 {
-	if row.Waehrung != "" && row.Waehrung != "EUR" && row.Wechselkurs > 0 {
-		return round2(round2(row.Bruttobetrag/row.Wechselkurs) + row.Gebuehr - row.Rabatt)
-	}
-	return round2(row.Bruttobetrag - row.Rabatt)
+	eurRow, _ := RowEUR(row)
+	return round2(eurRow.Bruttobetrag - eurRow.Rabatt)
 }
 
 // MatchConfig tunes the matcher.
