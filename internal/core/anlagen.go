@@ -17,6 +17,21 @@ type Asset struct {
 	NutzungsdauerJahre int     `json:"nutzungsdauer_jahre"`
 	Konto              int     `json:"konto"`
 	AfaKonto           int     `json:"afa_konto"`
+	BelegRef           string  `json:"beleg_ref,omitempty"` // linked invoice Belegnummer, if created from one
+}
+
+// FindAssetByBeleg returns the asset linked to the given Belegnummer via
+// BelegRef, if any — used to show an AfA note on the linked invoice.
+func FindAssetByBeleg(assets []Asset, belegnummer string) (Asset, bool) {
+	if belegnummer == "" {
+		return Asset{}, false
+	}
+	for _, a := range assets {
+		if a.BelegRef == belegnummer {
+			return a, true
+		}
+	}
+	return Asset{}, false
 }
 
 // LoadAssets reads assets from a JSON file. A missing file yields an empty

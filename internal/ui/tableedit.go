@@ -608,6 +608,33 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	rebuildSwitcher()
 
+	// AfA / Anlagenverzeichnis status: shows whether this acquisition is tracked
+	// as a fixed asset (depreciated), with a link to open the register — or a
+	// button to create the asset entry from this invoice.
+	afaStatus := container.NewVBox()
+	var refreshAfaStatus func()
+	refreshAfaStatus = func() {
+		afaStatus.RemoveAll()
+		if asset, ok := core.FindAssetByBeleg(a.assets, row.Belegnummer); ok {
+			note := newCopyableLabel(a.bundle, fmt.Sprintf(
+				"📊 In AfA erfasst: AK %s €, Nutzungsdauer %d J., Anlage %d / AfA %d",
+				formatDecimal(asset.Anschaffungswert, a.settings.DecimalSeparator),
+				asset.NutzungsdauerJahre, asset.Konto, asset.AfaKonto))
+			openBtn := widget.NewButton("Anlagenverzeichnis öffnen", func() { a.showAnlagen() })
+			openBtn.Importance = widget.LowImportance
+			afaStatus.Add(container.NewBorder(nil, nil, nil, openBtn, note))
+		} else {
+			createBtn := widget.NewButton("Als Anlagegut erfassen (AfA)", func() {
+				a.createAssetFromInvoice(editWin, row, selectedAccount, refreshAfaStatus)
+			})
+			createBtn.Importance = widget.LowImportance
+			afaStatus.Add(container.NewBorder(nil, nil,
+				widget.NewLabel("Nicht im Anlagenverzeichnis."), nil, createBtn))
+		}
+		afaStatus.Refresh()
+	}
+	refreshAfaStatus()
+
 	belegnrEntry := widget.NewEntry()
 	belegnrEntry.SetText(row.Belegnummer)
 	belegnrEntry.SetPlaceHolder("z. B. 2026-0007")
@@ -665,6 +692,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			fi(a.bundle.T("booking.category"), container.NewBorder(nil, nil, nil,
 				container.NewHBox(editBookingBtn, autoBookingBtn), categorySelect)),
 			fi("", bookingPrev.container),
+			fi("AfA / Anlage", afaStatus),
 		)),
 		widget.NewSeparator(),
 		newCopyableLabel(a.bundle, a.bundle.T("modal.filenamePreview")),

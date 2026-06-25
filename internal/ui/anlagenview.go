@@ -254,3 +254,79 @@ func sanitizeID(s string) string {
 	}
 	return result
 }
+
+// createAssetFromInvoice opens a small prefilled form to register an invoice as
+// a fixed asset (Anlagegut) in the asset register, linked back to the invoice
+// via BelegRef. onCreated runs after a successful save (e.g. to refresh the AfA
+// note in the edit dialog).
+func (a *App) createAssetFromInvoice(parent fyne.Window, row core.CSVRow, account int, onCreated func()) {
+	bez := widget.NewEntry()
+	bez.SetText(strings.TrimSpace(row.Auftraggeber + " " + row.Verwendungszweck))
+	datum := widget.NewEntry()
+	datum.SetText(row.Rechnungsdatum)
+
+	akBase := row.BetragNetto - row.Rabatt // method B: net reduced by a third-party rebate
+	if akBase <= 0 {
+		akBase = row.BetragNetto
+	}
+	wert := widget.NewEntry()
+	wert.SetText(formatDecimal(akBase, a.settings.DecimalSeparator))
+
+	nd := widget.NewEntry()
+	nd.SetText("1") // computers: 1-year useful life (BMF 2021); user adjusts otherwise
+	konto := widget.NewEntry()
+	konto.SetText(fmt.Sprintf("%d", account))
+	afa := widget.NewEntry()
+	afa.SetText("4830") // SKR03 Abschreibungen auf Sachanlagen (editable)
+
+	dialog.ShowForm("Als Anlagegut erfassen", "Erfassen", "Abbrechen",
+		[]*widget.FormItem{
+			widget.NewFormItem("Bezeichnung", bez),
+			widget.NewFormItem("Anschaffungsdatum", datum),
+			widget.NewFormItem("Anschaffungswert (€)", wert),
+			widget.NewFormItem("Nutzungsdauer (Jahre)", nd),
+			widget.NewFormItem("Anlagekonto", konto),
+			widget.NewFormItem("AfA-Konto", afa),
+		},
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			id := "beleg-" + row.Belegnummer
+			if row.Belegnummer == "" {
+				id = "beleg-" + row.Dateiname
+			}
+			ndJahre, _ := strconv.Atoi(strings.TrimSpace(nd.Text))
+			if ndJahre <= 0 {
+				ndJahre = 1
+			}
+			kontoN, _ := strconv.Atoi(strings.TrimSpace(konto.Text))
+			afaN, _ := strconv.Atoi(strings.TrimSpace(afa.Text))
+			asset := core.Asset{
+				ID:                 id,
+				Bezeichnung:        strings.TrimSpace(bez.Text),
+				Anschaffungsdatum:  strings.TrimSpace(datum.Text),
+				Anschaffungswert:   parseFloat(wert.Text, a.settings.DecimalSeparator),
+				NutzungsdauerJahre: ndJahre,
+				Konto:              kontoN,
+				AfaKonto:           afaN,
+				BelegRef:           row.Belegnummer,
+			}
+			// Replace any existing asset with the same ID (idempotent re-create).
+			kept := make([]core.Asset, 0, len(a.assets)+1)
+			for _, ex := range a.assets {
+				if ex.ID != id {
+					kept = append(kept, ex)
+				}
+			}
+			a.assets = append(kept, asset)
+			if err := core.SaveAssets(a.assetsPath, a.assets); err != nil {
+				dialog.ShowError(err, parent)
+				return
+			}
+			a.showToast("✓ Im Anlagenverzeichnis erfasst")
+			if onCreated != nil {
+				onCreated()
+			}
+		}, parent)
+}

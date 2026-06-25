@@ -213,3 +213,19 @@ func TestLoadSaveAssets(t *testing.T) {
 		t.Errorf("LoadAssets: Bezeichnung = %q, want \"Laptop\"", loaded[0].Bezeichnung)
 	}
 }
+
+func TestFindAssetByBeleg(t *testing.T) {
+	assets := []Asset{
+		{ID: "x1", BelegRef: "2026-0006", Anschaffungswert: 1066.85},
+		{ID: "x2", BelegRef: ""},
+	}
+	if a, ok := FindAssetByBeleg(assets, "2026-0006"); !ok || a.ID != "x1" {
+		t.Fatalf("expected to find x1, got %+v ok=%v", a, ok)
+	}
+	if _, ok := FindAssetByBeleg(assets, "2026-9999"); ok {
+		t.Error("must not match an unknown Belegnummer")
+	}
+	if _, ok := FindAssetByBeleg(assets, ""); ok {
+		t.Error("empty Belegnummer must not match")
+	}
+}
