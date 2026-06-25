@@ -163,7 +163,7 @@ func TestBuildAnlagenspiegelPDF(t *testing.T) {
 			Anschaffungswert: 700, NutzungsdauerJahre: 3},
 	}
 	rows := Anlagenspiegel(assets, 2024)
-	data, err := BuildAnlagenspiegelPDF(rows, 2024, "Anlagenspiegel 2024")
+	data, err := BuildAnlagenspiegelPDF(rows, 2024, "Anlagenspiegel 2024", "Test GmbH")
 	if err != nil {
 		t.Fatalf("BuildAnlagenspiegelPDF: %v", err)
 	}

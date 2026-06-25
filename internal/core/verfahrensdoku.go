@@ -12,7 +12,7 @@ import (
 // datum is the document date formatted as "DD.MM.YYYY".
 func BuildVerfahrensdokumentationPDF(s Settings, chartAccounts int, profilName, datum string) ([]byte, error) {
 	title := "Verfahrensdokumentation BuchISY"
-	pdf, tr := newReportPDF(title, "P")
+	pdf, tr := newReportPDF(title, "P", profilName)
 
 	// section renders a numbered GoBD heading + wrapped body text.
 	section := func(num int, heading, body string) {

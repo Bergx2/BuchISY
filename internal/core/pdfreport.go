@@ -4,21 +4,39 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-pdf/fpdf"
 )
 
 // newReportPDF starts an A4 report with a bold title and returns the document
 // plus a cp1252 translator (so ä/ö/ü/ß/€ render with the core Arial font).
-// orientation is "P" (portrait) or "L" (landscape).
-func newReportPDF(title, orientation string) (*fpdf.Fpdf, func(string) string) {
+// orientation is "P" (portrait) or "L" (landscape). company (optional) and the
+// creation date appear in a sub-header; every page gets a "Seite X / N" footer.
+func newReportPDF(title, orientation, company string) (*fpdf.Fpdf, func(string) string) {
 	pdf := fpdf.New(orientation, "mm", "A4", "")
 	tr := pdf.UnicodeTranslatorFromDescriptor("") // cp1252
 	pdf.SetTitle(title, true)
+
+	// "Seite X / N" centered footer on every page.
+	pdf.AliasNbPages("")
+	pdf.SetFooterFunc(func() {
+		pdf.SetY(-12)
+		pdf.SetFont("Arial", "I", 8)
+		pdf.CellFormat(0, 8, tr(fmt.Sprintf("Seite %d / {nb}", pdf.PageNo())), "", 0, "C", false, 0, "")
+	})
+
 	pdf.AddPage()
 	pdf.SetFont("Arial", "B", 14)
 	pdf.CellFormat(0, 10, tr(title), "", 1, "L", false, 0, "")
+
+	// Sub-header: company (if given) · creation date.
+	sub := "Erstellt am " + time.Now().Format("02.01.2006")
+	if strings.TrimSpace(company) != "" {
+		sub = company + "  ·  " + sub
+	}
 	pdf.SetFont("Arial", "", 9)
+	pdf.CellFormat(0, 6, tr(sub), "", 1, "L", false, 0, "")
 	pdf.Ln(1)
 	return pdf, tr
 }
@@ -62,7 +80,7 @@ func kontoLabelPDF(chart *ChartOfAccounts, konto int) string {
 // BuildBookingJournalPDF renders the booking journal: one row per Soll entry of
 // each balanced booking, against the payment account as counter-account.
 func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L")
+	pdf, tr := newReportPDF(title, "L", "")
 
 	headers := []string{"Datum", "Beleg", "Auftraggeber", "Soll-Konto", "Haben-Konto", "Betrag"}
 	widths := []float64{20, 35, 70, 55, 55, 25}
@@ -121,7 +139,7 @@ func truncate(s string, n int) string {
 // (Einnahmen and Ausgaben), each listing per-account sums plus a section
 // total, followed by a bold Saldo line.
 func BuildControllingPDF(c Controlling, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P")
+	pdf, tr := newReportPDF(title, "P", "")
 
 	headers := []string{"Konto", "Bezeichnung", "Summe"}
 	widths := []float64{25, 120, 35}
@@ -166,7 +184,7 @@ func BuildControllingPDF(c Controlling, title string) ([]byte, error) {
 
 // BuildInvoiceListPDF renders the invoices as a landscape table with a Brutto total.
 func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L")
+	pdf, tr := newReportPDF(title, "L", "")
 
 	headers := []string{"Datum", "Auftraggeber", "Rechnungsnr.", "Netto", "MwSt", "Brutto"}
 	widths := []float64{22, 90, 45, 30, 30, 30}
@@ -211,7 +229,7 @@ func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
 // 66/67/83) as a form — the document the user hands to the tax advisor. Only
 // non-zero Kennzahlen are shown; Kz 83 (Zahllast/Überschuss) is always shown.
 func BuildUStVAPDF(u UStVAOfficial, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P")
+	pdf, tr := newReportPDF(title, "P", "")
 	wKz, wLabel, wVal := 18.0, 122.0, 35.0
 
 	row := func(kz, label string, value float64, bold bool) {
@@ -275,7 +293,7 @@ func BuildUStVAPDF(u UStVAOfficial, title string) ([]byte, error) {
 // VAT-ID with its net sum + "Sonstige Leistung", plus the Kontrollsumme and the
 // own VAT-ID in the header (when set).
 func BuildZMPDF(z ZM, ownVatID, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P")
+	pdf, tr := newReportPDF(title, "P", "")
 	if ownVatID != "" {
 		pdf.SetFont("Arial", "", 9)
 		pdf.CellFormat(0, 6, tr("Eigene USt-IdNr.: "+ownVatID), "", 1, "L", false, 0, "")
@@ -310,7 +328,7 @@ func BuildZMPDF(z ZM, ownVatID, title string) ([]byte, error) {
 // section lists Belegnr, Datum, Partner, Betrag, Alter (Tage) and Bucket, and
 // closes with a section total.
 func BuildOpenItemsPDF(oi OpenItems, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L")
+	pdf, tr := newReportPDF(title, "L", "")
 
 	headers := []string{"Belegnr.", "Datum", "Partner", "Betrag", "Alter (Tage)", "Bucket"}
 	widths := []float64{30, 22, 90, 28, 28, 20}
@@ -364,7 +382,7 @@ func BuildOpenItemsPDF(oi OpenItems, title string) ([]byte, error) {
 // BuildSuSaPDF renders the Summen- und Saldenliste as a portrait PDF with
 // columns Konto · Name · Soll · Haben · Saldo and a totals row at the bottom.
 func BuildSuSaPDF(bals []AccountBalance, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P")
+	pdf, tr := newReportPDF(title, "P", "")
 
 	headers := []string{"Konto", "Bezeichnung", "Soll", "Haben", "Saldo"}
 	widths := []float64{18, 97, 25, 25, 25}
@@ -402,7 +420,7 @@ func BuildSuSaPDF(bals []AccountBalance, title string) ([]byte, error) {
 // BuildGuVPDF renders the Gewinn- und Verlustrechnung with an Erlöse section,
 // an Aufwand section and a bold Ergebnis line.
 func BuildGuVPDF(g GuV, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P")
+	pdf, tr := newReportPDF(title, "P", "")
 
 	headers := []string{"Konto", "Bezeichnung", "Betrag"}
 	widths := []float64{18, 107, 35}
@@ -449,13 +467,14 @@ func BuildGuVPDF(g GuV, title string) ([]byte, error) {
 }
 
 // BuildAnlagenspiegelPDF renders the Anlagenspiegel (asset register) for a given
-// year as a landscape PDF. Columns: Bezeichnung · Anschaffung · AK · ND · AfA(Jahr)
+// year as a PORTRAIT PDF. Columns: Bezeichnung · Anschaffung · AK · ND · AfA(Jahr)
 // · Restbuchwert · GWG. A totals row for AfA and Restbuchwert is appended.
-func BuildAnlagenspiegelPDF(rows []AnlagenRow, jahr int, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L")
+// company is shown in the header (e.g. the profile name).
+func BuildAnlagenspiegelPDF(rows []AnlagenRow, jahr int, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P", company)
 
 	headers := []string{"Bezeichnung", "Anschaffung", "AK (€)", "ND (J)", "AfA " + fmt.Sprintf("%d", jahr), "Restbuchwert", "GWG"}
-	widths := []float64{70, 26, 28, 18, 30, 32, 14}
+	widths := []float64{56, 24, 26, 14, 26, 30, 12}
 	pdfTableHeader(pdf, tr, headers, widths)
 
 	var totalAfa, totalRbw float64
@@ -470,7 +489,7 @@ func BuildAnlagenspiegelPDF(rows []AnlagenRow, jahr int, title string) ([]byte, 
 			txt   string
 			align string
 		}{
-			{widths[0], truncate(row.Asset.Bezeichnung, 40), "L"},
+			{widths[0], truncate(row.Asset.Bezeichnung, 32), "L"},
 			{widths[1], row.Asset.Anschaffungsdatum, "L"},
 			{widths[2], pdfAmount(row.Asset.Anschaffungswert), "R"},
 			{widths[3], fmt.Sprintf("%d", row.Asset.NutzungsdauerJahre), "R"},
@@ -506,7 +525,7 @@ func BuildAnlagenspiegelPDF(rows []AnlagenRow, jahr int, title string) ([]byte, 
 // all outgoing invoices (Ausgangsrechnungen) in the period with Belegnummer,
 // date, customer, revenue account, net, VAT and gross, plus net/gross totals.
 func BuildSalesJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L")
+	pdf, tr := newReportPDF(title, "L", "")
 
 	headers := []string{"Belegnr.", "Rechnungsnr.", "Datum", "Kunde", "Erlöskonto", "Netto", "USt", "Brutto"}
 	widths := []float64{24, 38, 20, 66, 46, 26, 26, 26}

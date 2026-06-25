@@ -88,7 +88,7 @@ func (a *App) showAnlagen() {
 	spiegelBtn := widget.NewButton(a.bundle.T("anlagen.spiegel"), func() {
 		rows := core.Anlagenspiegel(a.assets, a.currentYear)
 		title := fmt.Sprintf("%s %d", a.bundle.T("anlagen.title"), a.currentYear)
-		data, err := core.BuildAnlagenspiegelPDF(rows, a.currentYear, title)
+		data, err := core.BuildAnlagenspiegelPDF(rows, a.currentYear, title, a.profile)
 		if err != nil {
 			dialog.ShowError(err, win)
 			return
