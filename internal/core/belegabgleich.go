@@ -26,9 +26,9 @@ type ScoredLine struct {
 // the credit-card fee; otherwise the Bruttobetrag.
 func InvoiceEURAmount(row CSVRow) float64 {
 	if row.Waehrung != "" && row.Waehrung != "EUR" && row.Wechselkurs > 0 {
-		return round2(round2(row.Bruttobetrag/row.Wechselkurs) + row.Gebuehr)
+		return round2(round2(row.Bruttobetrag/row.Wechselkurs) + row.Gebuehr - row.Rabatt)
 	}
-	return round2(row.Bruttobetrag)
+	return round2(row.Bruttobetrag - row.Rabatt)
 }
 
 // MatchConfig tunes the matcher.

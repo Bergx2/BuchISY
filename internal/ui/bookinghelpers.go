@@ -50,7 +50,7 @@ func (a *App) computeRevenueBooking(lines []core.TaxLine, revenueAccount int, ba
 
 // computeInvoiceBooking resolves the payment account and builds the booking.
 // Returns (booking, bookable, reasonIfNotBookable).
-func (a *App) computeInvoiceBooking(kategorie string, lines []core.TaxLine, trinkgeld float64, expenseAccount int, bankAccountName string) (core.Booking, bool, string) {
+func (a *App) computeInvoiceBooking(kategorie string, lines []core.TaxLine, trinkgeld float64, expenseAccount int, bankAccountName string, rabatt float64) (core.Booking, bool, string) {
 	if len(lines) == 0 {
 		return core.Booking{}, false, a.bundle.T("booking.no.lines")
 	}
@@ -58,7 +58,7 @@ func (a *App) computeInvoiceBooking(kategorie string, lines []core.TaxLine, trin
 	if !ok {
 		return core.Booking{}, false, a.bundle.T("booking.no.payment.account")
 	}
-	b, err := core.BuildBooking(a.bookingRules, kategorie, lines, trinkgeld, expenseAccount, payment)
+	b, err := core.BuildBooking(a.bookingRules, kategorie, lines, trinkgeld, expenseAccount, payment, rabatt)
 	if err != nil {
 		return core.Booking{}, false, err.Error()
 	}

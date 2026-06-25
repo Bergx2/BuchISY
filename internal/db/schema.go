@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 	kommentar TEXT,
 	betrag_netto_eur REAL,
 	gebuehr REAL,
+	rabatt REAL DEFAULT 0,
 	hat_anhaenge BOOLEAN DEFAULT 0,
 	ustidnr TEXT,
 	trinkgeld REAL,

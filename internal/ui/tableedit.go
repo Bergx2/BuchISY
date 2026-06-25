@@ -211,6 +211,33 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	}
 	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
 
+	rabattEntry := widget.NewEntry()
+	if meta.Rabatt > 0 {
+		rabattEntry.SetText(formatDecimal(meta.Rabatt, a.settings.DecimalSeparator))
+	}
+	rabattEntry.SetPlaceHolder(a.bundle.T("field.rabatt"))
+
+	paidActualLabel := widget.NewLabel("")
+	updatePaidActual := func() {
+		brutto := 0.0
+		if ed != nil {
+			brutto = ed.Brutto()
+		}
+		rabatt := parseFloat(rabattEntry.Text, a.settings.DecimalSeparator)
+		if brutto != 0 || rabatt != 0 {
+			paid := brutto - rabatt
+			paidActualLabel.SetText(a.bundle.T("field.paidActual") + ": " + formatDecimal(paid, a.settings.DecimalSeparator))
+		} else {
+			paidActualLabel.SetText("")
+		}
+	}
+	rabattEntry.OnChanged = func(string) {
+		updatePaidActual()
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	}
+
 	// Exchange rate + CC-fee% entries for live EUR conversion
 	kursEntry := widget.NewEntry()
 	kursEntry.SetPlaceHolder(a.bundle.T("field.rate"))
@@ -356,9 +383,11 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			recomputeBooking()
 		}
 		recomputeEUR()
+		updatePaidActual()
 	})
 
 	updateFilenamePreview()
+	updatePaidActual()
 
 	// Booking category: learned template for this company, else "standard".
 	category := "standard"
@@ -389,7 +418,8 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		} else {
 			b, bookable, reason = a.computeInvoiceBooking(
 				catKeyByLabel[categorySelect.Selected],
-				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected,
+				parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 		}
 		bookingPrev.set(b, bookable, reason)
 	}
@@ -407,7 +437,8 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			} else {
 				seed, _, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected,
+					parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 			}
 		}
 		a.showBookingEditor(seed, func(edited core.Booking) {
@@ -612,6 +643,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			fi("MwSt.-Zeilen", ed.Container()),
 			fi(a.bundle.T("field.currency"),
 				container.NewBorder(nil, nil, nil, nil, currencySelect)),
+			fi(a.bundle.T("field.rabatt"), container.NewBorder(nil, nil, nil, paidActualLabel, rabattEntry)),
 		)),
 		section("Ablage", selectableForm(a.bundle,
 			fi(a.bundle.T("field.account"),
@@ -699,7 +731,8 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			} else {
 				b, bookable, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected,
+					parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 				learn = bookable
 			}
 			if bookable {
@@ -724,6 +757,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			commentEntry.Text,
 			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
 			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
+			parseFloat(rabattEntry.Text, a.settings.DecimalSeparator),
 			parseDecimal(kursEntry.Text),
 			parseDecimal(feePctEntry.Text),
 			filenameEntry.Text,
@@ -802,6 +836,7 @@ func (a *App) updateInvoice(
 	comment string,
 	netEUR float64,
 	fee float64,
+	rabatt float64,
 	wechselkurs float64,
 	gebuehrProzent float64,
 	filenameInput string,
@@ -836,6 +871,7 @@ func (a *App) updateInvoice(
 		Kommentar:         comment,
 		BetragNetto_EUR:   netEUR,
 		Gebuehr:           fee,
+		Rabatt:            rabatt,
 		Wechselkurs:       wechselkurs,
 		GebuehrProzent:    gebuehrProzent,
 		HatAnhaenge:       willHaveAttachments,

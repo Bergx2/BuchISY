@@ -425,3 +425,41 @@ func TestSearchInvoicesGlobal(t *testing.T) {
 		t.Errorf("expected 0 results for 'zzzz', got %d", len(results))
 	}
 }
+
+// TestRabattRoundTrip verifies that the Rabatt field is persisted via Insert,
+// survives a List read-back, and is correctly updated via Update.
+func TestRabattRoundTrip(t *testing.T) {
+	repo := newTestRepo(t)
+
+	// Insert with Rabatt = 50
+	if _, err := repo.Insert(core.CSVRow{
+		Dateiname: "rabatt.pdf",
+		Jahr:      "2026",
+		Monat:     "06",
+		Rabatt:    50.0,
+	}); err != nil {
+		t.Fatalf("Insert with Rabatt: %v", err)
+	}
+
+	rows, err := repo.List("2026", "06")
+	if err != nil {
+		t.Fatalf("List after Insert: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Rabatt != 50.0 {
+		t.Fatalf("Rabatt not persisted via Insert/List: %+v", rows)
+	}
+
+	// Update: change Rabatt to 25
+	rows[0].Rabatt = 25.0
+	if err := repo.Update("2026", "06", "rabatt.pdf", rows[0]); err != nil {
+		t.Fatalf("Update with Rabatt: %v", err)
+	}
+
+	rows, err = repo.List("2026", "06")
+	if err != nil {
+		t.Fatalf("List after Update: %v", err)
+	}
+	if rows[0].Rabatt != 25.0 {
+		t.Errorf("Rabatt not persisted via Update: got %v, want 25.0", rows[0].Rabatt)
+	}
+}

@@ -167,7 +167,7 @@ func (b Booking) DebitEntries() []BookingEntry {
 // category rule. expenseAccount is the Soll account for the "standard" case;
 // paymentAccount is the Haben account (Zahlungskonto). Returns an error for an
 // unknown category.
-func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkgeld float64, expenseAccount, paymentAccount int) (Booking, error) {
+func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkgeld float64, expenseAccount, paymentAccount int, rabatt float64) (Booking, error) {
 	rule, ok := rules.Rule(kategorie)
 	if !ok {
 		return Booking{}, fmt.Errorf("unbekannte Buchungskategorie: %s", kategorie)
@@ -205,7 +205,7 @@ func BuildBooking(rules *BookingRules, kategorie string, lines []TaxLine, trinkg
 	case "reisekosten", "kfz":
 		entries = append(entries, BookingEntry{Konto: rule.DefaultKonto, Betrag: netTotal, Soll: true})
 	case "standard":
-		entries = append(entries, BookingEntry{Konto: expenseAccount, Betrag: netTotal, Soll: true})
+		entries = append(entries, BookingEntry{Konto: expenseAccount, Betrag: round2(netTotal - rabatt), Soll: true})
 	default:
 		return Booking{}, fmt.Errorf("Buchungskategorie ohne Buchungslogik: %s", kategorie)
 	}
