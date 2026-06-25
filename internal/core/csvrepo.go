@@ -49,6 +49,8 @@ var DefaultCSVColumns = []string{
 	"Steuerzeilen",
 	"Buchung",
 	"Exportiert",
+	"Originalwaehrung",
+	"Originalbetrag_Brutto",
 }
 
 // ColumnDisplayNames maps column IDs to German display names.
@@ -88,6 +90,8 @@ var ColumnDisplayNames = map[string]string{
 	"Steuerzeilen":       "Steuerzeilen (Detail)",
 	"Buchung":            "Buchungssatz",
 	"Exportiert":         "Exportiert",
+	"Originalwaehrung":      "Originalwährung",
+	"Originalbetrag_Brutto": "Originalbetrag Brutto",
 }
 
 // ColumnTranslationKeys maps column IDs to translation keys.
@@ -127,6 +131,8 @@ var ColumnTranslationKeys = map[string]string{
 	"Steuerzeilen":       "table.col.taxlines",
 	"Buchung":            "table.col.buchung",
 	"Exportiert":         "table.col.exportiert",
+	"Originalwaehrung":      "table.col.originalwaehrung",
+	"Originalbetrag_Brutto": "table.col.originalbetrag_brutto",
 }
 
 var validColumns = func() map[string]struct{} {
@@ -137,6 +143,11 @@ var validColumns = func() map[string]struct{} {
 	// Add old column names for backward compatibility
 	m["Firmenname"] = struct{}{}
 	m["Kurzbezeichnung"] = struct{}{}
+	// New documentation columns are already in DefaultCSVColumns; listed here
+	// explicitly so that parseHeader also recognises them in older CSVs that
+	// contain them without the full DefaultCSVColumns set.
+	m["Originalwaehrung"] = struct{}{}
+	m["Originalbetrag_Brutto"] = struct{}{}
 	return m
 }()
 
@@ -322,6 +333,9 @@ func (r *CSVRepository) Load(path string) ([]CSVRow, error) {
 		}
 		row.Buchung = ParseBooking(valueForColumn(record, headerMap, "Buchung"))
 		row.Exportiert = strings.EqualFold(strings.TrimSpace(valueForColumn(record, headerMap, "Exportiert")), "true")
+		// Documentation columns (optional; empty/zero when absent in older CSVs).
+		row.Originalwaehrung = valueForColumn(record, headerMap, "Originalwaehrung")
+		row.Originalbetrag_Brutto = parseFloat(valueForColumn(record, headerMap, "Originalbetrag_Brutto"))
 		rows = append(rows, row)
 	}
 
@@ -519,6 +533,8 @@ func (r *CSVRepository) rowToRecord(row CSVRow) []string {
 		"Steuerzeilen":       MarshalTaxLines(row.TaxLines),
 		"Buchung":            MarshalBooking(row.Buchung),
 		"Exportiert":         fmt.Sprintf("%t", row.Exportiert),
+		"Originalwaehrung":      row.Originalwaehrung,
+		"Originalbetrag_Brutto": r.formatFloat(row.Originalbetrag_Brutto),
 	}
 
 	// Build record in configured order

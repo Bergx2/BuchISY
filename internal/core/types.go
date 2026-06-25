@@ -220,6 +220,12 @@ type CSVRow struct {
 	BuchungRef        string // statementFilename|page|lineIdx (within the Bankkonto's folder)
 	Buchung           Booking
 	Exportiert        bool
+	// Documentation columns for foreign-currency invoices.
+	// Set by the CSV/PDF export layer (not persisted in the DB):
+	//   Originalwaehrung      = the original currency code before EUR normalisation
+	//   Originalbetrag_Brutto = the original gross amount before EUR normalisation
+	Originalwaehrung      string
+	Originalbetrag_Brutto float64
 }
 
 // ToCSVRow converts Meta to CSVRow.
