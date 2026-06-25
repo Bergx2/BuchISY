@@ -412,5 +412,6 @@
   "reconcile.openLinesHeading": "Offene Auszugszeilen",
   "reconcile.truncated": "… und %d weitere",
   "reconcile.linked": "Bereits zugeordnet",
-  "reconcile.unlink": "Zuordnung aufheben"
+  "reconcile.unlink": "Zuordnung aufheben",
+  "currency.conversion.section": "Währungsumrechnung"
 }

@@ -412,5 +412,6 @@
   "reconcile.openLinesHeading": "Open statement lines",
   "reconcile.truncated": "… and %d more",
   "reconcile.linked": "Already linked",
-  "reconcile.unlink": "Unlink"
+  "reconcile.unlink": "Unlink",
+  "currency.conversion.section": "Currency conversion"
 }

@@ -301,13 +301,13 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			feeLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.fee"), defaultCurrency)
 			netEURLabel := fmt.Sprintf("%s (%s)", a.bundle.T("field.net_eur"), defaultCurrency)
 			currencyConversionContainer.Objects = []fyne.CanvasObject{
-				widget.NewForm(
+				section(a.bundle.T("currency.conversion.section"), widget.NewForm(
 					widget.NewFormItem(a.bundle.T("field.rate"), kursEntry),
 					widget.NewFormItem(a.bundle.T("field.fee.percent"), feePctEntry),
 					widget.NewFormItem(netEURLabel, netEUREntry),
 					widget.NewFormItem(feeLabel, feeEntry),
 					widget.NewFormItem(a.bundle.T("field.total.eur.label"), gesamtEURLabel),
-				),
+				)),
 			}
 			recomputeEUR()
 		} else {
