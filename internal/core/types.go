@@ -34,6 +34,7 @@ type Meta struct {
 	Kommentar         string     // Comment/note for this invoice
 	BetragNetto_EUR   float64    // Net amount in default currency (EUR) for foreign currency invoices
 	Gebuehr           float64    // Fee (e.g., currency exchange fee)
+	Rabatt            float64    // Third-party rebate / platform voucher (gross rebate deducted from payment)
 	Wechselkurs       float64    // Exchange rate used for currency conversion
 	GebuehrProzent    float64    // Fee rate in percent (e.g., currency exchange fee %)
 	HatAnhaenge       bool       // Indicates if invoice has additional file attachments
@@ -206,6 +207,7 @@ type CSVRow struct {
 	Kommentar         string
 	BetragNetto_EUR   float64
 	Gebuehr           float64
+	Rabatt            float64 // Third-party rebate / platform voucher (gross rebate deducted from payment)
 	Wechselkurs       float64
 	GebuehrProzent    float64
 	HatAnhaenge       bool
@@ -249,6 +251,7 @@ func (m Meta) ToCSVRow() CSVRow {
 		Kommentar:         m.Kommentar,
 		BetragNetto_EUR:   m.BetragNetto_EUR,
 		Gebuehr:           m.Gebuehr,
+		Rabatt:            m.Rabatt,
 		Wechselkurs:       m.Wechselkurs,
 		GebuehrProzent:    m.GebuehrProzent,
 		HatAnhaenge:       m.HatAnhaenge,
@@ -285,6 +288,7 @@ func (r CSVRow) ToMeta() Meta {
 		Kommentar:         r.Kommentar,
 		BetragNetto_EUR:   r.BetragNetto_EUR,
 		Gebuehr:           r.Gebuehr,
+		Rabatt:            r.Rabatt,
 		Wechselkurs:       r.Wechselkurs,
 		GebuehrProzent:    r.GebuehrProzent,
 		HatAnhaenge:       r.HatAnhaenge,
