@@ -313,6 +313,7 @@
   "erloesabgleich.confirm": "Verknüpfen",
   "hint.no_api_key": "Kein Claude-API-Key hinterlegt — in den Einstellungen ergänzen, um KI-Extraktion zu nutzen.",
   "hint.no_storage": "Kein Speicherpfad gesetzt — in den Einstellungen wählen, wo Belege abgelegt werden.",
+  "hint.kontenrahmen": "Buchungskonten passen nicht zum Kontenrahmen — Einstellungen → Erweitert → Kontenrahmen prüfen.",
   "hint.dismiss": "Ausblenden",
   "empty.title": "Noch keine Belege in diesem Monat",
   "empty.hint": "PDFs hierher ziehen oder einen Beleg hinzufügen",
