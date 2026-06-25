@@ -1113,6 +1113,9 @@ func (a *App) updateInvoice(
 	newRow.Dateiname = finalName
 	newRow.HatAnhaenge = originalRow.HatAnhaenge
 	newRow.AnzahlAnhaenge = originalRow.AnzahlAnhaenge
+	// Preserve the statement reconciliation link (not a form field) — otherwise
+	// saving would wipe a BuchungRef set via the single-invoice match.
+	newRow.BuchungRef = originalRow.BuchungRef
 	newRow.Unterordner = unterordner
 	newRow.Buchung = buchung
 
