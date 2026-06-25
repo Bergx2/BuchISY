@@ -597,12 +597,25 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			bookingPrev.set(*manualBooking, manualBooking.Balanced(), a.bundle.T("booking.manual.hint"))
 			return
 		}
+		// Convert tax lines + scalar amounts to EUR before building the booking,
+		// so the stored Buchung is always in EUR even for foreign-currency invoices.
+		waehr := core.CurrencyCodeFromOption(currencySelect.Selected)
+		kurs := parseDecimal(kursEntry.Text)
+		linesEUR := core.TaxLinesEUR(ed.Lines(), waehr, kurs)
+		toEUR := func(v float64) float64 {
+			if waehr != "" && waehr != "EUR" && kurs > 0 {
+				return v / kurs
+			}
+			return v
+		}
+		trinkgeldEUR := toEUR(ed.Trinkgeld())
+		rabattEUR := toEUR(parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 		var b core.Booking
 		var bookable bool
 		var reason string
 		if ausgangsrechnungCheck.Checked {
 			b, bookable, reason = a.computeRevenueBooking(
-				ed.Lines(), selectedAccount, bankAccountSelect.Selected)
+				linesEUR, selectedAccount, bankAccountSelect.Selected)
 			// #6 Payment settlement: when a payment date is set, settle the
 			// revenue booking from Forderung (1400) to the actual bank account,
 			// so the preview already reflects the paid state at entry time.
@@ -614,8 +627,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		} else {
 			b, bookable, reason = a.computeInvoiceBooking(
 				catKeyByLabel[categorySelect.Selected],
-				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected,
-				parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
+				linesEUR, trinkgeldEUR, selectedAccount, bankAccountSelect.Selected,
+				rabattEUR)
 		}
 		bookingPrev.set(b, bookable, reason)
 	}
