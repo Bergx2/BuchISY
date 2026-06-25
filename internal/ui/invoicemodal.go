@@ -349,6 +349,33 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	}
 	feeEntry.SetPlaceHolder(a.bundle.T("field.fee"))
 
+	rabattEntry := widget.NewEntry()
+	if meta.Rabatt > 0 {
+		rabattEntry.SetText(formatDecimal(meta.Rabatt, a.settings.DecimalSeparator))
+	}
+	rabattEntry.SetPlaceHolder(a.bundle.T("field.rabatt"))
+
+	paidActualLabel := widget.NewLabel("")
+	updatePaidActual := func() {
+		brutto := 0.0
+		if ed != nil {
+			brutto = ed.Brutto()
+		}
+		rabatt := parseFloat(rabattEntry.Text, a.settings.DecimalSeparator)
+		if brutto != 0 || rabatt != 0 {
+			paid := brutto - rabatt
+			paidActualLabel.SetText(a.bundle.T("field.paidActual") + ": " + formatDecimal(paid, a.settings.DecimalSeparator))
+		} else {
+			paidActualLabel.SetText("")
+		}
+	}
+	rabattEntry.OnChanged = func(string) {
+		updatePaidActual()
+		if recomputeBooking != nil {
+			recomputeBooking()
+		}
+	}
+
 	// Exchange rate + CC-fee% entries for live EUR conversion
 	kursEntry := widget.NewEntry()
 	kursEntry.SetPlaceHolder(a.bundle.T("field.rate"))
@@ -536,6 +563,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			recomputeBooking()
 		}
 		recomputeEUR()
+		updatePaidActual()
 	})
 
 	// Booking category: learned template for this company, else "standard".
@@ -571,7 +599,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		} else {
 			b, bookable, reason = a.computeInvoiceBooking(
 				catKeyByLabel[categorySelect.Selected],
-				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
+				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected,
+				parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 		}
 		bookingPrev.set(b, bookable, reason)
 	}
@@ -610,7 +639,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			} else {
 				seed, _, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected,
+					parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 			}
 		}
 		a.showBookingEditor(seed, func(edited core.Booking) {
@@ -626,6 +656,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// Initial preview - call after all widgets are set up
 	updateFilenamePreview()
 	recomputeBooking()
+	updatePaidActual()
 	// If the invoice was already classified as an Ausgangsrechnung by the
 	// extractor, pre-suggest the matching revenue account (unless the user
 	// already has a manually chosen account from a prior session).
@@ -774,6 +805,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			fi("MwSt.-Zeilen", ed.Container()),
 			fi(a.bundle.T("field.currency"),
 				container.NewBorder(nil, nil, nil, nil, currencySelect)),
+			fi(a.bundle.T("field.rabatt"), container.NewBorder(nil, nil, nil, paidActualLabel, rabattEntry)),
 		)),
 		section("Ablage", selectableForm(a.bundle,
 			fi(a.bundle.T("field.account"),
@@ -927,7 +959,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			} else {
 				b, bookable, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected,
+					parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 				learn = bookable
 			}
 			if bookable {
@@ -954,6 +987,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				commentEntry.Text,
 				parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
 				parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
+				parseFloat(rabattEntry.Text, a.settings.DecimalSeparator),
 				parseDecimal(kursEntry.Text),
 				parseDecimal(feePctEntry.Text),
 				rememberCheck.Checked,
@@ -1078,6 +1112,7 @@ func (a *App) saveInvoice(
 	comment string,
 	netEUR float64,
 	fee float64,
+	rabatt float64,
 	wechselkurs float64,
 	gebuehrProzent float64,
 	rememberMapping bool,
@@ -1110,6 +1145,7 @@ func (a *App) saveInvoice(
 		Kommentar:         comment,
 		BetragNetto_EUR:   netEUR,
 		Gebuehr:           fee,
+		Rabatt:            rabatt,
 		Wechselkurs:       wechselkurs,
 		GebuehrProzent:    gebuehrProzent,
 		HatAnhaenge:       len(attachments) > 0,
@@ -1342,6 +1378,7 @@ func (a *App) autoBookInvoice(mainPath string, attachments []string, meta core.M
 		meta.Kommentar,
 		meta.BetragNetto_EUR,
 		meta.Gebuehr,
+		meta.Rabatt,
 		meta.Wechselkurs,
 		meta.GebuehrProzent,
 		false, // rememberMapping

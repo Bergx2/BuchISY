@@ -71,6 +71,8 @@
   "field.comment": "Kommentar",
   "field.net_eur": "Betrag netto (EUR)",
   "field.fee": "Gebühr",
+  "field.rabatt": "Rabatt/Gutschein (Plattform)",
+  "field.paidActual": "Tatsächlich gezahlt",
   "field.rate": "Wechselkurs (Fremdwährung pro EUR)",
   "field.fee.percent": "Gebühr %",
   "field.total.eur.label": "Gesamt (EUR)",
