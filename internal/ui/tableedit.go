@@ -148,7 +148,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	}
 	updateAccountDisplay()
 	chooseAccountBtn := widget.NewButton(a.bundle.T("picker.account.choose"), func() {
-		a.showAccountSearch(selectedAccount, func(n int) {
+		a.showAccountSearch(selectedAccount, editWin, func(n int) {
 			selectedAccount = n
 			updateAccountDisplay()
 			if a.accountPrefs != nil { // record invoice Gegenkonto picks as "recently used"
@@ -441,7 +441,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 					parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 			}
 		}
-		a.showBookingEditor(seed, func(edited core.Booking) {
+		a.showBookingEditor(seed, editWin, func(edited core.Booking) {
 			manualBooking = &edited
 			recomputeBooking()
 		})

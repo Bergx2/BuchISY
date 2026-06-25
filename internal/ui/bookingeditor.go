@@ -43,7 +43,10 @@ func parseDecimal(s string) float64 {
 
 // showBookingEditor opens a dialog to hand-edit a booking's Soll/Haben lines.
 // On OK it calls onSave with a Booking{Manuell:true}.
-func (a *App) showBookingEditor(current core.Booking, onSave func(core.Booking)) {
+func (a *App) showBookingEditor(current core.Booking, parent fyne.Window, onSave func(core.Booking)) {
+	if parent == nil {
+		parent = a.window
+	}
 	rows := make([]bookingEditRow, 0, len(current.Entries))
 	for _, e := range current.Entries {
 		rows = append(rows, bookingEditRow{Konto: e.Konto, Betrag: e.Betrag, Soll: e.Soll})
@@ -73,7 +76,7 @@ func (a *App) showBookingEditor(current core.Booking, onSave func(core.Booking))
 			r := &rows[i]
 			kontoLabel := widget.NewLabel(a.bookingKontoLabel(r.Konto))
 			pickBtn := widget.NewButton("…", func() {
-				a.showAccountSearch(r.Konto, func(n int) {
+				a.showAccountSearch(r.Konto, parent, func(n int) {
 					r.Konto = n
 					kontoLabel.SetText(a.bookingKontoLabel(n))
 					refreshBalance()
@@ -120,7 +123,7 @@ func (a *App) showBookingEditor(current core.Booking, onSave func(core.Booking))
 			if ok {
 				onSave(bookingFromRows(rows))
 			}
-		}, a.window)
+		}, parent)
 	d.Resize(fyne.NewSize(520, 460))
 	d.Show()
 }

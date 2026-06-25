@@ -357,7 +357,7 @@ func (a *App) showSettingsView() {
 			skr04Display := widget.NewLabel(paymentSKR04Label(a, tempBankAccounts[currentIdx].SKR04Konto))
 			skr04Display.Wrapping = fyne.TextWrapWord
 			skr04Btn := widget.NewButton(a.bundle.T("settings.payment.skr04"), func() {
-				a.showAccountSearch(tempBankAccounts[currentIdx].SKR04Konto, func(n int) {
+				a.showAccountSearch(tempBankAccounts[currentIdx].SKR04Konto, a.window, func(n int) {
 					tempBankAccounts[currentIdx].SKR04Konto = n
 					skr04Display.SetText(paymentSKR04Label(a, n))
 				})
@@ -823,46 +823,46 @@ func (a *App) showSettingsView() {
 
 	vst19Lbl := widget.NewLabel(paymentSKR04Label(a, vst19))
 	vst19Btn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(vst19, func(n int) { vst19 = n; vst19Lbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(vst19, a.window, func(n int) { vst19 = n; vst19Lbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	vst7Lbl := widget.NewLabel(paymentSKR04Label(a, vst7))
 	vst7Btn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(vst7, func(n int) { vst7 = n; vst7Lbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(vst7, a.window, func(n int) { vst7 = n; vst7Lbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	bewAbzLbl := widget.NewLabel(paymentSKR04Label(a, bewAbz))
 	bewAbzBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(bewAbz, func(n int) { bewAbz = n; bewAbzLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(bewAbz, a.window, func(n int) { bewAbz = n; bewAbzLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	bewNichtLbl := widget.NewLabel(paymentSKR04Label(a, bewNicht))
 	bewNichtBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(bewNicht, func(n int) { bewNicht = n; bewNichtLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(bewNicht, a.window, func(n int) { bewNicht = n; bewNichtLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	bewProzentEntry := widget.NewEntry()
 	bewProzentEntry.SetText(strings.Replace(fmt.Sprintf("%g", bewProzent), ".", ",", 1))
 
 	vstRCLbl := widget.NewLabel(paymentSKR04Label(a, vstRC))
 	vstRCBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(vstRC, func(n int) { vstRC = n; vstRCLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(vstRC, a.window, func(n int) { vstRC = n; vstRCLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	ustRCLbl := widget.NewLabel(paymentSKR04Label(a, ustRC))
 	ustRCBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(ustRC, func(n int) { ustRC = n; ustRCLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(ustRC, a.window, func(n int) { ustRC = n; ustRCLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	geschAbzLbl := widget.NewLabel(paymentSKR04Label(a, geschAbz))
 	geschAbzBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(geschAbz, func(n int) { geschAbz = n; geschAbzLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(geschAbz, a.window, func(n int) { geschAbz = n; geschAbzLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	geschNichtLbl := widget.NewLabel(paymentSKR04Label(a, geschNicht))
 	geschNichtBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(geschNicht, func(n int) { geschNicht = n; geschNichtLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(geschNicht, a.window, func(n int) { geschNicht = n; geschNichtLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	reiseLbl := widget.NewLabel(paymentSKR04Label(a, reiseKonto))
 	reiseBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(reiseKonto, func(n int) { reiseKonto = n; reiseLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(reiseKonto, a.window, func(n int) { reiseKonto = n; reiseLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 	kfzLbl := widget.NewLabel(paymentSKR04Label(a, kfzKonto))
 	kfzBtn := widget.NewButton(a.bundle.T("settings.rules.pick"), func() {
-		a.showAccountSearch(kfzKonto, func(n int) { kfzKonto = n; kfzLbl.SetText(paymentSKR04Label(a, n)) })
+		a.showAccountSearch(kfzKonto, a.window, func(n int) { kfzKonto = n; kfzLbl.SetText(paymentSKR04Label(a, n)) })
 	})
 
 	rulesSection := widget.NewCard("", a.bundle.T("settings.rules.section"), container.NewVBox(

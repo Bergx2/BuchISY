@@ -104,9 +104,12 @@ func buildSearchResults(accs []core.SKRAccount) []pickerRow {
 // showAccountSearch opens a modal search dialog over the chart of accounts.
 // current is the account number that is pre-selected (informational only).
 // onPick is called with the chosen account number and the dialog is closed.
-func (a *App) showAccountSearch(current int, onPick func(number int)) {
+func (a *App) showAccountSearch(current int, parent fyne.Window, onPick func(number int)) {
 	if a.chart == nil {
 		return
+	}
+	if parent == nil {
+		parent = a.window
 	}
 
 	// Working slice shown in the list, rebuilt on every query change.
@@ -233,12 +236,12 @@ func (a *App) showAccountSearch(current int, onPick func(number int)) {
 		container.NewStack(
 			container.New(fixedHeightLayout{height: 400}, content),
 		),
-		a.window,
+		parent,
 	)
 	dlg.Resize(fyne.NewSize(480, 460))
 	dlg.Show()
 
-	a.window.Canvas().Focus(searchEntry)
+	parent.Canvas().Focus(searchEntry)
 }
 
 // fixedHeightLayout is a minimal Fyne layout that gives its single child a

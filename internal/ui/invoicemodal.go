@@ -222,7 +222,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	}
 	updateAccountDisplay()
 	chooseAccountBtn := widget.NewButton(a.bundle.T("picker.account.choose"), func() {
-		a.showAccountSearch(selectedAccount, func(n int) {
+		a.showAccountSearch(selectedAccount, confirmWin, func(n int) {
 			accountManuallyPicked = true
 			selectedAccount = n
 			updateAccountDisplay()
@@ -643,7 +643,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 					parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 			}
 		}
-		a.showBookingEditor(seed, func(edited core.Booking) {
+		a.showBookingEditor(seed, confirmWin, func(edited core.Booking) {
 			manualBooking = &edited
 			recomputeBooking()
 		})
