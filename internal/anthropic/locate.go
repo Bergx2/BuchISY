@@ -23,7 +23,7 @@ Wenn der Betrag gefunden wurde:
 
 x0,y0 = obere linke Ecke; x1,y1 = untere rechte Ecke.
 Alle Koordinaten sind normalisiert (0.0 = linker/oberer Rand, 1.0 = rechter/unterer Rand der Seite).
-Die Box soll den Betrag eng umschließen.
+Die Box soll den GESAMTEN Betrag vollständig umschließen — alle Ziffern, Tausenderpunkte, Komma und ggf. Währungssymbol — mit etwas Rand. Lieber etwas zu groß als zu klein; der Betrag darf NICHT halb außerhalb liegen.
 
 Wenn der Betrag NICHT gefunden wurde:
 {"found":false}

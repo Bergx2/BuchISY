@@ -122,16 +122,25 @@ func applyVisionBox(strip *pdfPreviewStrip, page int, x0, y0, x1, y1 float64, hl
 	W := native.Width
 	H := native.Height
 
-	// Slight padding (2 % of page dimension) so the highlight is easy to spot.
-	padX := W * 0.02
-	padY := H * 0.01
+	boxW := float32(x1-x0) * W
+	boxH := float32(y1-y0) * H
 
-	rc := core.Rect{
-		X: float32(x0)*W - padX,
-		Y: float32(y0)*H - padY,
-		W: float32(x1-x0)*W + 2*padX,
-		H: float32(y1-y0)*H + 2*padY,
+	// Vision coordinates are approximate — pad generously (half the box on each
+	// side plus a small page-relative margin) so the whole amount is enclosed
+	// even when the returned box covers only part of it.
+	padX := boxW*0.5 + W*0.015
+	padY := boxH*0.5 + H*0.01
+
+	x := float32(x0)*W - padX
+	y := float32(y0)*H - padY
+	if x < 0 {
+		x = 0
 	}
+	if y < 0 {
+		y = 0
+	}
+
+	rc := core.Rect{X: x, Y: y, W: boxW + 2*padX, H: boxH + 2*padY}
 
 	fyne.Do(func() {
 		strip.addHighlight(page, rc, hl)
