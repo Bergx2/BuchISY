@@ -754,6 +754,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			Rechnungsdatum:   dateEntry.Text,
 			VATID:            vatIDEntry.Text,
 			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
+			Buchung:          bookingPrev.last, // for the Bewirtung-70/30 check
 		})
 		if len(warnings) == 0 {
 			warningsLabel.Hide()
@@ -1026,6 +1027,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			Rechnungsdatum:   dateEntry.Text,
 			VATID:            vatIDEntry.Text,
 			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
+			Buchung:          bookingPrev.last, // for the Bewirtung-70/30 check
 		})
 		if len(warnings) > 0 {
 			msg := a.bundle.T("warnings.intro") + "\n• " + strings.Join(warnings, "\n• ")

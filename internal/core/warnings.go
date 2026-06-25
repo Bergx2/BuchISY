@@ -53,6 +53,23 @@ func InvoiceWarningsAsOf(row CSVRow, today time.Time) []string {
 		w = append(w, "GWG-Konto, aber Netto > 800 € — kein GWG: als Anlagegut aktivieren und abschreiben (AfA)")
 	}
 
+	// Bewirtung (entertainment) booked without the 70/30 split: an entry on the
+	// deductible Bewirtung account (SKR03 4650 / SKR04 6640) with NO matching
+	// non-deductible entry (4654 / 6644) means the cost was treated as 100 %
+	// deductible — but § 4 Abs. 5 Nr. 2 EStG allows only 70 %.
+	hasBewAbz, hasBewNicht := false, false
+	for _, e := range row.Buchung.Entries {
+		switch e.Konto {
+		case 4650, 6640:
+			hasBewAbz = true
+		case 4654, 6644:
+			hasBewNicht = true
+		}
+	}
+	if hasBewAbz && !hasBewNicht {
+		w = append(w, "Bewirtung ohne 70/30-Aufteilung — Kategorie \"Bewirtung\" wählen (nur 70 % abziehbar, § 4 Abs. 5 EStG)")
+	}
+
 	// VAT-ID format check
 	if vatID := strings.TrimSpace(row.VATID); vatID != "" {
 		// Normalize: remove spaces, uppercase

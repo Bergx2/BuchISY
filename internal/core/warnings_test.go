@@ -53,6 +53,18 @@ func TestInvoiceWarnings(t *testing.T) {
 	if hasWarn(InvoiceWarnings(gwgOk), "Netto > 800") {
 		t.Error("must not warn for a genuine GWG (net ≤ 800)")
 	}
+	// Bewirtung booked 100% to 4650 (no 4654 split) → warn.
+	bewUnsplit := CSVRow{BetragNetto: 21.97, SteuersatzBetrag: 2.43, Bruttobetrag: 27.00, Gegenkonto: 4650, Waehrung: "EUR",
+		Buchung: Booking{Entries: []BookingEntry{{Konto: 4650, Betrag: 24.57, Soll: true}, {Konto: 1576, Betrag: 2.43, Soll: true}, {Konto: 1000, Betrag: 27.00, Soll: false}}}}
+	if !hasWarn(InvoiceWarnings(bewUnsplit), "70/30") {
+		t.Error("expected a Bewirtung-70/30 warning when 4654 split is missing")
+	}
+	// Bewirtung correctly split (4650 + 4654) → no warning.
+	bewSplit := bewUnsplit
+	bewSplit.Buchung = Booking{Entries: []BookingEntry{{Konto: 4650, Betrag: 17.20, Soll: true}, {Konto: 4654, Betrag: 7.37, Soll: true}, {Konto: 1576, Betrag: 2.43, Soll: true}, {Konto: 1000, Betrag: 27.00, Soll: false}}}
+	if hasWarn(InvoiceWarnings(bewSplit), "70/30") {
+		t.Error("must not warn when Bewirtung is correctly split 70/30")
+	}
 }
 
 func TestInvoiceWarningsAsOf(t *testing.T) {

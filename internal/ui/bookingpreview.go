@@ -35,6 +35,7 @@ func formatBookingLines(b core.Booking, chart *core.ChartOfAccounts) []string {
 type bookingPreview struct {
 	app       *App
 	container *fyne.Container
+	last      core.Booking // most recently shown booking (for warning checks)
 }
 
 func newBookingPreview(a *App) *bookingPreview {
@@ -43,6 +44,7 @@ func newBookingPreview(a *App) *bookingPreview {
 
 // set replaces the preview content. When bookable is false, reason is shown.
 func (p *bookingPreview) set(b core.Booking, bookable bool, reason string) {
+	p.last = b
 	p.container.RemoveAll()
 	if !bookable {
 		hint := widget.NewLabel(reason)
