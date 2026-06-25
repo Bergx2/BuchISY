@@ -53,9 +53,9 @@ Folgende Stellen müssen `RowEUR` statt der Fremdwährungs-Nennwerte verwenden:
 - Automatische Buchung von **Kursdifferenzen** (Bankabbuchungs-EUR vs. manueller Kurs).
 - Mehrere Kurse pro Beleg (USt-Basis-Kurs vs. Zahlungskurs).
 
-## Offene Entscheidung zur Review
-1. **PDF/CSV:** Original-Fremdwährung als **Zusatzspalte** mitführen (Dokumentation) — ja/nein? (Vorschlag: ja, schlank.)
-2. **Migration:** Bestand **aktiv neu buchen** vs. nur **beim nächsten Bearbeiten** auf EUR umstellen? (Vorschlag: einmaliger aktiver Lauf mit Backup + Markierung der kurslosen Belege.)
+## Entscheidungen (bestätigt)
+1. **PDF/CSV:** Original-Fremdwährung wird als **Zusatzspalte** mitgeführt (Dokumentation). ✅
+2. **Migration:** **Einmaliger aktiver Neu-Buchungslauf** über bestehende Fremdwährungsbelege (mit Backup; kurslose Belege werden markiert, nicht stillschweigend umgerechnet). ✅
 
 ## Self-Review
 Fokussiert auf ein Subsystem (Fremdwährung→EUR). Zentrale Umrechnung `RowEUR` als single source; Buchung + alle Auswertungen konsumieren sie. Manuelle Kursquelle (bestätigt). Bestehende EUR-Logik unberührt. Kursabruf/Kursdifferenz/Multi-Rate bewusst out-of-scope.
