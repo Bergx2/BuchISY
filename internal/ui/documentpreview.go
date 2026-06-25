@@ -463,3 +463,20 @@ func (r *pdfPreviewStripRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (r *pdfPreviewStripRenderer) Destroy() {}
+
+// addHighlight appends a highlight rectangle to the given page of the strip
+// and triggers a refresh. Must be called on the main (UI) thread.
+// page is 0-based; rc is in native image pixels (matching pageNative).
+func (s *pdfPreviewStrip) addHighlight(page int, rc core.Rect, hl previewHighlight) {
+	if page < 0 || page >= len(s.rects) {
+		return
+	}
+	s.rects[page] = append(s.rects[page], rc)
+	r := canvas.NewRectangle(hl.fill)
+	if hl.strokeWidth > 0 {
+		r.StrokeColor = hl.stroke
+		r.StrokeWidth = hl.strokeWidth
+	}
+	s.rectObjs[page] = append(s.rectObjs[page], r)
+	s.Refresh()
+}
