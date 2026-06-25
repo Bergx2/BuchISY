@@ -555,15 +555,20 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	// If this invoice is reconciled to a bank statement, resolve that
 	// statement's PDF so the preview switcher can show it ("Kontoauszug")
 	// at the matching booking — the amount is highlighted like on the receipt.
+	// Recomputed after a single-invoice match links a statement line.
 	var statementPreviewPath string
-	if row.BuchungRef != "" && row.BuchungRef != core.CashConfirmedRef {
-		if ref := core.ParseBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
-			p := filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename)
-			if core.FileExists(p) {
-				statementPreviewPath = p
+	recomputeStatementPath := func() {
+		statementPreviewPath = ""
+		if row.BuchungRef != "" && row.BuchungRef != core.CashConfirmedRef {
+			if ref := core.ParseBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
+				p := filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename)
+				if core.FileExists(p) {
+					statementPreviewPath = p
+				}
 			}
 		}
 	}
+	recomputeStatementPath()
 
 	currentPreviewPath := originalPath
 	previewSwitcher := container.NewHBox()
@@ -712,6 +717,42 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	}
 	refreshAfaStatus()
 
+	// Bank-reconciliation status: whether this receipt is linked to a statement
+	// line, or a button to match it directly here (without the full Belegabgleich).
+	abgleichStatus := container.NewVBox()
+	var refreshAbgleichStatus func()
+	refreshAbgleichStatus = func() {
+		abgleichStatus.RemoveAll()
+		at := ""
+		for _, ba := range a.settings.BankAccounts {
+			if ba.Name == row.Bankkonto {
+				at = ba.AccountType
+			}
+		}
+		switch {
+		case row.BuchungRef == core.CashConfirmedRef:
+			abgleichStatus.Add(widget.NewLabel("✓ Bar bestätigt (Kasse)."))
+		case row.BuchungRef != "":
+			abgleichStatus.Add(newCopyableLabel(a.bundle, "✓ Abgeglichen: "+core.ParseBuchungRef(row.BuchungRef).Display()))
+		case at == core.AccountTypeBank || at == core.AccountTypeCreditCard:
+			matchBtn := widget.NewButton("Mit Kontoauszug abgleichen", func() {
+				a.matchInvoiceWithStatement(row, editWin, func(updated core.CSVRow) {
+					row.BuchungRef = updated.BuchungRef
+					recomputeStatementPath()
+					rebuildSwitcher()
+					refreshAbgleichStatus()
+				})
+			})
+			matchBtn.Importance = widget.LowImportance
+			abgleichStatus.Add(container.NewBorder(nil, nil,
+				widget.NewLabel("Noch nicht abgeglichen."), nil, matchBtn))
+		default:
+			abgleichStatus.Add(widget.NewLabel("—"))
+		}
+		abgleichStatus.Refresh()
+	}
+	refreshAbgleichStatus()
+
 	belegnrEntry := widget.NewEntry()
 	belegnrEntry.SetText(row.Belegnummer)
 	belegnrEntry.SetPlaceHolder("z. B. 2026-0007")
@@ -770,6 +811,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			fi(a.bundle.T("booking.category"), container.NewBorder(nil, nil, nil,
 				container.NewHBox(editBookingBtn, autoBookingBtn), categorySelect)),
 			fi("", bookingPrev.container),
+			fi("Kontoauszug-Abgleich", abgleichStatus),
 			fi("AfA / Anlage", afaStatus),
 		)),
 		bewirtungBox,
