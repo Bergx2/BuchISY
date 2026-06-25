@@ -67,6 +67,46 @@ func TestInvoiceWarnings(t *testing.T) {
 	}
 }
 
+func TestInvoiceWarnings13b(t *testing.T) {
+	// USD 0%-VAT expense with no §13b booking → warns.
+	rc13bMissing := CSVRow{
+		BetragNetto: 500, SteuersatzBetrag: 0, Bruttobetrag: 500,
+		Gegenkonto: 6815, Waehrung: "USD",
+		Buchung: Booking{Entries: []BookingEntry{
+			{Konto: 6815, Betrag: 500, Soll: true},
+			{Konto: 1200, Betrag: 500, Soll: false},
+		}},
+	}
+	if !hasWarn(InvoiceWarnings(rc13bMissing), "§13b") && !hasWarn(InvoiceWarnings(rc13bMissing), "Reverse-Charge") {
+		t.Error("expected §13b/Reverse-Charge warning for USD 0%-VAT expense without §13b booking")
+	}
+
+	// Same but booking already has 1577+1787 entries → no warn.
+	rc13bBooked := rc13bMissing
+	rc13bBooked.Buchung = Booking{Entries: []BookingEntry{
+		{Konto: 6815, Betrag: 500, Soll: true},
+		{Konto: 1577, Betrag: 95, Soll: true},
+		{Konto: 1787, Betrag: 95, Soll: false},
+		{Konto: 1200, Betrag: 500, Soll: false},
+	}}
+	if hasWarn(InvoiceWarnings(rc13bBooked), "§13b") || hasWarn(InvoiceWarnings(rc13bBooked), "Reverse-Charge") {
+		t.Error("must not warn when §13b accounts (1577/1787) are already in the booking")
+	}
+
+	// Domestic EUR 0% expense (e.g. Gegenkonto 4138, no VAT-ID) → no warn.
+	rc13bDomestic := CSVRow{
+		BetragNetto: 200, SteuersatzBetrag: 0, Bruttobetrag: 200,
+		Gegenkonto: 4138, Waehrung: "EUR",
+		Buchung: Booking{Entries: []BookingEntry{
+			{Konto: 4138, Betrag: 200, Soll: true},
+			{Konto: 1200, Betrag: 200, Soll: false},
+		}},
+	}
+	if hasWarn(InvoiceWarnings(rc13bDomestic), "§13b") || hasWarn(InvoiceWarnings(rc13bDomestic), "Reverse-Charge") {
+		t.Error("must not warn for a domestic EUR 0%-VAT expense without foreign signal")
+	}
+}
+
 func TestInvoiceWarningsAsOf(t *testing.T) {
 	today := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
 	future := CSVRow{Rechnungsdatum: "01.08.2026", Bruttobetrag: 119, BetragNetto: 100, SteuersatzBetrag: 19, Gegenkonto: 4980, Waehrung: "EUR"}
