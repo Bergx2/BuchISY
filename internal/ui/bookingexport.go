@@ -138,7 +138,7 @@ func (a *App) writeBookingExport(exportable []core.CSVRow, fromY, fromM, toY, to
 		}
 
 		// Write the booking journal PDF alongside DATEV and Lexware files.
-		journal, jerr := core.BuildBookingJournalPDF(exportable, a.chart, "Buchungsjournal "+period)
+		journal, jerr := core.BuildBookingJournalPDF(exportable, a.chart, "Buchungsjournal "+period, a.profile)
 		if jerr != nil {
 			a.logger.Warn("journal PDF build failed: %v", jerr)
 		} else if werr := os.WriteFile(filepath.Join(uri.Path(), "Buchungsjournal_"+period+".pdf"), journal, 0644); werr != nil {

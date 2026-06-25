@@ -1056,7 +1056,7 @@ func (a *App) pasteFromClipboard() {
 func (a *App) showBelegListePDF() {
 	period := fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
 	rows := a.collectInvoiceRows(a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth))
-	data, err := core.BuildInvoiceListPDF(rows, "Belegliste "+period)
+	data, err := core.BuildInvoiceListPDF(rows, "Belegliste "+period, a.profile)
 	if err != nil {
 		a.showError(a.bundle.T("error.processing.title"), err.Error())
 		return
@@ -1215,7 +1215,7 @@ func (a *App) showYearOverviewDialog() {
 func (a *App) showSalesJournalPDF() {
 	period := fmt.Sprintf("%04d-%02d", a.currentYear, int(a.currentMonth))
 	rows := a.collectInvoiceRows(a.currentYear, int(a.currentMonth), a.currentYear, int(a.currentMonth))
-	data, err := core.BuildSalesJournalPDF(rows, a.chart, "Rechnungsausgangsbuch "+period)
+	data, err := core.BuildSalesJournalPDF(rows, a.chart, "Rechnungsausgangsbuch "+period, a.profile)
 	if err != nil {
 		a.showError(a.bundle.T("error.processing.title"), err.Error())
 		return

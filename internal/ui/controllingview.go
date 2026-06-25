@@ -114,7 +114,7 @@ func (a *App) showControllingDialog() {
 
 	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
 		title := a.bundle.T("controlling.title")
-		data, err := core.BuildControllingPDF(c, title)
+		data, err := core.BuildControllingPDF(c, title, a.profile)
 		if err != nil {
 			a.showError(a.bundle.T("error.processing.title"), err.Error())
 			return

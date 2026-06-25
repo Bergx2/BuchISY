@@ -148,7 +148,7 @@ func (a *App) showUStVADialog() {
 	reload()
 
 	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
-		data, err := core.BuildUStVAPDF(u, a.bundle.T("ustva.title"))
+		data, err := core.BuildUStVAPDF(u, a.bundle.T("ustva.title"), a.profile)
 		if err != nil {
 			a.showError(a.bundle.T("error.processing.title"), err.Error())
 			return

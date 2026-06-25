@@ -110,7 +110,7 @@ func (a *App) showSuSa() {
 
 	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
 		title := fmt.Sprintf("%s %d", a.bundle.T("susa.title"), year)
-		data, err := core.BuildSuSaPDF(bals, title)
+		data, err := core.BuildSuSaPDF(bals, title, a.profile)
 		if err != nil {
 			a.showError(a.bundle.T("error.processing.title"), err.Error())
 			return
@@ -180,7 +180,7 @@ func (a *App) showGuV() {
 
 	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
 		title := fmt.Sprintf("%s %d", a.bundle.T("guv.title"), year)
-		data, err := core.BuildGuVPDF(g, title)
+		data, err := core.BuildGuVPDF(g, title, a.profile)
 		if err != nil {
 			a.showError(a.bundle.T("error.processing.title"), err.Error())
 			return

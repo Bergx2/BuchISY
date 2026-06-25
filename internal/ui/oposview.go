@@ -116,7 +116,7 @@ func (a *App) showOpenItems() {
 
 	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
 		title := fmt.Sprintf("Offene Posten %d", year)
-		data, err := core.BuildOpenItemsPDF(oi, title)
+		data, err := core.BuildOpenItemsPDF(oi, title, a.profile)
 		if err != nil {
 			a.showError(a.bundle.T("error.processing.title"), err.Error())
 			return

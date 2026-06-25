@@ -80,7 +80,7 @@ func (a *App) showZMDialog() {
 	reload()
 
 	pdfBtn := widget.NewButton(a.bundle.T("report.pdf"), func() {
-		data, err := core.BuildZMPDF(zm, a.settings.OwnVATID, a.bundle.T("zm.title"))
+		data, err := core.BuildZMPDF(zm, a.settings.OwnVATID, a.bundle.T("zm.title"), a.profile)
 		if err != nil {
 			a.showError(a.bundle.T("error.processing.title"), err.Error())
 			return

@@ -79,8 +79,8 @@ func kontoLabelPDF(chart *ChartOfAccounts, konto int) string {
 
 // BuildBookingJournalPDF renders the booking journal: one row per Soll entry of
 // each balanced booking, against the payment account as counter-account.
-func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L", "")
+func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "L", company)
 
 	headers := []string{"Datum", "Beleg", "Auftraggeber", "Soll-Konto", "Haben-Konto", "Betrag"}
 	widths := []float64{20, 35, 70, 55, 55, 25}
@@ -138,8 +138,8 @@ func truncate(s string, n int) string {
 // BuildControllingPDF renders a Controlling report with two sections
 // (Einnahmen and Ausgaben), each listing per-account sums plus a section
 // total, followed by a bold Saldo line.
-func BuildControllingPDF(c Controlling, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P", "")
+func BuildControllingPDF(c Controlling, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P", company)
 
 	headers := []string{"Konto", "Bezeichnung", "Summe"}
 	widths := []float64{25, 120, 35}
@@ -183,8 +183,8 @@ func BuildControllingPDF(c Controlling, title string) ([]byte, error) {
 }
 
 // BuildInvoiceListPDF renders the invoices as a landscape table with a Brutto total.
-func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L", "")
+func BuildInvoiceListPDF(rows []CSVRow, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "L", company)
 
 	headers := []string{"Datum", "Auftraggeber", "Rechnungsnr.", "Netto", "MwSt", "Brutto"}
 	widths := []float64{22, 90, 45, 30, 30, 30}
@@ -228,8 +228,8 @@ func BuildInvoiceListPDF(rows []CSVRow, title string) ([]byte, error) {
 // BuildUStVAPDF renders the official UStVA Kennzahlen (Kz 81/86/21/45/84/85/
 // 66/67/83) as a form — the document the user hands to the tax advisor. Only
 // non-zero Kennzahlen are shown; Kz 83 (Zahllast/Überschuss) is always shown.
-func BuildUStVAPDF(u UStVAOfficial, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P", "")
+func BuildUStVAPDF(u UStVAOfficial, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P", company)
 	wKz, wLabel, wVal := 18.0, 122.0, 35.0
 
 	row := func(kz, label string, value float64, bold bool) {
@@ -292,8 +292,8 @@ func BuildUStVAPDF(u UStVAOfficial, title string) ([]byte, error) {
 // BuildZMPDF renders the Zusammenfassende Meldung: one row per EU customer
 // VAT-ID with its net sum + "Sonstige Leistung", plus the Kontrollsumme and the
 // own VAT-ID in the header (when set).
-func BuildZMPDF(z ZM, ownVatID, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P", "")
+func BuildZMPDF(z ZM, ownVatID, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P", company)
 	if ownVatID != "" {
 		pdf.SetFont("Arial", "", 9)
 		pdf.CellFormat(0, 6, tr("Eigene USt-IdNr.: "+ownVatID), "", 1, "L", false, 0, "")
@@ -327,8 +327,8 @@ func BuildZMPDF(z ZM, ownVatID, title string) ([]byte, error) {
 // sections: Debitoren (Forderungen) and Kreditoren (Verbindlichkeiten). Each
 // section lists Belegnr, Datum, Partner, Betrag, Alter (Tage) and Bucket, and
 // closes with a section total.
-func BuildOpenItemsPDF(oi OpenItems, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L", "")
+func BuildOpenItemsPDF(oi OpenItems, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "L", company)
 
 	headers := []string{"Belegnr.", "Datum", "Partner", "Betrag", "Alter (Tage)", "Bucket"}
 	widths := []float64{30, 22, 90, 28, 28, 20}
@@ -381,8 +381,8 @@ func BuildOpenItemsPDF(oi OpenItems, title string) ([]byte, error) {
 
 // BuildSuSaPDF renders the Summen- und Saldenliste as a portrait PDF with
 // columns Konto · Name · Soll · Haben · Saldo and a totals row at the bottom.
-func BuildSuSaPDF(bals []AccountBalance, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P", "")
+func BuildSuSaPDF(bals []AccountBalance, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P", company)
 
 	headers := []string{"Konto", "Bezeichnung", "Soll", "Haben", "Saldo"}
 	widths := []float64{18, 97, 25, 25, 25}
@@ -419,8 +419,8 @@ func BuildSuSaPDF(bals []AccountBalance, title string) ([]byte, error) {
 
 // BuildGuVPDF renders the Gewinn- und Verlustrechnung with an Erlöse section,
 // an Aufwand section and a bold Ergebnis line.
-func BuildGuVPDF(g GuV, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "P", "")
+func BuildGuVPDF(g GuV, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "P", company)
 
 	headers := []string{"Konto", "Bezeichnung", "Betrag"}
 	widths := []float64{18, 107, 35}
@@ -524,8 +524,8 @@ func BuildAnlagenspiegelPDF(rows []AnlagenRow, jahr int, title, company string) 
 // BuildSalesJournalPDF renders the Rechnungsausgangsbuch — a landscape table of
 // all outgoing invoices (Ausgangsrechnungen) in the period with Belegnummer,
 // date, customer, revenue account, net, VAT and gross, plus net/gross totals.
-func BuildSalesJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title string) ([]byte, error) {
-	pdf, tr := newReportPDF(title, "L", "")
+func BuildSalesJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title, company string) ([]byte, error) {
+	pdf, tr := newReportPDF(title, "L", company)
 
 	headers := []string{"Belegnr.", "Rechnungsnr.", "Datum", "Kunde", "Erlöskonto", "Netto", "USt", "Brutto"}
 	widths := []float64{24, 38, 20, 66, 46, 26, 26, 26}
