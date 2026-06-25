@@ -612,11 +612,19 @@ func (it *InvoiceTable) updateSummary() {
 	if it.summaryLabel == nil {
 		return
 	}
+	// Totals are in EUR: convert foreign-currency rows via their stored rate so
+	// e.g. a USD 200 invoice contributes its EUR value, not 200 at face value.
 	var net, vat, brutto float64
 	for _, r := range it.filtered {
-		net += r.BetragNetto
-		vat += r.SteuersatzBetrag
-		brutto += r.Bruttobetrag
+		if r.Waehrung != "" && r.Waehrung != "EUR" && r.Wechselkurs > 0 {
+			net += r.BetragNetto / r.Wechselkurs
+			vat += r.SteuersatzBetrag / r.Wechselkurs
+			brutto += r.Bruttobetrag / r.Wechselkurs
+		} else {
+			net += r.BetragNetto
+			vat += r.SteuersatzBetrag
+			brutto += r.Bruttobetrag
+		}
 	}
 	sep := ","
 	if it.app != nil && it.app.settings.DecimalSeparator != "" {
@@ -971,6 +979,17 @@ func (it *InvoiceTable) formatAmount(amount float64) string {
 	return formatted
 }
 
+// formatMoneyCell renders an amount with the ISO currency code before it, e.g.
+// "EUR 165,55" or "USD 200,00" — so a foreign-currency invoice is never mistaken
+// for EUR. An empty currency defaults to EUR.
+func (it *InvoiceTable) formatMoneyCell(amount float64, currency string) string {
+	code := strings.TrimSpace(currency)
+	if code == "" {
+		code = "EUR"
+	}
+	return code + " " + it.formatAmount(amount)
+}
+
 func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	switch colID {
 	case "Belegnummer":
@@ -992,13 +1011,13 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 	case "VATID":
 		return row.VATID
 	case "BetragNetto":
-		return it.formatAmount(row.BetragNetto)
+		return it.formatMoneyCell(row.BetragNetto, row.Waehrung)
 	case "Steuersatz_Prozent":
-		return it.formatAmount(row.SteuersatzProzent)
+		return it.formatAmount(row.SteuersatzProzent) // a percentage, no currency
 	case "Steuersatz_Betrag":
-		return it.formatAmount(row.SteuersatzBetrag)
+		return it.formatMoneyCell(row.SteuersatzBetrag, row.Waehrung)
 	case "Bruttobetrag":
-		return it.formatAmount(row.Bruttobetrag)
+		return it.formatMoneyCell(row.Bruttobetrag, row.Waehrung)
 	case "Waehrung":
 		return row.Waehrung
 	case "Gegenkonto":
@@ -1029,7 +1048,7 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 		return row.Kommentar
 	case "BetragNetto_EUR":
 		if row.BetragNetto_EUR > 0 {
-			return it.formatAmount(row.BetragNetto_EUR)
+			return it.formatMoneyCell(row.BetragNetto_EUR, "EUR")
 		}
 		return ""
 	case "Gebuehr":
