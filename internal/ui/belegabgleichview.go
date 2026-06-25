@@ -545,8 +545,8 @@ func (a *App) showBelegabgleich() {
 				shown = shown[:maxOpenLines]
 			}
 			for _, sl := range shown {
-				betragStr := strings.Replace(fmt.Sprintf("%.2f", sl.Line.Betrag), ".", ",", 1)
-				lineText := fmt.Sprintf("%s · %s € · %s", sl.Line.Date, betragStr, sl.Line.Text)
+				betragStr := formatMoney(sl.Line.Betrag, "EUR", a.settings.DecimalSeparator)
+				lineText := fmt.Sprintf("%s · %s · %s", sl.Line.Date, betragStr, sl.Line.Text)
 				lbl := newCopyableLabel(a.bundle, lineText)
 				lbl.Wrapping = fyne.TextWrapWord
 				vb.Add(lbl)
@@ -589,7 +589,7 @@ func (a *App) showBelegabgleich() {
 			// Capture loop variable for closure safety.
 			cashRow := cr
 
-			bruttoStr := strings.Replace(fmt.Sprintf("%.2f", cashRow.Bruttobetrag), ".", ",", 1)
+			bruttoStr := formatMoney(cashRow.Bruttobetrag, cashRow.Waehrung, a.settings.DecimalSeparator)
 
 			// Coverage hint from a.cashUncovered (populated by loadInvoices).
 			coverageHint := ""
@@ -601,7 +601,7 @@ func (a *App) showBelegabgleich() {
 				}
 			}
 
-			rowLabel := fmt.Sprintf("%s · %s · %s · %s €%s",
+			rowLabel := fmt.Sprintf("%s · %s · %s · %s%s",
 				cashRow.Belegnummer,
 				cashRow.Rechnungsdatum,
 				cashRow.Auftraggeber,
@@ -654,8 +654,8 @@ func (a *App) showBelegabgleich() {
 				}
 			}
 			unc, closing := core.CashCoverage(book, a.cashInvoicesForMonth(acct, a.currentYear, a.currentMonth))
-			closingStr := strings.Replace(fmt.Sprintf("%.2f", closing), ".", ",", 1)
-			line := fmt.Sprintf("%s: %s %s €", acct, a.bundle.T("reconcile.cashBalance"), closingStr)
+			closingStr := formatMoney(closing, "EUR", a.settings.DecimalSeparator)
+			line := fmt.Sprintf("%s: %s %s", acct, a.bundle.T("reconcile.cashBalance"), closingStr)
 			if len(unc) > 0 {
 				line += "  " + fmt.Sprintf(a.bundle.T("reconcile.cashUncovered"), len(unc))
 			} else {
@@ -707,9 +707,9 @@ func (a *App) showBelegabgleich() {
 			// Capture loop variable for closure safety.
 			linkRow := lr
 
-			bruttoStr := strings.Replace(fmt.Sprintf("%.2f", linkRow.Bruttobetrag), ".", ",", 1)
+			bruttoStr := formatMoney(linkRow.Bruttobetrag, linkRow.Waehrung, a.settings.DecimalSeparator)
 			lineDisplay := core.ParseBuchungRef(linkRow.BuchungRef).Display()
-			rowLabel := fmt.Sprintf("%s · %s · %s € · %s",
+			rowLabel := fmt.Sprintf("%s · %s · %s · %s",
 				linkRow.Belegnummer,
 				linkRow.Auftraggeber,
 				bruttoStr,
@@ -847,10 +847,10 @@ func (a *App) showBelegabgleich() {
 
 			// Invoice EUR amount: prefer BetragNetto_EUR if set, else Bruttobetrag.
 			invEUR := core.InvoiceEURAmount(sug.row)
-			invAmtStr := strings.Replace(fmt.Sprintf("%.2f", invEUR), ".", ",", 1)
+			invAmtStr := formatMoney(invEUR, "EUR", a.settings.DecimalSeparator)
 
 			lineDate := top.scored.Line.Date
-			lineBetragStr := strings.Replace(fmt.Sprintf("%.2f", top.scored.Line.Betrag), ".", ",", 1)
+			lineBetragStr := formatMoney(top.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 
 			// Truncate line text to ~60 runes.
 			lineRunes := []rune(top.scored.Line.Text)
@@ -861,13 +861,13 @@ func (a *App) showBelegabgleich() {
 			baseName := filepath.Base(top.file)
 
 			// Label format:
-			// [★ ]<Auftraggeber>  <invEUR> €  →  S.<p> Z.<l> · <date> · <betrag> € · <text>  (<file>)
+			// [★ ]<Auftraggeber>  <invEUR>  →  S.<p> Z.<l> · <date> · <betrag> · <text>  (<file>)
 			// ★ prefix indicates a high-confidence (formerly auto-linked) match.
 			prefix := ""
 			if sug.highConfidence {
 				prefix = "★ "
 			}
-			rowLabel := fmt.Sprintf("%s%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+			rowLabel := fmt.Sprintf("%s%s  %s  →  S.%d Z.%d · %s · %s · %s  (%s)",
 				prefix,
 				sug.row.Auftraggeber,
 				invAmtStr,
@@ -926,11 +926,11 @@ func (a *App) showBelegabgleich() {
 					if len(runes) > 60 {
 						runes = append(runes[:57], []rune("…")...)
 					}
-					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
+					bStr := formatMoney(c.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 					// Prefix with a 1-based index so option labels are unique even
 					// when two candidate lines render identically — the OnChanged
 					// string lookup then always resolves to the right candidate.
-					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
+					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s · %s",
 						i+1,
 						c.scored.Line.Page+1,
 						c.scored.Line.LineIdx,
@@ -967,13 +967,13 @@ func (a *App) showBelegabgleich() {
 			if len(lineRunes) > 60 {
 				lineRunes = append(lineRunes[:57], []rune("…")...)
 			}
-			betragStr := strings.Replace(fmt.Sprintf("%.2f", grp.Line.Betrag), ".", ",", 1)
+			betragStr := formatMoney(grp.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 			filePart := ""
 			if grp.File != "" {
 				filePart = " (" + filepath.Base(grp.File) + ")"
 			}
 			countLabel := fmt.Sprintf(a.bundle.T("reconcile.group"), len(grp.Dateinamen))
-			rowLabel := fmt.Sprintf("%s (%s) = S.%d Z.%d · %s · %s € · %s%s",
+			rowLabel := fmt.Sprintf("%s (%s) = S.%d Z.%d · %s · %s · %s%s",
 				countLabel,
 				strings.Join(grp.Dateinamen, ", "),
 				grp.Line.Page+1,
@@ -1034,14 +1034,14 @@ func (a *App) showBelegabgleich() {
 			}
 			top := psug.candidates[0]
 			invEUR := core.InvoiceEURAmount(psug.row)
-			invAmtStr := strings.Replace(fmt.Sprintf("%.2f", invEUR), ".", ",", 1)
-			lineBetragStr := strings.Replace(fmt.Sprintf("%.2f", top.scored.Line.Betrag), ".", ",", 1)
+			invAmtStr := formatMoney(invEUR, "EUR", a.settings.DecimalSeparator)
+			lineBetragStr := formatMoney(top.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 			lineRunes := []rune(top.scored.Line.Text)
 			if len(lineRunes) > 60 {
 				lineRunes = append(lineRunes[:57], []rune("…")...)
 			}
 			baseName := filepath.Base(top.file)
-			rowLabel := fmt.Sprintf("[%s] %s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+			rowLabel := fmt.Sprintf("[%s] %s  %s  →  S.%d Z.%d · %s · %s · %s  (%s)",
 				a.bundle.T("reconcile.partial"),
 				psug.row.Auftraggeber,
 				invAmtStr,
@@ -1087,8 +1087,8 @@ func (a *App) showBelegabgleich() {
 					if len(runes) > 60 {
 						runes = append(runes[:57], []rune("…")...)
 					}
-					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
-					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
+					bStr := formatMoney(c.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
+					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s · %s",
 						i+1,
 						c.scored.Line.Page+1,
 						c.scored.Line.LineIdx,

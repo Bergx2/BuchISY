@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -22,7 +21,7 @@ func (a *App) showZMDialog() {
 	scroll := container.NewVScroll(body)
 
 	fmtAmt := func(v float64) string {
-		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+		return formatMoney(v, "EUR", a.settings.DecimalSeparator)
 	}
 
 	var zm core.ZM // current period's result, for the PDF export
@@ -47,7 +46,7 @@ func (a *App) showZMDialog() {
 		} else {
 			sonstige := a.bundle.T("zm.art.sonstige")
 			for _, z := range zm.Zeilen {
-				body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("    %s    %s €    %s", z.UStIdNr, fmtAmt(z.Netto), sonstige)))
+				body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("    %s    %s    %s", z.UStIdNr, fmtAmt(z.Netto), sonstige)))
 			}
 			body.Add(widget.NewSeparator())
 			body.Add(widget.NewLabelWithStyle(

@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -22,7 +21,7 @@ func (a *App) showOpenItems() {
 	oi := core.ComputeOpenItems(rows, time.Now())
 
 	fmtAmt := func(v float64) string {
-		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+		return formatMoney(v, "EUR", a.settings.DecimalSeparator)
 	}
 
 	headers := []string{

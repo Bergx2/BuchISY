@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -22,7 +21,7 @@ func (a *App) showUStVADialog() {
 	scroll := container.NewVScroll(body)
 
 	fmtAmt := func(v float64) string {
-		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+		return formatMoney(v, "EUR", a.settings.DecimalSeparator)
 	}
 
 	addSection := func(headingKey string, lines []struct {
@@ -42,10 +41,10 @@ func (a *App) showUStVADialog() {
 				continue
 			}
 			label := a.bundle.T(l.kzKey)
-			body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("    %s  %s   %s €", l.kzNum, label, fmtAmt(l.val))))
+			body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("    %s  %s   %s", l.kzNum, label, fmtAmt(l.val))))
 			if l.ustKey != "" && l.ustVal != 0 {
 				ustLabel := a.bundle.T("ustva.ust")
-				body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("        → %s: %s €", ustLabel, fmtAmt(l.ustVal))))
+				body.Add(newCopyableLabel(a.bundle, fmt.Sprintf("        → %s: %s", ustLabel, fmtAmt(l.ustVal))))
 			}
 		}
 		body.Add(widget.NewSeparator())

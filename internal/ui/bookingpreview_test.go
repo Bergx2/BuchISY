@@ -16,7 +16,7 @@ func TestFormatBookingLines(t *testing.T) {
 		{Konto: 6640, Betrag: 12.71, Soll: true},
 		{Konto: 1800, Betrag: 12.71, Soll: false},
 	}}
-	lines := formatBookingLines(b, chart)
+	lines := formatBookingLines(b, chart, ",")
 	if len(lines) != 2 {
 		t.Fatalf("want 2 lines, got %d", len(lines))
 	}

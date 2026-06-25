@@ -421,7 +421,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			if pct > 0 {
 				feeEntry.SetText(formatDecimal(c.GebuehrEUR, a.settings.DecimalSeparator))
 			}
-			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", fmt.Sprintf("%.2f", c.GesamtEUR)))
+			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", formatMoney(c.GesamtEUR, "EUR", a.settings.DecimalSeparator)))
 		} else {
 			gesamtEURLabel.SetText("") // clear stale total when the rate is removed
 		}

@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -19,7 +18,7 @@ func (a *App) showSuSa() {
 	bals := core.ComputeSuSa(rows, a.chart)
 
 	fmtAmt := func(v float64) string {
-		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+		return formatMoney(v, "EUR", a.settings.DecimalSeparator)
 	}
 
 	headers := []string{
@@ -145,7 +144,7 @@ func (a *App) showGuV() {
 	g := core.ComputeGuV(bals, a.chart)
 
 	fmtAmt := func(v float64) string {
-		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+		return formatMoney(v, "EUR", a.settings.DecimalSeparator)
 	}
 
 	body := container.NewVBox()
@@ -161,7 +160,7 @@ func (a *App) showGuV() {
 			body.Add(newCopyableLabel(a.bundle, line))
 		}
 		total := widget.NewLabelWithStyle(
-			fmt.Sprintf("    %s: %s €", a.bundle.T("susa.total"), fmtAmt(gesamt)),
+			fmt.Sprintf("    %s: %s", a.bundle.T("susa.total"), fmtAmt(gesamt)),
 			fyne.TextAlignLeading,
 			fyne.TextStyle{Bold: true},
 		)
@@ -172,7 +171,7 @@ func (a *App) showGuV() {
 	addSection("guv.erloese", g.ErloesPosten, g.ErloeseGesamt)
 	addSection("guv.aufwand", g.AufwandPosten, g.AufwandGesamt)
 
-	ergebnisLabel := fmt.Sprintf("%s: %s €", a.bundle.T("guv.ergebnis"), fmtAmt(g.Ergebnis))
+	ergebnisLabel := fmt.Sprintf("%s: %s", a.bundle.T("guv.ergebnis"), fmtAmt(g.Ergebnis))
 	body.Add(widget.NewLabelWithStyle(ergebnisLabel, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 
 	scroll := container.NewVScroll(body)

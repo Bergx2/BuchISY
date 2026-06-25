@@ -459,10 +459,10 @@ func (a *App) showErloesAbgleich() {
 			top := sug.candidates[0]
 
 			invEUR := core.InvoiceEURAmount(sug.row)
-			invAmtStr := strings.Replace(fmt.Sprintf("%.2f", invEUR), ".", ",", 1)
+			invAmtStr := formatMoney(invEUR, "EUR", a.settings.DecimalSeparator)
 
 			lineDate := top.scored.Line.Date
-			lineBetragStr := strings.Replace(fmt.Sprintf("%.2f", top.scored.Line.Betrag), ".", ",", 1)
+			lineBetragStr := formatMoney(top.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 
 			lineRunes := []rune(top.scored.Line.Text)
 			if len(lineRunes) > 60 {
@@ -471,13 +471,13 @@ func (a *App) showErloesAbgleich() {
 
 			baseName := filepath.Base(top.file)
 
-			// Label: [★ ]<Auftraggeber>  <amount> €  →  S.<page+1> Z.<lineIdx> · <date> · <betrag> · <text> (<file>)
+			// Label: [★ ]<Auftraggeber>  <amount>  →  S.<page+1> Z.<lineIdx> · <date> · <betrag> · <text> (<file>)
 			// ★ prefix indicates a high-confidence (formerly auto-linked) match.
 			prefix := ""
 			if sug.highConfidence {
 				prefix = "★ "
 			}
-			rowLabel := fmt.Sprintf("%s%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+			rowLabel := fmt.Sprintf("%s%s  %s  →  S.%d Z.%d · %s · %s · %s  (%s)",
 				prefix,
 				sug.row.Auftraggeber,
 				invAmtStr,
@@ -536,10 +536,10 @@ func (a *App) showErloesAbgleich() {
 					if len(runes) > 60 {
 						runes = append(runes[:57], []rune("…")...)
 					}
-					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
+					bStr := formatMoney(c.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 					// 1-based index prefix ensures option labels are unique even when
 					// two candidates render identically (mirrors expense dialog E12 fix).
-					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
+					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s · %s",
 						i+1,
 						c.scored.Line.Page+1,
 						c.scored.Line.LineIdx,
@@ -562,9 +562,9 @@ func (a *App) showErloesAbgleich() {
 					if len(newLineRunes) > 60 {
 						newLineRunes = append(newLineRunes[:57], []rune("…")...)
 					}
-					newBStr := strings.Replace(fmt.Sprintf("%.2f", chosen.scored.Line.Betrag), ".", ",", 1)
+					newBStr := formatMoney(chosen.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 					newBase := filepath.Base(chosen.file)
-					lbl.SetText(fmt.Sprintf("%s%s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+					lbl.SetText(fmt.Sprintf("%s%s  %s  →  S.%d Z.%d · %s · %s · %s  (%s)",
 						prefix,
 						sug.row.Auftraggeber,
 						invAmtStr,
@@ -596,13 +596,13 @@ func (a *App) showErloesAbgleich() {
 			if len(lineRunes) > 60 {
 				lineRunes = append(lineRunes[:57], []rune("…")...)
 			}
-			betragStr := strings.Replace(fmt.Sprintf("%.2f", grp.Line.Betrag), ".", ",", 1)
+			betragStr := formatMoney(grp.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 			filePart := ""
 			if grp.File != "" {
 				filePart = " (" + filepath.Base(grp.File) + ")"
 			}
 			countLabel := fmt.Sprintf(a.bundle.T("reconcile.group"), len(grp.Dateinamen))
-			rowLabel := fmt.Sprintf("%s (%s) = S.%d Z.%d · %s · %s € · %s%s",
+			rowLabel := fmt.Sprintf("%s (%s) = S.%d Z.%d · %s · %s · %s%s",
 				countLabel,
 				strings.Join(grp.Dateinamen, ", "),
 				grp.Line.Page+1,
@@ -672,14 +672,14 @@ func (a *App) showErloesAbgleich() {
 			}
 			top := psug.candidates[0]
 			invEUR := core.InvoiceEURAmount(psug.row)
-			invAmtStr := strings.Replace(fmt.Sprintf("%.2f", invEUR), ".", ",", 1)
-			lineBetragStr := strings.Replace(fmt.Sprintf("%.2f", top.scored.Line.Betrag), ".", ",", 1)
+			invAmtStr := formatMoney(invEUR, "EUR", a.settings.DecimalSeparator)
+			lineBetragStr := formatMoney(top.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
 			lineRunes := []rune(top.scored.Line.Text)
 			if len(lineRunes) > 60 {
 				lineRunes = append(lineRunes[:57], []rune("…")...)
 			}
 			baseName := filepath.Base(top.file)
-			rowLabel := fmt.Sprintf("[%s] %s  %s €  →  S.%d Z.%d · %s · %s € · %s  (%s)",
+			rowLabel := fmt.Sprintf("[%s] %s  %s  →  S.%d Z.%d · %s · %s · %s  (%s)",
 				a.bundle.T("reconcile.partial"),
 				psug.row.Auftraggeber,
 				invAmtStr,
@@ -735,8 +735,8 @@ func (a *App) showErloesAbgleich() {
 					if len(runes) > 60 {
 						runes = append(runes[:57], []rune("…")...)
 					}
-					bStr := strings.Replace(fmt.Sprintf("%.2f", c.scored.Line.Betrag), ".", ",", 1)
-					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s € · %s",
+					bStr := formatMoney(c.scored.Line.Betrag, "EUR", a.settings.DecimalSeparator)
+					options[i] = fmt.Sprintf("[%d] S.%d Z.%d · %s · %s · %s",
 						i+1,
 						c.scored.Line.Page+1,
 						c.scored.Line.LineIdx,

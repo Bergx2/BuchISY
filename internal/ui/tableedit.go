@@ -283,7 +283,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			if pct > 0 {
 				feeEntry.SetText(formatDecimal(c.GebuehrEUR, a.settings.DecimalSeparator))
 			}
-			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", fmt.Sprintf("%.2f", c.GesamtEUR)))
+			gesamtEURLabel.SetText(a.bundle.T("field.total.eur", formatMoney(c.GesamtEUR, "EUR", a.settings.DecimalSeparator)))
 		} else {
 			gesamtEURLabel.SetText("") // clear stale total when the rate is removed
 		}
@@ -681,8 +681,8 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		afaStatus.RemoveAll()
 		if asset, ok := core.FindAssetByBeleg(a.assets, row.Belegnummer); ok {
 			note := newCopyableLabel(a.bundle, fmt.Sprintf(
-				"📊 In AfA erfasst: AK %s €, Nutzungsdauer %d J., Anlage %d / AfA %d",
-				formatDecimal(asset.Anschaffungswert, a.settings.DecimalSeparator),
+				"📊 In AfA erfasst: AK %s, Nutzungsdauer %d J., Anlage %d / AfA %d",
+				formatMoney(asset.Anschaffungswert, "EUR", a.settings.DecimalSeparator),
 				asset.NutzungsdauerJahre, asset.Konto, asset.AfaKonto))
 			openBtn := widget.NewButton("Anlagenverzeichnis öffnen", func() { a.showAnlagen() })
 			openBtn.Importance = widget.LowImportance

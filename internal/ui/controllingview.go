@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -35,7 +34,7 @@ func (a *App) showControllingDialog() {
 					lbl.SetText(s.Name)
 				default:
 					lbl.Alignment = fyne.TextAlignTrailing
-					lbl.SetText(strings.Replace(fmt.Sprintf("%.2f", s.Summe), ".", ",", 1))
+					lbl.SetText(formatMoney(s.Summe, "EUR", a.settings.DecimalSeparator))
 				}
 			},
 		)
@@ -46,7 +45,7 @@ func (a *App) showControllingDialog() {
 	}
 
 	fmtAmount := func(v float64) string {
-		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+		return formatMoney(v, "EUR", a.settings.DecimalSeparator)
 	}
 
 	// Section labels and totals — created once, refreshed via reload.

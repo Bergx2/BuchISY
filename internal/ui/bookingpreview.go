@@ -12,7 +12,8 @@ import (
 )
 
 // formatBookingLines renders each booking entry as one human-readable line.
-func formatBookingLines(b core.Booking, chart *core.ChartOfAccounts) []string {
+// sep is the decimal separator ("," or ".").
+func formatBookingLines(b core.Booking, chart *core.ChartOfAccounts, sep string) []string {
 	lines := make([]string, 0, len(b.Entries))
 	for _, e := range b.Entries {
 		side := "Soll "
@@ -25,7 +26,7 @@ func formatBookingLines(b core.Booking, chart *core.ChartOfAccounts) []string {
 				name = acc.Name
 			}
 		}
-		amount := strings.Replace(fmt.Sprintf("%.2f", e.Betrag), ".", ",", 1)
+		amount := formatMoney(e.Betrag, "EUR", sep)
 		lines = append(lines, strings.TrimSpace(fmt.Sprintf("%s  %d  %s  %s", side, e.Konto, name, amount)))
 	}
 	return lines
@@ -53,7 +54,7 @@ func (p *bookingPreview) set(b core.Booking, bookable bool, reason string) {
 		p.container.Refresh()
 		return
 	}
-	for _, line := range formatBookingLines(b, p.app.chart) {
+	for _, line := range formatBookingLines(b, p.app.chart, p.app.settings.DecimalSeparator) {
 		p.container.Add(widget.NewLabel(line))
 	}
 	status := p.app.bundle.T("booking.balanced")
