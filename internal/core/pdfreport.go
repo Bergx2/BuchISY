@@ -77,6 +77,40 @@ func kontoLabelPDF(chart *ChartOfAccounts, konto int) string {
 	return fmt.Sprintf("%d", konto)
 }
 
+// BuildCashYearOverviewPDF renders a cash account's twelve-month overview:
+// per month the opening balance, income (deposits), cash expenses and closing
+// balance. All amounts in EUR.
+func BuildCashYearOverviewPDF(summaries []MonthSummary, account string, year int, company string) ([]byte, error) {
+	title := fmt.Sprintf("Kassen-Jahresübersicht %d  ·  %s", year, account)
+	pdf, tr := newReportPDF(title, "P", company)
+	headers := []string{"Monat", "Anfangsbestand", "Einnahmen", "Ausgaben", "Endbestand"}
+	widths := []float64{50, 35, 30, 30, 35}
+	pdfTableHeader(pdf, tr, headers, widths)
+	for _, s := range summaries {
+		pdfPageBreak(pdf, tr, headers, widths, 6)
+		cells := []struct {
+			w     float64
+			txt   string
+			align string
+		}{
+			{widths[0], fmt.Sprintf("%s %d", getMonthName(fmt.Sprintf("%02d", int(s.Month))), year), "L"},
+			{widths[1], pdfAmount(s.Anfangsbestand), "R"},
+			{widths[2], pdfAmount(s.Einnahmen), "R"},
+			{widths[3], pdfAmount(s.Ausgaben), "R"},
+			{widths[4], pdfAmount(s.Endbestand), "R"},
+		}
+		for _, c := range cells {
+			pdf.CellFormat(c.w, 6, tr(c.txt), "1", 0, c.align, false, 0, "")
+		}
+		pdf.Ln(6)
+	}
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // BuildBookingJournalPDF renders the booking journal: one row per Soll entry of
 // each balanced booking, against the payment account as counter-account.
 // All amounts are shown in EUR. Foreign-currency rows show the original currency

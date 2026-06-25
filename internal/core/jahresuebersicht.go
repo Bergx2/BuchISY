@@ -19,20 +19,30 @@ type MonthSummary struct {
 }
 
 // ComputeYearOverview rolls the cash balance through a year's months.
-// carriedIn is the opening balance entering the first month, used when that
-// month has no stored cash book. months are in calendar order, January
+// carriedIn is the opening balance entering the first month, used until a
+// stored cash book anchors the balance. months are in calendar order, January
 // first; each summary carries the matching time.Month (index 0 -> January).
-// A month with a stored book uses that book's own opening balance; a month
-// without one opens with the previous month's closing balance.
+//
+// Cash carries continuously: only the FIRST stored book sets an explicit
+// opening balance (the anchor). Every later month opens with the previous
+// month's closing balance — a later stored book's own Anfangsbestand is
+// ignored (its deposits/Einlagen still apply). This prevents a stray book
+// saved with a 0 opening (e.g. created before the carry chain existed) from
+// resetting the running balance to zero mid-year.
 func ComputeYearOverview(carriedIn float64, months []MonthInput) []MonthSummary {
 	summaries := make([]MonthSummary, len(months))
 	running := carriedIn
+	anchored := false
 	for i, mi := range months {
 		anfang := running
 		var book CashBook
 		if mi.HasStoredBook {
 			book = mi.Book
-			anfang = book.Anfangsbestand
+			if !anchored {
+				anfang = book.Anfangsbestand // first stored book anchors the balance
+				anchored = true
+			}
+			book.Anfangsbestand = anfang // later months carry; keep the book's Einlagen
 		} else {
 			book = CashBook{Anfangsbestand: anfang}
 		}

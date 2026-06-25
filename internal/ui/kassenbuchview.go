@@ -343,6 +343,7 @@ func (a *App) showCashYearView(account string, year int) {
 	yearSelect.SetSelected(fmt.Sprintf("%d", curYear))
 
 	tableArea := container.NewVBox()
+	var lastSummaries []core.MonthSummary // for the PDF export
 
 	rebuild := func() {
 		curAccount := accountSelect.Selected
@@ -366,6 +367,7 @@ func (a *App) showCashYearView(account string, year int) {
 		}
 		carriedIn, _ := a.cashCarryIn(curAccount, curYear, time.January)
 		summaries := core.ComputeYearOverview(carriedIn, months)
+		lastSummaries = summaries
 
 		tableArea.Objects = tableArea.Objects[:0]
 		tableArea.Add(container.NewGridWithColumns(5,
@@ -377,7 +379,7 @@ func (a *App) showCashYearView(account string, year int) {
 		))
 		for _, s := range summaries {
 			m := s.Month
-			monthBtn := widget.NewButton(a.bundle.T(fmt.Sprintf("month.%02d", int(m))), func() {
+			monthBtn := widget.NewButton(fmt.Sprintf("%s %d", a.bundle.T(fmt.Sprintf("month.%02d", int(m))), curYear), func() {
 				a.currentYear = curYear
 				a.currentMonth = m
 				a.yearSelect.SetSelected(fmt.Sprintf("%d", curYear))
@@ -412,9 +414,20 @@ func (a *App) showCashYearView(account string, year int) {
 	}
 	rebuild()
 
+	exportBtn := widget.NewButton("PDF-Export", func() {
+		data, err := core.BuildCashYearOverviewPDF(lastSummaries, accountSelect.Selected, curYear, a.profile)
+		if err != nil {
+			a.showError("PDF-Export", err.Error())
+			return
+		}
+		a.savePDF(fmt.Sprintf("Kassen-Jahresuebersicht_%s_%d.pdf",
+			core.SanitizeFilename(accountSelect.Selected), curYear), data)
+	})
+	exportBtn.Importance = widget.LowImportance
+
 	header := container.NewBorder(nil, nil,
 		container.NewPadded(titleLabel),
-		container.NewPadded(backBtn),
+		container.NewPadded(container.NewHBox(exportBtn, backBtn)),
 		container.NewPadded(container.NewHBox(accountSelect, yearSelect)),
 	)
 	a.window.SetContent(container.NewBorder(
