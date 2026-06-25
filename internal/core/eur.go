@@ -23,13 +23,15 @@ func RowEUR(row CSVRow) (eur CSVRow, rateMissing bool) {
 
 	kurs := row.Wechselkurs
 	eur = row
+	// Invoice amounts are in the foreign currency → convert to EUR.
 	eur.BetragNetto = round2(row.BetragNetto / kurs)
 	eur.SteuersatzBetrag = round2(row.SteuersatzBetrag / kurs)
 	eur.Bruttobetrag = round2(row.Bruttobetrag / kurs)
-	eur.BetragNetto_EUR = round2(row.BetragNetto_EUR / kurs)
-	eur.Gebuehr = round2(row.Gebuehr / kurs)
 	eur.Trinkgeld = round2(row.Trinkgeld / kurs)
 	eur.Rabatt = round2(row.Rabatt / kurs)
+	// BetragNetto_EUR IS the EUR net (already EUR) → equals the converted net.
+	eur.BetragNetto_EUR = eur.BetragNetto
+	// Gebuehr (bank/CC FX fee) is already booked in EUR → keep as-is (NOT divided).
 	eur.Waehrung = "EUR"
 	eur.Wechselkurs = 0
 	return eur, false

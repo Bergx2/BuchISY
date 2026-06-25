@@ -42,10 +42,13 @@ func TestRowEUR_USDConversion(t *testing.T) {
 		t.Errorf("Bruttobetrag = %v, want %v", got.Bruttobetrag, wantBrutto)
 	}
 
-	// Gebuehr: round2(2.34 / 1.1720) ≈ 2.00
-	wantGebuehr := round2(2.34 / 1.1720)
-	if got.Gebuehr != wantGebuehr {
-		t.Errorf("Gebuehr = %v, want %v", got.Gebuehr, wantGebuehr)
+	// Gebuehr is already in EUR (bank/CC fee) → stays unchanged.
+	if got.Gebuehr != 2.34 {
+		t.Errorf("Gebuehr = %v, want 2.34 (unchanged, already EUR)", got.Gebuehr)
+	}
+	// BetragNetto_EUR is the EUR net → equals the converted BetragNetto.
+	if got.BetragNetto_EUR != wantNetto {
+		t.Errorf("BetragNetto_EUR = %v, want %v", got.BetragNetto_EUR, wantNetto)
 	}
 
 	// Trinkgeld: round2(1.17 / 1.1720) ≈ 1.00

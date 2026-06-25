@@ -28,9 +28,10 @@ func TestMatchInvoiceToStatement(t *testing.T) {
 	if k, _ := MatchInvoiceToStatement(none, lines, cfg); k != MatchNone {
 		t.Errorf("none: kind=%v", k)
 	}
-	// Foreign currency: EUR debit = round2(89.18/1.1583) = 76.99 (RowEUR converts Bruttobetrag; Gebuehr is part of Bruttobetrag).
+	// Foreign currency: EUR debit = converted gross + EUR CC fee:
+	// round2(89.18/1.1583) + 1.54 = 76.99 + 1.54 = 78.53.
 	fx := CSVRow{Auftraggeber: "AWS", Bezahldatum: "14.01.2026", Bruttobetrag: 89.18, Waehrung: "USD", Wechselkurs: 1.1583, Gebuehr: 1.54}
-	wantFX := round2(89.18 / 1.1583)
+	wantFX := round2(round2(89.18/1.1583) + 1.54)
 	if !almost(InvoiceEURAmount(fx), wantFX) {
 		t.Errorf("InvoiceEURAmount(fx) = %v, want %v", InvoiceEURAmount(fx), wantFX)
 	}

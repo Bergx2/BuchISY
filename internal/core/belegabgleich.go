@@ -22,13 +22,12 @@ type ScoredLine struct {
 }
 
 // InvoiceEURAmount returns the amount that should appear on the statement: the
-// gross in EUR minus any discount. Uses RowEUR for conversion so all foreign
-// money fields (including Gebuehr, which RowEUR already converts) are consistent.
-// For a foreign row with a missing rate the face-value gross − rabatt is returned
-// (RowEUR passes amounts through unchanged in that case).
+// EUR gross (converted via RowEUR) plus the EUR CC/FX fee (Gebuehr is already in
+// EUR — RowEUR keeps it) minus any discount. For a foreign row with a missing
+// rate the face-value gross + fee − rabatt is returned.
 func InvoiceEURAmount(row CSVRow) float64 {
 	eurRow, _ := RowEUR(row)
-	return round2(eurRow.Bruttobetrag - eurRow.Rabatt)
+	return round2(eurRow.Bruttobetrag + eurRow.Gebuehr - eurRow.Rabatt)
 }
 
 // MatchConfig tunes the matcher.
