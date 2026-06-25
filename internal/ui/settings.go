@@ -942,6 +942,68 @@ func (a *App) showSettingsView() {
 		rulesSection,
 	))
 
+	// Kontenrahmen section: validate + apply SKR variant
+	detectedVariant := core.DetectSKRVariant(a.chart)
+
+	skrStatusLbl := widget.NewLabel("")
+	skrStatusLbl.Wrapping = fyne.TextWrapWord
+
+	pruefenBtn := widget.NewButton("Prüfen", func() {
+		issues := core.ValidateBookingAccounts(a.bookingRules, a.chart)
+		variant := core.DetectSKRVariant(a.chart)
+		variantText := "Erkannter Kontenrahmen: "
+		if variant != "" {
+			variantText += variant
+		} else {
+			variantText += "(unbekannt)"
+		}
+		if len(issues) == 0 {
+			skrStatusLbl.SetText(variantText + "\n✓ Alle Buchungskonten im Kontenrahmen vorhanden")
+		} else {
+			text := variantText + "\nProbleme:\n"
+			for _, iss := range issues {
+				text += "• " + iss + "\n"
+			}
+			skrStatusLbl.SetText(text)
+		}
+	})
+
+	skr03Btn := widget.NewButton("SKR03 anwenden", nil)
+	skr04Btn := widget.NewButton("SKR04 anwenden", nil)
+	if detectedVariant == "SKR03" {
+		skr03Btn.Importance = widget.HighImportance
+	} else if detectedVariant == "SKR04" {
+		skr04Btn.Importance = widget.HighImportance
+	}
+
+	applyVariant := func(variant string) {
+		dialog.ShowConfirm(
+			"Kontenrahmen anwenden",
+			"Alle Standard-Buchungskonten werden auf "+variant+" umgestellt.\n\nFortfahren?",
+			func(confirmed bool) {
+				if !confirmed {
+					return
+				}
+				newRules := core.ApplySKRVariant(a.bookingRules, variant)
+				if err := a.bookingRulesStore.Save(newRules); err != nil {
+					a.showError("Fehler", fmt.Sprintf("Buchungsregeln konnten nicht gespeichert werden: %v", err))
+					return
+				}
+				a.bookingRules = newRules
+				skrStatusLbl.SetText("✓ " + variant + " erfolgreich angewendet und gespeichert")
+				a.showToast("✓ " + variant + " angewendet")
+			},
+			a.window,
+		)
+	}
+	skr03Btn.OnTapped = func() { applyVariant("SKR03") }
+	skr04Btn.OnTapped = func() { applyVariant("SKR04") }
+
+	kontenrahmenSection := widget.NewCard("", "Kontenrahmen", container.NewVBox(
+		container.NewHBox(pruefenBtn, skr03Btn, skr04Btn),
+		skrStatusLbl,
+	))
+
 	// Tab 4: Advanced settings
 	advancedTab := container.NewVScroll(container.NewVBox(
 		widget.NewLabel(a.bundle.T("settings.columns")),
@@ -968,6 +1030,9 @@ func (a *App) showSettingsView() {
 			widget.NewFormItem(a.bundle.T("settings.matchWindow"), matchWindowEntry),
 			widget.NewFormItem(a.bundle.T("settings.matchTolerance"), matchToleranceEntry),
 		),
+		widget.NewSeparator(),
+
+		kontenrahmenSection,
 		widget.NewSeparator(),
 
 		widget.NewLabel(a.bundle.T("settings.database")),

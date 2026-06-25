@@ -313,6 +313,7 @@
   "erloesabgleich.confirm": "Link",
   "hint.no_api_key": "No Claude API key set — add one in Settings to use AI extraction.",
   "hint.no_storage": "No storage folder set — choose one in Settings.",
+  "hint.kontenrahmen": "Booking accounts don't match the chart of accounts — check Settings → Advanced → Chart of Accounts.",
   "hint.dismiss": "Dismiss",
   "empty.title": "No receipts in this month yet",
   "empty.hint": "Drag PDFs here or add a receipt",

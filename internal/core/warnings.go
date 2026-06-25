@@ -53,6 +53,28 @@ func InvoiceWarningsAsOf(row CSVRow, today time.Time) []string {
 		w = append(w, "GWG-Konto, aber Netto > 800 € — kein GWG: als Anlagegut aktivieren und abschreiben (AfA)")
 	}
 
+	// §13b reverse-charge: a 0%-VAT expense from a likely foreign supplier should
+	// have a §13b booking (Vorsteuer-RC 1577/1407, Umsatzsteuer-RC 1787/3837).
+	// Fire when: incoming invoice, 0% VAT, positive amount, no §13b account in
+	// the booking, AND a foreign-supplier signal (non-EUR currency OR non-DE EU
+	// VAT-ID on the supplier).
+	if !row.Ausgangsrechnung && row.SteuersatzBetrag == 0 && row.Bruttobetrag > 0 {
+		has13b := false
+		for _, e := range row.Buchung.Entries {
+			if e.Konto == 1577 || e.Konto == 1787 || e.Konto == 1407 || e.Konto == 3837 {
+				has13b = true
+				break
+			}
+		}
+		if !has13b {
+			foreignSignal := (row.Waehrung != "" && row.Waehrung != "EUR") ||
+				(IsEUVatID(row.VATID) && !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(row.VATID)), "DE"))
+			if foreignSignal {
+				w = append(w, "0 % USt ohne Reverse-Charge — bei ausländischem Lieferant §13b (Kz 46/47) prüfen")
+			}
+		}
+	}
+
 	// Bewirtung (entertainment) booked without the 70/30 split: an entry on the
 	// deductible Bewirtung account (SKR03 4650 / SKR04 6640) with NO matching
 	// non-deductible entry (4654 / 6644) means the cost was treated as 100 %

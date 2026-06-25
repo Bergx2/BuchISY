@@ -721,8 +721,14 @@ func (a *App) buildUI() fyne.CanvasObject {
 		a.invoiceTable.FilterEntry())
 
 	// Config-hint banners: one slim dismissible row per unmet precondition.
+	// Collect all hint keys: standard config hints + Kontenrahmen validation.
+	allHintKeys := core.MissingConfigHints(a.settings, a.hasAPIKey())
+	if len(core.ValidateBookingAccounts(a.bookingRules, a.chart)) > 0 {
+		allHintKeys = append(allHintKeys, "hint.kontenrahmen")
+	}
+
 	headerObjects := []fyne.CanvasObject{}
-	for _, hintKey := range core.MissingConfigHints(a.settings, a.hasAPIKey()) {
+	for _, hintKey := range allHintKeys {
 		hintKey := hintKey // capture
 		if a.dismissedHints[hintKey] {
 			continue
