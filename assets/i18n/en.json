@@ -68,6 +68,8 @@
   "field.partialPayment": "Partial Payment",
   "field.cashpaid": "Paid in cash",
   "info.cashpaid.nocashaccount": "No cash account found. Please add an account with type 'Cash register' under Settings → Payment Accounts.",
+  "field.bewirtungAnlass": "Occasion (entertainment)",
+  "field.bewirtungTeilnehmer": "Participants",
   "field.comment": "Comment",
   "field.net_eur": "Net Amount (EUR)",
   "field.fee": "Fee",

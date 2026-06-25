@@ -68,6 +68,8 @@
   "field.partialPayment": "Teilzahlung",
   "field.cashpaid": "Bar bezahlt",
   "info.cashpaid.nocashaccount": "Kein Barkasse-Konto gefunden. Bitte unter Einstellungen → Zahlungskonten ein Konto mit Typ 'Barkasse' anlegen.",
+  "field.bewirtungAnlass": "Anlass (Bewirtung)",
+  "field.bewirtungTeilnehmer": "Teilnehmer",
   "field.comment": "Kommentar",
   "field.net_eur": "Betrag netto (EUR)",
   "field.fee": "Gebühr",

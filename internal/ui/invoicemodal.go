@@ -330,6 +330,21 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		applyBarBezahlt()
 	}
 
+	// Bewirtung fields (shown only when category == "bewirtung")
+	anlassEntry := widget.NewEntry()
+	anlassEntry.SetText(meta.BewirtungAnlass)
+	anlassEntry.SetPlaceHolder(a.bundle.T("field.bewirtungAnlass"))
+	teilnehmerEntry := widget.NewEntry()
+	teilnehmerEntry.SetText(meta.BewirtungTeilnehmer)
+	teilnehmerEntry.SetPlaceHolder(a.bundle.T("field.bewirtungTeilnehmer"))
+	bewirtungBox := container.NewVBox(
+		widget.NewLabel(a.bundle.T("field.bewirtungAnlass")),
+		anlassEntry,
+		widget.NewLabel(a.bundle.T("field.bewirtungTeilnehmer")),
+		teilnehmerEntry,
+	)
+	bewirtungBox.Hide()
+
 	// Comment field (multiline)
 	commentEntry := widget.NewMultiLineEntry()
 	commentEntry.SetText(meta.Kommentar)
@@ -620,7 +635,20 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		}
 	}
 
-	categorySelect.OnChanged = func(string) { recomputeBooking() }
+	// updateBewirtungVisibility shows the Anlass/Teilnehmer fields only for Bewirtung.
+	updateBewirtungVisibility := func() {
+		if catKeyByLabel[categorySelect.Selected] == "bewirtung" {
+			bewirtungBox.Show()
+		} else {
+			bewirtungBox.Hide()
+		}
+	}
+	categorySelect.OnChanged = func(string) {
+		recomputeBooking()
+		updateBewirtungVisibility()
+	}
+	// Set initial visibility based on the pre-selected category.
+	updateBewirtungVisibility()
 	ausgangsrechnungCheck.OnChanged = func(checked bool) {
 		if checked {
 			suggestErloeskonto()
@@ -831,6 +859,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				container.NewHBox(editBookingBtn, autoBookingBtn), categorySelect)),
 			fi("", bookingPrev.container),
 		)),
+		bewirtungBox,
 		rememberCheck,
 		widget.NewSeparator(),
 		newCopyableLabel(a.bundle, a.bundle.T("modal.filenamePreview")),
@@ -986,6 +1015,8 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				bankAccountSelect.Selected,
 				partialPaymentCheck.Checked,
 				commentEntry.Text,
+				strings.TrimSpace(anlassEntry.Text),
+				strings.TrimSpace(teilnehmerEntry.Text),
 				parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
 				parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
 				parseFloat(rabattEntry.Text, a.settings.DecimalSeparator),
@@ -1112,6 +1143,8 @@ func (a *App) saveInvoice(
 	bankAccount string,
 	partialPayment bool,
 	comment string,
+	bewirtungAnlass string,
+	bewirtungTeilnehmer string,
 	netEUR float64,
 	fee float64,
 	rabatt float64,
@@ -1127,31 +1160,33 @@ func (a *App) saveInvoice(
 ) error {
 	// Build meta
 	meta := core.Meta{
-		Belegnummer:       belegnummer,
-		Auftraggeber:      company,
-		Verwendungszweck:  shortDesc,
-		Rechnungsnummer:   invoiceNum,
-		VATID:             strings.TrimSpace(vatID),
-		Rechnungsdatum:    invoiceDate,
-		Bezahldatum:       paymentDate,
-		TaxLines:          taxLines,
-		Trinkgeld:         trinkgeld,
-		BetragNetto:       core.SumNetto(taxLines),
-		SteuersatzProzent: core.PrimarySatz(taxLines),
-		SteuersatzBetrag:  core.SumMwSt(taxLines),
-		Bruttobetrag:      core.ComputeBrutto(taxLines, trinkgeld),
-		Waehrung:          currency,
-		Gegenkonto:        account,
-		Bankkonto:         bankAccount,
-		Teilzahlung:       partialPayment,
-		Kommentar:         comment,
-		BetragNetto_EUR:   netEUR,
-		Gebuehr:           fee,
-		Rabatt:            rabatt,
-		Wechselkurs:       wechselkurs,
-		GebuehrProzent:    gebuehrProzent,
-		HatAnhaenge:       len(attachments) > 0,
-		Ausgangsrechnung:  ausgangsrechnung,
+		Belegnummer:         belegnummer,
+		Auftraggeber:        company,
+		Verwendungszweck:    shortDesc,
+		Rechnungsnummer:     invoiceNum,
+		VATID:               strings.TrimSpace(vatID),
+		Rechnungsdatum:      invoiceDate,
+		Bezahldatum:         paymentDate,
+		TaxLines:            taxLines,
+		Trinkgeld:           trinkgeld,
+		BetragNetto:         core.SumNetto(taxLines),
+		SteuersatzProzent:   core.PrimarySatz(taxLines),
+		SteuersatzBetrag:    core.SumMwSt(taxLines),
+		Bruttobetrag:        core.ComputeBrutto(taxLines, trinkgeld),
+		Waehrung:            currency,
+		Gegenkonto:          account,
+		Bankkonto:           bankAccount,
+		Teilzahlung:         partialPayment,
+		Kommentar:           comment,
+		BewirtungAnlass:     bewirtungAnlass,
+		BewirtungTeilnehmer: bewirtungTeilnehmer,
+		BetragNetto_EUR:     netEUR,
+		Gebuehr:             fee,
+		Rabatt:              rabatt,
+		Wechselkurs:         wechselkurs,
+		GebuehrProzent:      gebuehrProzent,
+		HatAnhaenge:         len(attachments) > 0,
+		Ausgangsrechnung:    ausgangsrechnung,
 	}
 
 	// Extract year and month from invoice date (for filename template only)
@@ -1378,6 +1413,8 @@ func (a *App) autoBookInvoice(mainPath string, attachments []string, meta core.M
 		bankAccount,
 		false, // partialPayment
 		meta.Kommentar,
+		meta.BewirtungAnlass,
+		meta.BewirtungTeilnehmer,
 		meta.BetragNetto_EUR,
 		meta.Gebuehr,
 		meta.Rabatt,
