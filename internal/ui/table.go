@@ -624,9 +624,9 @@ func (it *InvoiceTable) updateSummary() {
 	}
 	it.summaryLabel.SetText(fmt.Sprintf(
 		"Σ  Netto: %s   ·   MwSt: %s   ·   Brutto: %s",
-		formatDecimal(net, sep),
-		formatDecimal(vat, sep),
-		formatDecimal(brutto, sep)))
+		formatMoney(net, "EUR", sep),
+		formatMoney(vat, "EUR", sep),
+		formatMoney(brutto, "EUR", sep)))
 }
 
 func (it *InvoiceTable) applyColumnWidths() {

@@ -1105,7 +1105,7 @@ func (a *App) showYearOverviewDialog() {
 	var dlg *dialog.CustomDialog
 
 	fmtBrutto := func(v float64) string {
-		return strings.Replace(fmt.Sprintf("%.2f", v), ".", ",", 1)
+		return formatMoney(v, "EUR", a.settings.DecimalSeparator)
 	}
 
 	tbl := widget.NewTable(
