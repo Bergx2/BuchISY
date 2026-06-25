@@ -477,6 +477,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		preview.Objects = []fyne.CanvasObject{content}
 		preview.Refresh()
 		previewStrip = strip
+		a.visionHighlight(strip, path, fmt.Sprintf("%.2f", row.Bruttobetrag), hl)
 		rebuildSwitcher()
 	}
 
