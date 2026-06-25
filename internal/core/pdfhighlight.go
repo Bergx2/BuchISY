@@ -59,6 +59,23 @@ func pdfBoxToPixel(b pdfBox, pageHeight, dpi float64) Rect {
 	}
 }
 
+// pdfBoxToPixelTopOrigin maps a box whose Y is TOP-origin in a coordinate space
+// of height coordHeight (which differs from the MediaBox) onto the rendered
+// image. Some PDFs — e.g. bank statements generated from HTML — report text in
+// a top-origin space scaled relative to the page, so text Y runs past the
+// MediaBox height and the normal bottom-origin flip lands the rect off-page.
+// Only Y/H need be accurate for the full-width statement frame; X/W are
+// overridden by the caller's fullWidth handling.
+func pdfBoxToPixelTopOrigin(b pdfBox, pageHeight, coordHeight, dpi float64) Rect {
+	s := (dpi / 72.0) * (pageHeight / coordHeight)
+	return Rect{
+		X: float32(b.x * s),
+		Y: float32(b.y * s),
+		W: float32(b.w * s),
+		H: float32(b.h * s),
+	}
+}
+
 // valueBoxInRow searches one row of text fragments for value (verbatim,
 // case-insensitive, whitespace-trimmed) and returns the PDF-point box
 // enclosing the matching fragments. ok is false if value is empty or does
@@ -164,12 +181,33 @@ func HighlightRects(path string, values []string, dpi float64) ([][]Rect, error)
 		}
 		pageHeight := pageHeightPoints(page)
 
+		// Detect a top-origin / scaled coordinate space: if the lowest text runs
+		// past the MediaBox height, the text coords don't match the bottom-origin
+		// MediaBox (common for HTML-generated statements). Map proportionally.
+		maxY := 0.0
+		for _, row := range rows {
+			for _, f := range []pdf.Text(row.Content) {
+				fh := f.FontSize
+				if fh <= 0 {
+					fh = 8
+				}
+				if y := f.Y + fh; y > maxY {
+					maxY = y
+				}
+			}
+		}
+		topOrigin := maxY > pageHeight*1.02
+
 		var rects []Rect
 		for _, row := range rows {
 			frags := []pdf.Text(row.Content)
 			for _, value := range values {
 				if box, ok := valueBoxInRow(frags, value); ok {
-					rects = append(rects, pdfBoxToPixel(box, pageHeight, dpi))
+					if topOrigin {
+						rects = append(rects, pdfBoxToPixelTopOrigin(box, pageHeight, maxY, dpi))
+					} else {
+						rects = append(rects, pdfBoxToPixel(box, pageHeight, dpi))
+					}
 				}
 			}
 		}

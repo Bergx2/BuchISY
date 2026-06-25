@@ -51,3 +51,15 @@ func TestValueBoxInRow(t *testing.T) {
 		t.Error("empty value should not match")
 	}
 }
+
+func TestPdfBoxToPixelTopOrigin(t *testing.T) {
+	// Top-origin box at y=840 in a 1031-tall coord space, page 792pt, 110 DPI.
+	// Expected Y ≈ 840 * (110/72) * (792/1031) ≈ 986 px.
+	r := pdfBoxToPixelTopOrigin(pdfBox{x: 100, y: 840, w: 50, h: 12}, 792, 1031, 110)
+	if r.Y < 980 || r.Y > 992 {
+		t.Errorf("top-origin Y mapping off: got %.1f, want ~986", r.Y)
+	}
+	if r.H < 13 || r.H > 16 {
+		t.Errorf("top-origin H mapping off: got %.1f, want ~14", r.H)
+	}
+}
