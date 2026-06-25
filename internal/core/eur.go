@@ -29,6 +29,8 @@ func RowEUR(row CSVRow) (eur CSVRow, rateMissing bool) {
 	eur.Bruttobetrag = round2(row.Bruttobetrag / kurs)
 	eur.Trinkgeld = round2(row.Trinkgeld / kurs)
 	eur.Rabatt = round2(row.Rabatt / kurs)
+	// Tax lines drive UStVA/ZM — must be EUR too (own slice, original untouched).
+	eur.TaxLines = TaxLinesEUR(row.TaxLines, row.Waehrung, kurs)
 	// BetragNetto_EUR IS the EUR net (already EUR) → equals the converted net.
 	eur.BetragNetto_EUR = eur.BetragNetto
 	// Gebuehr (bank/CC FX fee) is already booked in EUR → keep as-is (NOT divided).

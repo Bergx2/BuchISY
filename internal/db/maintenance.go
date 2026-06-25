@@ -81,7 +81,7 @@ func (r *Repository) RebookForeignToEUR() (converted, skipped, rateMissing int, 
 	// Fetch all foreign-currency invoices that have a booking.
 	// We do NOT filter wechselkurs > 0 here so we can count rateMissing separately.
 	sqlQuery := `
-		SELECT id, dateiname, belegnummer, bruttobetrag, wechselkurs, buchung, ausgangsrechnung
+		SELECT id, dateiname, belegnummer, bruttobetrag, wechselkurs, buchung, ausgangsrechnung, trinkgeld, rabatt
 		FROM invoices
 		WHERE waehrung != '' AND waehrung != 'EUR' AND buchung != '' AND buchung IS NOT NULL
 	`
@@ -100,6 +100,8 @@ func (r *Repository) RebookForeignToEUR() (converted, skipped, rateMissing int, 
 		wechselkurs      float64
 		buchungJSON      string
 		ausgangsrechnung bool
+		trinkgeld        float64
+		rabatt           float64
 	}
 
 	var candidates []candidate
@@ -108,9 +110,11 @@ func (r *Repository) RebookForeignToEUR() (converted, skipped, rateMissing int, 
 		var buchungNull sql.NullString
 		var belegnummerNull sql.NullString
 		var ausgangsNull sql.NullInt64
+		var tgNull, rabNull sql.NullFloat64
 		if scanErr := rows.Scan(
 			&c.id, &c.dateiname, &belegnummerNull,
 			&c.bruttobetrag, &c.wechselkurs, &buchungNull, &ausgangsNull,
+			&tgNull, &rabNull,
 		); scanErr != nil {
 			err = fmt.Errorf("RebookForeignToEUR scan: %w", scanErr)
 			return
@@ -118,6 +122,8 @@ func (r *Repository) RebookForeignToEUR() (converted, skipped, rateMissing int, 
 		c.buchungJSON = buchungNull.String
 		c.belegnummer = belegnummerNull.String
 		c.ausgangsrechnung = ausgangsNull.Int64 != 0
+		c.trinkgeld = tgNull.Float64
+		c.rabatt = rabNull.Float64
 		candidates = append(candidates, c)
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
@@ -138,14 +144,15 @@ func (r *Repository) RebookForeignToEUR() (converted, skipped, rateMissing int, 
 			continue
 		}
 
-		eurGross := round2(c.bruttobetrag / c.wechselkurs)
+		eurGross := round2(c.bruttobetrag / c.wechselkurs) // for the audit detail
 
-		// Idempotency check: use the appropriate side sum to detect whether
-		// the booking has already been rescaled to EUR.
-		// For incoming invoices (Ausgangsrechnung=false) the "base" (payment) side
-		// is the single Haben; for revenue invoices it is the single Soll.
-		// We compare the base side's total against both the foreign gross and the
-		// EUR gross to decide which state the booking is in.
+		// A standard booking's base (payment) side totals Brutto + Trinkgeld − Rabatt.
+		foreignBase := round2(c.bruttobetrag + c.trinkgeld - c.rabatt)
+		eurBase := round2(foreignBase / c.wechselkurs)
+
+		// Idempotency: compare the base side's total against the foreign vs EUR
+		// expectation. For incoming invoices the base is the single Haben; for
+		// revenue invoices the single Soll.
 		var currentTotal float64
 		if c.ausgangsrechnung {
 			currentTotal = b.SollSum()
@@ -153,13 +160,17 @@ func (r *Repository) RebookForeignToEUR() (converted, skipped, rateMissing int, 
 			currentTotal = b.HabenSum()
 		}
 
-		if math.Abs(currentTotal-eurGross) < 0.005 {
+		if math.Abs(currentTotal-eurBase) < 0.005 {
 			// Already EUR-scaled.
 			skipped++
 			continue
 		}
-		if math.Abs(currentTotal-c.bruttobetrag) >= 0.005 {
-			// Neither foreign nor EUR total matches — unusual state; skip to be safe.
+		if math.Abs(currentTotal-foreignBase) >= 0.005 {
+			// Side-sum matches neither the foreign nor the EUR standard total —
+			// e.g. a §13b booking (VAT appears on both sides) or an irregular
+			// booking. Skip safely and log it for manual review.
+			log.Printf("[INFO] rebook-eur: skipping %s — ambiguous booking (total=%.2f, foreignBase=%.2f); convert manually",
+				c.belegnummer, currentTotal, foreignBase)
 			skipped++
 			continue
 		}
