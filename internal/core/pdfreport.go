@@ -79,6 +79,8 @@ func kontoLabelPDF(chart *ChartOfAccounts, konto int) string {
 
 // BuildBookingJournalPDF renders the booking journal: one row per Soll entry of
 // each balanced booking, against the payment account as counter-account.
+// All amounts are shown in EUR. Foreign-currency rows show the original currency
+// and gross amount as a suffix in the Auftraggeber column, e.g. "(USD 200,00)".
 func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title, company string) ([]byte, error) {
 	pdf, tr := newReportPDF(title, "L", company)
 
@@ -86,11 +88,27 @@ func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title, compan
 	widths := []float64{20, 35, 70, 55, 55, 25}
 	pdfTableHeader(pdf, tr, headers, widths)
 
+	// Capture original foreign-currency data BEFORE EUR normalisation.
+	type origInfo struct{ waehrung string; brutto float64 }
+	originals := make([]origInfo, len(rows))
+	for i, r := range rows {
+		if r.Waehrung != "" && r.Waehrung != "EUR" {
+			originals[i] = origInfo{r.Waehrung, r.Bruttobetrag}
+		}
+	}
+	rows = RowsEUR(rows)
+
 	var total float64
-	for _, r := range rows {
+	for i, r := range rows {
 		pay, ok := r.Buchung.PaymentEntry()
 		if !r.Buchung.Balanced() || !ok {
 			continue
+		}
+		orig := originals[i]
+		auftraggeber := truncate(r.Auftraggeber, 40)
+		if orig.waehrung != "" {
+			suffix := fmt.Sprintf(" (%s %s)", orig.waehrung, pdfAmount(orig.brutto))
+			auftraggeber = truncate(r.Auftraggeber, 27) + suffix
 		}
 		for _, e := range r.Buchung.DebitEntries() {
 			pdfPageBreak(pdf, tr, headers, widths, 6)
@@ -101,7 +119,7 @@ func BuildBookingJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title, compan
 			}{
 				{widths[0], r.Rechnungsdatum, "L"},
 				{widths[1], truncate(r.Rechnungsnummer, 22), "L"},
-				{widths[2], truncate(r.Auftraggeber, 40), "L"},
+				{widths[2], auftraggeber, "L"},
 				{widths[3], truncate(kontoLabelPDF(chart, e.Konto), 32), "L"},
 				{widths[4], truncate(kontoLabelPDF(chart, pay.Konto), 32), "L"},
 				{widths[5], pdfAmount(e.Betrag), "R"},
@@ -183,27 +201,43 @@ func BuildControllingPDF(c Controlling, title, company string) ([]byte, error) {
 }
 
 // BuildInvoiceListPDF renders the invoices as a landscape table with a Brutto total.
+// All amounts are shown in EUR. Foreign-currency rows show the original currency and
+// gross as a suffix in the Brutto column, e.g. "170,65 (USD 200,00)".
 func BuildInvoiceListPDF(rows []CSVRow, title, company string) ([]byte, error) {
 	pdf, tr := newReportPDF(title, "L", company)
 
-	headers := []string{"Datum", "Auftraggeber", "Rechnungsnr.", "Netto", "MwSt", "Brutto"}
-	widths := []float64{22, 90, 45, 30, 30, 30}
+	headers := []string{"Datum", "Auftraggeber", "Rechnungsnr.", "Netto", "MwSt", "Brutto (EUR)"}
+	widths := []float64{22, 80, 40, 28, 28, 49}
 	pdfTableHeader(pdf, tr, headers, widths)
 
+	// Capture original foreign-currency data BEFORE EUR normalisation.
+	type origInfo struct{ waehrung string; brutto float64 }
+	originals := make([]origInfo, len(rows))
+	for i, r := range rows {
+		if r.Waehrung != "" && r.Waehrung != "EUR" {
+			originals[i] = origInfo{r.Waehrung, r.Bruttobetrag}
+		}
+	}
+	rows = RowsEUR(rows)
+
 	var totalBrutto float64
-	for _, r := range rows {
+	for i, r := range rows {
 		pdfPageBreak(pdf, tr, headers, widths, 6)
+		bruttoTxt := pdfAmount(r.Bruttobetrag)
+		if orig := originals[i]; orig.waehrung != "" {
+			bruttoTxt += fmt.Sprintf(" (%s %s)", orig.waehrung, pdfAmount(orig.brutto))
+		}
 		cells := []struct {
 			w     float64
 			txt   string
 			align string
 		}{
 			{widths[0], r.Rechnungsdatum, "L"},
-			{widths[1], truncate(r.Auftraggeber, 52), "L"},
-			{widths[2], truncate(r.Rechnungsnummer, 26), "L"},
+			{widths[1], truncate(r.Auftraggeber, 46), "L"},
+			{widths[2], truncate(r.Rechnungsnummer, 24), "L"},
 			{widths[3], pdfAmount(r.BetragNetto), "R"},
 			{widths[4], pdfAmount(r.SteuersatzBetrag), "R"},
-			{widths[5], pdfAmount(r.Bruttobetrag), "R"},
+			{widths[5], bruttoTxt, "R"},
 		}
 		for _, c := range cells {
 			pdf.CellFormat(c.w, 6, tr(c.txt), "1", 0, c.align, false, 0, "")
@@ -524,32 +558,48 @@ func BuildAnlagenspiegelPDF(rows []AnlagenRow, jahr int, title, company string) 
 // BuildSalesJournalPDF renders the Rechnungsausgangsbuch — a landscape table of
 // all outgoing invoices (Ausgangsrechnungen) in the period with Belegnummer,
 // date, customer, revenue account, net, VAT and gross, plus net/gross totals.
+// All amounts are shown in EUR. Foreign-currency rows show the original currency
+// and gross as a suffix in the Brutto column, e.g. "170,65 (USD 200,00)".
 func BuildSalesJournalPDF(rows []CSVRow, chart *ChartOfAccounts, title, company string) ([]byte, error) {
 	pdf, tr := newReportPDF(title, "L", company)
 
-	headers := []string{"Belegnr.", "Rechnungsnr.", "Datum", "Kunde", "Erlöskonto", "Netto", "USt", "Brutto"}
-	widths := []float64{24, 38, 20, 66, 46, 26, 26, 26}
+	headers := []string{"Belegnr.", "Rechnungsnr.", "Datum", "Kunde", "Erlöskonto", "Netto", "USt", "Brutto (EUR)"}
+	widths := []float64{24, 33, 20, 58, 42, 26, 26, 43}
 	pdfTableHeader(pdf, tr, headers, widths)
 
+	// Capture original foreign-currency data BEFORE EUR normalisation.
+	type origInfo struct{ waehrung string; brutto float64 }
+	originals := make([]origInfo, len(rows))
+	for i, r := range rows {
+		if r.Waehrung != "" && r.Waehrung != "EUR" {
+			originals[i] = origInfo{r.Waehrung, r.Bruttobetrag}
+		}
+	}
+	rows = RowsEUR(rows)
+
 	var totalNetto, totalUSt, totalBrutto float64
-	for _, r := range rows {
+	for i, r := range rows {
 		if !r.Ausgangsrechnung {
 			continue
 		}
 		pdfPageBreak(pdf, tr, headers, widths, 6)
+		bruttoTxt := pdfAmount(r.Bruttobetrag)
+		if orig := originals[i]; orig.waehrung != "" {
+			bruttoTxt += fmt.Sprintf(" (%s %s)", orig.waehrung, pdfAmount(orig.brutto))
+		}
 		cells := []struct {
 			w     float64
 			txt   string
 			align string
 		}{
 			{widths[0], r.Belegnummer, "L"},
-			{widths[1], truncate(r.Rechnungsnummer, 22), "L"},
+			{widths[1], truncate(r.Rechnungsnummer, 19), "L"},
 			{widths[2], r.Rechnungsdatum, "L"},
-			{widths[3], truncate(r.Auftraggeber, 38), "L"},
-			{widths[4], truncate(kontoLabelPDF(chart, r.Gegenkonto), 26), "L"},
+			{widths[3], truncate(r.Auftraggeber, 33), "L"},
+			{widths[4], truncate(kontoLabelPDF(chart, r.Gegenkonto), 24), "L"},
 			{widths[5], pdfAmount(r.BetragNetto), "R"},
 			{widths[6], pdfAmount(r.SteuersatzBetrag), "R"},
-			{widths[7], pdfAmount(r.Bruttobetrag), "R"},
+			{widths[7], bruttoTxt, "R"},
 		}
 		for _, c := range cells {
 			pdf.CellFormat(c.w, 6, tr(c.txt), "1", 0, c.align, false, 0, "")

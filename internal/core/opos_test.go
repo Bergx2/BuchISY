@@ -88,6 +88,40 @@ func TestComputeOpenItems(t *testing.T) {
 	}
 }
 
+// TestComputeOpenItemsEURNormalization verifies that a foreign-currency invoice
+// flows into ComputeOpenItems at its EUR value (via RowsEUR), not at the foreign face value.
+func TestComputeOpenItemsEURNormalization(t *testing.T) {
+	asOf := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	rows := []CSVRow{
+		{
+			Belegnummer:     "2026-USD-001",
+			Rechnungsnummer: "INV-001",
+			Rechnungsdatum:  "25.06.2026",
+			Auftraggeber:    "US Vendor LLC",
+			Bruttobetrag:    200.00, // USD
+			Waehrung:        "USD",
+			Wechselkurs:     1.17, // 1 EUR = 1.17 USD → EUR gross = round2(200/1.17) ≈ 170.94
+			Ausgangsrechnung: false,
+			Bezahldatum:     "",
+			BuchungRef:      "",
+		},
+	}
+
+	oi := ComputeOpenItems(rows, asOf)
+
+	if len(oi.Verbindlichkeiten) != 1 {
+		t.Fatalf("expected 1 Verbindlichkeit, got %d", len(oi.Verbindlichkeiten))
+	}
+	wantEUR := round2(200.00 / 1.17) // ≈ 170.94
+	got := oi.Verbindlichkeiten[0].Betrag
+	if !almost(got, wantEUR) {
+		t.Errorf("USD invoice Betrag = %.2f, want EUR %.2f (not face value 200)", got, wantEUR)
+	}
+	if almost(got, 200.00) {
+		t.Errorf("USD invoice Betrag is still face value 200 — RowsEUR normalization not applied")
+	}
+}
+
 func TestBuildOpenItemsPDF(t *testing.T) {
 	oi := OpenItems{
 		Forderungen: []OpenItem{

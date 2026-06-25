@@ -42,6 +42,7 @@ type ZM struct {
 // ComputeZM sums the net of intra-EU reverse-charge supplies (outgoing invoices
 // to an EU customer VAT-ID with no VAT charged), grouped per customer VAT-ID.
 func ComputeZM(rows []CSVRow) ZM {
+	rows = RowsEUR(rows) // EU reverse-charge sales must be reported in EUR
 	byVat := map[string]float64{}
 	for _, r := range rows {
 		if !r.Ausgangsrechnung || !IsEUVatID(r.VATID) || SumMwSt(r.TaxLines) != 0 {

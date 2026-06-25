@@ -28,10 +28,12 @@ func TestMatchInvoiceToStatement(t *testing.T) {
 	if k, _ := MatchInvoiceToStatement(none, lines, cfg); k != MatchNone {
 		t.Errorf("none: kind=%v", k)
 	}
-	// Foreign currency: EUR debit = round2(89.18/1.1583)+1.54 = 78.53 → matches line 2.
+	// Foreign currency: EUR debit = converted gross + EUR CC fee:
+	// round2(89.18/1.1583) + 1.54 = 76.99 + 1.54 = 78.53.
 	fx := CSVRow{Auftraggeber: "AWS", Bezahldatum: "14.01.2026", Bruttobetrag: 89.18, Waehrung: "USD", Wechselkurs: 1.1583, Gebuehr: 1.54}
-	if !almost(InvoiceEURAmount(fx), 78.53) {
-		t.Errorf("InvoiceEURAmount(fx) = %v, want 78.53", InvoiceEURAmount(fx))
+	wantFX := round2(round2(89.18/1.1583) + 1.54)
+	if !almost(InvoiceEURAmount(fx), wantFX) {
+		t.Errorf("InvoiceEURAmount(fx) = %v, want %v", InvoiceEURAmount(fx), wantFX)
 	}
 }
 
@@ -103,8 +105,8 @@ func TestMatchConfigForeignToleranceAndCredit(t *testing.T) {
 		{Page: 0, LineIdx: 1, Date: "14.01.2026", Text: "VISA AWS 78,90", Betrag: 78.90},
 		{Page: 0, LineIdx: 2, Date: "14.01.2026", Text: "Gutschrift 78,53 H", Betrag: 78.53, IstGutschrift: true},
 	}
-	// Foreign invoice EUR amount 78.53; bank debited 78.90 (rate drift). Within 1.5% → matches line 1, NOT the credit line.
-	fx := CSVRow{Auftraggeber: "AWS", Bezahldatum: "14.01.2026", Bruttobetrag: 89.18, Waehrung: "USD", Wechselkurs: 1.1583, Gebuehr: 1.54}
+	// Foreign invoice EUR amount ≈ round2(91.39/1.1583) ≈ 78.90; bank debited 78.90 (rate drift within 1.5%) → matches line 1, NOT the credit line.
+	fx := CSVRow{Auftraggeber: "AWS", Bezahldatum: "14.01.2026", Bruttobetrag: 91.39, Waehrung: "USD", Wechselkurs: 1.1583}
 	kind, cands := MatchInvoiceToStatement(fx, lines, cfg)
 	if kind == MatchNone || len(cands) == 0 || cands[0].Line.LineIdx != 1 {
 		t.Fatalf("foreign tolerance: kind=%v cands=%+v", kind, cands)

@@ -53,6 +53,7 @@ func AggregateBookingsByAccount(rows []CSVRow, chart *ChartOfAccounts) ([]Accoun
 // (paymentKonten). On the remaining accounts, Soll entries are expenses and
 // Haben entries are revenue. Names come from chart (nil → empty).
 func AggregateControlling(rows []CSVRow, rules *BookingRules, paymentKonten map[int]bool, chart *ChartOfAccounts) Controlling {
+	rows = RowsEUR(rows)
 	exclude := map[int]bool{}
 	for k := range paymentKonten {
 		exclude[k] = true

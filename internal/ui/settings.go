@@ -576,6 +576,33 @@ func (a *App) showSettingsView() {
 	})
 	wipeDBBtn.Importance = widget.DangerImportance
 
+	// Rebook foreign-currency invoices to EUR
+	rebookForeignBtn := widget.NewButton("Fremdwährungs-Belege auf EUR umstellen", func() {
+		dialog.ShowConfirm(
+			"Fremdwährungs-Umstellung",
+			"Alle Buchungen von Fremdwährungs-Belegen (z. B. USD) werden auf EUR umgerechnet\n"+
+				"(Betrag ÷ Wechselkurs). Idempotent: bereits umgerechnete Buchungen werden übersprungen.\n\n"+
+				"Fortfahren?",
+			func(confirmed bool) {
+				if !confirmed || a.dbRepo == nil {
+					return
+				}
+				conv, skip, missing, rebookErr := a.dbRepo.RebookForeignToEUR()
+				if rebookErr != nil {
+					a.showError("Fehler", fmt.Sprintf("Umrechnung fehlgeschlagen: %v", rebookErr))
+					return
+				}
+				a.loadInvoices()
+				a.showInfo(
+					"Fremdwährungs-Umstellung abgeschlossen",
+					fmt.Sprintf("Umgerechnet: %d\nÜbersprungen (bereits EUR): %d\nKein Kurs vorhanden: %d",
+						conv, skip, missing),
+				)
+			},
+			a.window,
+		)
+	})
+
 	// Column order
 	tempColumnOrder := make([]string, len(a.settings.ColumnOrder))
 	copy(tempColumnOrder, a.settings.ColumnOrder)
@@ -946,6 +973,11 @@ func (a *App) showSettingsView() {
 		widget.NewLabel(a.bundle.T("settings.database")),
 		wipeDBBtn,
 		widget.NewLabel(a.bundle.T("settings.wipeDatabase.hint")),
+		widget.NewSeparator(),
+
+		widget.NewLabel("Daten-Migration"),
+		rebookForeignBtn,
+		widget.NewLabel("Einmalige Umrechnung: Buchungsbeträge in Fremdwährung werden auf EUR skaliert (÷ Wechselkurs). Bereits umgerechnete Buchungen werden übersprungen."),
 	))
 
 	// Build tabbed container

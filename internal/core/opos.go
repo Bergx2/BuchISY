@@ -48,6 +48,7 @@ func agingBucket(days int) string {
 // Rechnungsdatum is empty or unparseable). Bucket boundaries: 0–30 / 31–60 /
 // 61–90 / >90 days.
 func ComputeOpenItems(rows []CSVRow, asOf time.Time) OpenItems {
+	rows = RowsEUR(rows)
 	var oi OpenItems
 	for _, r := range rows {
 		if strings.TrimSpace(r.Bezahldatum) != "" || strings.TrimSpace(r.BuchungRef) != "" {
