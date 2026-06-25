@@ -404,9 +404,14 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		b := row.Buchung
 		manualBooking = &b
 	}
+	// Forward-declared so recomputeBooking can trigger it after booking is set.
+	var refreshWarnings func()
 	recomputeBooking = func() {
 		if manualBooking != nil {
 			bookingPrev.set(*manualBooking, manualBooking.Balanced(), a.bundle.T("booking.manual.hint"))
+			if refreshWarnings != nil {
+				refreshWarnings()
+			}
 			return
 		}
 		var b core.Booking
@@ -422,6 +427,9 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 				parseFloat(rabattEntry.Text, a.settings.DecimalSeparator))
 		}
 		bookingPrev.set(b, bookable, reason)
+		if refreshWarnings != nil {
+			refreshWarnings()
+		}
 	}
 	categorySelect.OnChanged = func(string) { recomputeBooking() }
 	ausgangsrechnungCheck.OnChanged = func(bool) { recomputeBooking() }
@@ -453,6 +461,34 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	// Initial booking preview — call after all widgets are set up.
 	recomputeBooking()
+
+	// Live plausibility-warning strip — mirrors the one in invoicemodal.go.
+	warningsLabel := widget.NewLabel("")
+	warningsLabel.Importance = widget.WarningImportance
+	warningsLabel.Wrapping = fyne.TextWrapWord
+	warningsLabel.Hide()
+
+	refreshWarnings = func() {
+		warnings := core.InvoiceWarnings(core.CSVRow{
+			BetragNetto:      core.SumNetto(ed.Lines()),
+			SteuersatzBetrag: core.SumMwSt(ed.Lines()),
+			Bruttobetrag:     ed.Brutto(),
+			Trinkgeld:        ed.Trinkgeld(),
+			Gegenkonto:       selectedAccount,
+			Waehrung:         core.CurrencyCodeFromOption(currencySelect.Selected),
+			Wechselkurs:      parseDecimal(kursEntry.Text),
+			Rechnungsdatum:   dateEntry.Text,
+			VATID:            vatIDEntry.Text,
+			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
+			Buchung:          bookingPrev.last,
+		})
+		if len(warnings) == 0 {
+			warningsLabel.Hide()
+		} else {
+			warningsLabel.SetText("⚠ " + strings.Join(warnings, " • "))
+			warningsLabel.Show()
+		}
+	}
 
 	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
 		editWin.Close()
@@ -645,6 +681,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 				openBelegBtn, addAttBtn, delAttBtn),
 			container.NewHBox(cancelBtn, saveBtn)),
 		previewSwitcher,
+		warningsLabel,
 		section("Identifikation", selectableForm(a.bundle,
 			fi("Beleg-Nr.", belegnrEntry),
 			fi(a.bundle.T("field.company"), companyEntry),
@@ -704,8 +741,23 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	currencySelect.OnChanged = func(string) {
 		updateCurrencyConversionVisibility()
 		updateFilenamePreview()
+		refreshWarnings()
 	}
 	updateCurrencyConversionVisibility()
+
+	// Chain refreshWarnings into dateEntry (already has onAnyChange) and wire
+	// vatIDEntry (no prior OnChanged). Both affect plausibility checks.
+	prevDateChanged := dateEntry.OnChanged
+	dateEntry.OnChanged = func(s string) {
+		if prevDateChanged != nil {
+			prevDateChanged(s)
+		}
+		refreshWarnings()
+	}
+	vatIDEntry.OnChanged = func(string) { refreshWarnings() }
+
+	// Initial warnings evaluation — once the full form is assembled.
+	refreshWarnings()
 
 	scrollForm := container.NewVScroll(form)
 	// Keep just a sliver minimum so the user can collapse the form pane
