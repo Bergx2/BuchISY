@@ -100,7 +100,7 @@ func TestBuildOpenItemsPDF(t *testing.T) {
 		VerbindlichkeitenGesamt: 297.50,
 	}
 
-	data, err := BuildOpenItemsPDF(oi, "Offene Posten 2026")
+	data, err := BuildOpenItemsPDF(oi, "Offene Posten 2026", "")
 	if err != nil {
 		t.Fatalf("BuildOpenItemsPDF error: %v", err)
 	}

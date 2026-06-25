@@ -145,7 +145,7 @@ func TestBuildSuSaPDF(t *testing.T) {
 		{Konto: 4663, Name: "Reisekosten", SollSumme: 100, HabenSumme: 0, Saldo: 100},
 		{Konto: 8400, Name: "Erlöse", SollSumme: 0, HabenSumme: 200, Saldo: -200},
 	}
-	data, err := BuildSuSaPDF(bals, "Summen- und Saldenliste")
+	data, err := BuildSuSaPDF(bals, "Summen- und Saldenliste", "")
 	if err != nil {
 		t.Fatalf("BuildSuSaPDF error: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestBuildGuVPDF(t *testing.T) {
 		AufwandGesamt: 100,
 		Ergebnis:      100,
 	}
-	data, err := BuildGuVPDF(g, "Gewinn- und Verlustrechnung")
+	data, err := BuildGuVPDF(g, "Gewinn- und Verlustrechnung", "")
 	if err != nil {
 		t.Fatalf("BuildGuVPDF error: %v", err)
 	}
