@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -1464,4 +1465,34 @@ func (a *App) addAttachmentToInvoice(row core.CSVRow, sourcePath string) (int, e
 		a.logger.Warn("CSV-Export nach Anhang fehlgeschlagen: %v", err)
 	}
 	return nextSeq, nil
+}
+
+// removeAttachmentFromInvoice deletes a single attachment file and refreshes the
+// invoice's HatAnhaenge flag from the filesystem. The main invoice file and the
+// linked bank statement are never passed here (the caller restricts deletion to
+// real attachment siblings).
+func (a *App) removeAttachmentFromInvoice(row core.CSVRow, attPath string) error {
+	if !core.FileExists(attPath) {
+		return fmt.Errorf("Anhang nicht gefunden: %s", filepath.Base(attPath))
+	}
+	if err := os.Remove(attPath); err != nil {
+		return fmt.Errorf("Anhang konnte nicht gelöscht werden: %w", err)
+	}
+
+	// Recompute the attachment flag from the remaining sibling files.
+	invoicePath := a.resolveInvoicePath(row)
+	attachmentFolder := filepath.Dir(invoicePath)
+	monthFolder := attachmentFolder
+	if row.Unterordner != "" {
+		monthFolder = filepath.Dir(attachmentFolder)
+	}
+	row.HatAnhaenge = core.CountAttachmentsIn(attachmentFolder, row.Dateiname) > 0
+	if err := a.dbRepo.Update(row.Jahr, row.Monat, row.Dateiname, row); err != nil {
+		return fmt.Errorf("Datenbank-Aktualisierung fehlgeschlagen: %w", err)
+	}
+	csvPath := filepath.Join(monthFolder, "invoices.csv")
+	if err := a.dbRepo.ExportToCSV(row.Jahr, row.Monat, csvPath, a.csvRepo); err != nil {
+		a.logger.Warn("CSV-Export nach Anhang-Löschung fehlgeschlagen: %v", err)
+	}
+	return nil
 }

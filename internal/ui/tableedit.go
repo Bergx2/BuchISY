@@ -521,6 +521,42 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		})
 	addAttBtn.Importance = widget.LowImportance
 
+	// Delete the attachment currently shown in the preview (Original /
+	// Kontoauszug cannot be deleted). Confirm first — attachments can be large.
+	delAttBtn := widget.NewButtonWithIcon("Anhang löschen", theme.DeleteIcon(), func() {
+		target := currentPreviewPath
+		isAtt := false
+		for _, p := range attPaths {
+			if p == target {
+				isAtt = true
+				break
+			}
+		}
+		if !isAtt {
+			a.showInfo("Anhang löschen",
+				"Bitte zuerst oben den zu löschenden Anhang auswählen — Original und Kontoauszug können nicht gelöscht werden.")
+			return
+		}
+		dialog.ShowConfirm("Anhang löschen",
+			fmt.Sprintf("Anhang \"%s\" wirklich unwiderruflich löschen?", filepath.Base(target)),
+			func(ok bool) {
+				if !ok {
+					return
+				}
+				if err := a.removeAttachmentFromInvoice(row, target); err != nil {
+					dialog.ShowError(err, editWin)
+					return
+				}
+				attPaths = a.invoiceAttachmentPaths(row)
+				row.HatAnhaenge = len(attPaths) > 0
+				currentPreviewPath = originalPath
+				swapPreview(originalPath) // also rebuilds the switcher
+				a.loadInvoices()
+				a.showToast("✓ Anhang gelöscht")
+			}, editWin)
+	})
+	delAttBtn.Importance = widget.LowImportance
+
 	rebuildSwitcher()
 
 	belegnrEntry := widget.NewEntry()
@@ -530,7 +566,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		container.NewBorder(nil, nil,
 			container.NewHBox(
 				newCopyableLabel(a.bundle, "Datei: "+row.Dateiname),
-				openBelegBtn, addAttBtn),
+				openBelegBtn, addAttBtn, delAttBtn),
 			container.NewHBox(cancelBtn, saveBtn)),
 		previewSwitcher,
 		section("Identifikation", selectableForm(a.bundle,
