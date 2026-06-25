@@ -571,7 +571,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		} else {
 			b, bookable, reason = a.computeInvoiceBooking(
 				catKeyByLabel[categorySelect.Selected],
-				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
 		}
 		bookingPrev.set(b, bookable, reason)
 	}
@@ -610,7 +610,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			} else {
 				seed, _, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
 			}
 		}
 		a.showBookingEditor(seed, func(edited core.Booking) {
@@ -927,7 +927,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			} else {
 				b, bookable, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
 				learn = bookable
 			}
 			if bookable {
@@ -1305,6 +1305,7 @@ func (a *App) autoBookInvoice(mainPath string, attachments []string, meta core.M
 		meta.Trinkgeld,
 		account,
 		bankAccount,
+		meta.Rabatt,
 	)
 
 	// Build the filename via the naming template, mirroring updateFilenamePreview.

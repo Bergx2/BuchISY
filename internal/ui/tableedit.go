@@ -389,7 +389,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		} else {
 			b, bookable, reason = a.computeInvoiceBooking(
 				catKeyByLabel[categorySelect.Selected],
-				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+				ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
 		}
 		bookingPrev.set(b, bookable, reason)
 	}
@@ -407,7 +407,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			} else {
 				seed, _, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
 			}
 		}
 		a.showBookingEditor(seed, func(edited core.Booking) {
@@ -699,7 +699,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			} else {
 				b, bookable, _ = a.computeInvoiceBooking(
 					catKeyByLabel[categorySelect.Selected],
-					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected)
+					ed.Lines(), ed.Trinkgeld(), selectedAccount, bankAccountSelect.Selected, 0)
 				learn = bookable
 			}
 			if bookable {

@@ -35,6 +35,21 @@ func TestMatchInvoiceToStatement(t *testing.T) {
 	}
 }
 
+// TestInvoiceEURAmountRabatt verifies that InvoiceEURAmount subtracts Rabatt from
+// both the EUR and the plain-Bruttobetrag branches (Method B reconciliation).
+func TestInvoiceEURAmountRabatt(t *testing.T) {
+	// Plain EUR branch: 1329.05 − 50 = 1279.05.
+	row := CSVRow{Bruttobetrag: 1329.05, Waehrung: "EUR", Rabatt: 50}
+	if got := InvoiceEURAmount(row); !almost(got, 1279.05) {
+		t.Errorf("EUR branch: InvoiceEURAmount = %v, want 1279.05", got)
+	}
+	// Zero Rabatt: unchanged.
+	row0 := CSVRow{Bruttobetrag: 1329.05, Waehrung: "EUR", Rabatt: 0}
+	if got := InvoiceEURAmount(row0); !almost(got, 1329.05) {
+		t.Errorf("zero Rabatt: InvoiceEURAmount = %v, want 1329.05", got)
+	}
+}
+
 func TestFindGroupedPayments(t *testing.T) {
 	cfg := DefaultMatchConfig()
 	invoices := []CSVRow{

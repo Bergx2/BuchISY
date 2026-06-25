@@ -30,7 +30,7 @@ func TestBuildBookingBewirtung(t *testing.T) {
 		{Netto: 6.64, SatzProzent: 19, MwStBetrag: 1.26},
 		{Netto: 8.41, SatzProzent: 7, MwStBetrag: 0.59},
 	}
-	b, err := BuildBooking(rules, "bewirtung", lines, 3.10, 0, 1800)
+	b, err := BuildBooking(rules, "bewirtung", lines, 3.10, 0, 1800, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestBuildBookingBewirtung(t *testing.T) {
 func TestBuildBookingStandard(t *testing.T) {
 	rules, _ := ParseBookingRules([]byte(`{"vorsteuer_konten":{"19":1406},"regeln":[{"kategorie":"standard","name":"Standard"}]}`))
 	lines := []TaxLine{{Netto: 100, SatzProzent: 19, MwStBetrag: 19}}
-	b, err := BuildBooking(rules, "standard", lines, 0, 6815, 1800)
+	b, err := BuildBooking(rules, "standard", lines, 0, 6815, 1800, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,8 +71,35 @@ func TestBuildBookingStandard(t *testing.T) {
 	if !b.Balanced() {
 		t.Errorf("standard booking not balanced: %+v", b)
 	}
-	if _, err := BuildBooking(rules, "unbekannt", lines, 0, 6815, 1800); err == nil {
+	if _, err := BuildBooking(rules, "unbekannt", lines, 0, 6815, 1800, 0); err == nil {
 		t.Error("unknown category should error")
+	}
+}
+
+// TestBuildBookingStandardRabatt verifies Method B: expense reduced by gross rabatt,
+// VAT posted in full, payment = Brutto − Rabatt.
+// netTotal 1116.85, VAT 19% 212.20, expenseAccount 420, paymentAccount 1270, rabatt 50.
+// Expected: Soll 420 = 1066.85, Soll 1406 (Vorsteuer) = 212.20, Haben 1270 = 1279.05.
+func TestBuildBookingStandardRabatt(t *testing.T) {
+	rules, _ := ParseBookingRules([]byte(`{"vorsteuer_konten":{"19":1406},"regeln":[{"kategorie":"standard","name":"Standard"}]}`))
+	lines := []TaxLine{{Netto: 1116.85, SatzProzent: 19, MwStBetrag: 212.20}}
+	b, err := BuildBooking(rules, "standard", lines, 0, 420, 1270, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Balanced() {
+		t.Fatalf("booking not balanced: soll=%v haben=%v entries=%+v", b.SollSum(), b.HabenSum(), b.Entries)
+	}
+	soll := sollByKonto(b)
+	haben := habenByKonto(b)
+	if !almost(soll[420], 1066.85) {
+		t.Errorf("Soll 420 = %v, want 1066.85", soll[420])
+	}
+	if !almost(soll[1406], 212.20) {
+		t.Errorf("Soll 1406 (Vorsteuer) = %v, want 212.20", soll[1406])
+	}
+	if !almost(haben[1270], 1279.05) {
+		t.Errorf("Haben 1270 = %v, want 1279.05", haben[1270])
 	}
 }
 
@@ -87,7 +114,7 @@ func TestBuildBookingBalancesWithMissingVorsteuerAccount(t *testing.T) {
 		{Netto: 100, SatzProzent: 19, MwStBetrag: 19},
 		{Netto: 50, SatzProzent: 5, MwStBetrag: 2.50},
 	}
-	b, err := BuildBooking(rules, "standard", lines, 0, 6815, 1800)
+	b, err := BuildBooking(rules, "standard", lines, 0, 6815, 1800, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +172,7 @@ func TestBuildBookingNewCategories(t *testing.T) {
 		{"kategorie":"reisekosten","name":"R","default_konto":6650}]}`))
 
 	// reverse_charge: net 100 → expense 100, VSt§13b 19, USt§13b 19, payment 100; balanced.
-	rc, err := BuildBooking(rules, "reverse_charge", []TaxLine{{Netto: 100, SatzProzent: 0, MwStBetrag: 0}}, 0, 6300, 1800)
+	rc, err := BuildBooking(rules, "reverse_charge", []TaxLine{{Netto: 100, SatzProzent: 0, MwStBetrag: 0}}, 0, 6300, 1800, 0)
 	if err != nil || !rc.Balanced() {
 		t.Fatalf("rc not balanced: %+v err=%v", rc, err)
 	}
@@ -158,19 +185,19 @@ func TestBuildBookingNewCategories(t *testing.T) {
 	}
 
 	// geschenke ≤ 35: net 20, VAT 3.80 → 6610=20, 1406=3.80, payment 23.80.
-	g1, _ := BuildBooking(rules, "geschenke", []TaxLine{{Netto: 20, SatzProzent: 19, MwStBetrag: 3.80}}, 0, 0, 1800)
+	g1, _ := BuildBooking(rules, "geschenke", []TaxLine{{Netto: 20, SatzProzent: 19, MwStBetrag: 3.80}}, 0, 0, 1800, 0)
 	if !g1.Balanced() || !almost(sollByKonto(g1)[6610], 20) || !almost(sollByKonto(g1)[1406], 3.80) {
 		t.Errorf("geschenke≤35: %+v", g1)
 	}
 
 	// geschenke > 35: net 40, VAT 7.60 → 6620 = 47.60 (gross), no Vorsteuer, payment 47.60.
-	g2, _ := BuildBooking(rules, "geschenke", []TaxLine{{Netto: 40, SatzProzent: 19, MwStBetrag: 7.60}}, 0, 0, 1800)
+	g2, _ := BuildBooking(rules, "geschenke", []TaxLine{{Netto: 40, SatzProzent: 19, MwStBetrag: 7.60}}, 0, 0, 1800, 0)
 	if !g2.Balanced() || !almost(sollByKonto(g2)[6620], 47.60) || sollByKonto(g2)[1406] != 0 {
 		t.Errorf("geschenke>35: %+v", g2)
 	}
 
 	// reisekosten: net 100, VAT 19 → 6650=100, 1406=19, payment 119 (ignores passed expenseAccount).
-	r, _ := BuildBooking(rules, "reisekosten", []TaxLine{{Netto: 100, SatzProzent: 19, MwStBetrag: 19}}, 0, 9999, 1800)
+	r, _ := BuildBooking(rules, "reisekosten", []TaxLine{{Netto: 100, SatzProzent: 19, MwStBetrag: 19}}, 0, 9999, 1800, 0)
 	if !r.Balanced() || !almost(sollByKonto(r)[6650], 100) || sollByKonto(r)[9999] != 0 {
 		t.Errorf("reisekosten: %+v", r)
 	}
