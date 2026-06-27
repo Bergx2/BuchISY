@@ -21,7 +21,7 @@ To help resolve your issue as quickly as possible, please include:
 * **Expected vs actual behavior**
 * **System information**:
   - Operating system and version (e.g., macOS 14.x, Windows 11)
-  - BuchISY version (e.g., v2.1)
+  - BuchISY version (e.g., v2.16)
   - Processing mode (Claude API or Local)
 * **Log files** from `~/Library/Application Support/BuchISY/logs/` (macOS) or `%APPDATA%\BuchISY\logs\` (Windows)
 * **Screenshots** for UI issues
@@ -50,6 +50,9 @@ When making pull requests to the repository, make sure to follow these guideline
 * `feat(ui): add invoice search functionality`
 * `fix(core): resolve ARM64 crash on vision extraction`
 * `docs(readme): update installation guide for Windows`
+
+* **Update the [CHANGELOG](CHANGELOG.md)** under the `## [Unreleased]` section for any
+  user-facing change. When a release is tagged, move those entries under the new version.
 
 ### Features
 
@@ -121,8 +124,8 @@ internal/
 
 When adding new UI strings:
 
-1. Add German translation to `assets/i18n/de.toml`
-2. Add English translation to `assets/i18n/en.toml`
+1. Add German translation to `assets/i18n/de.json`
+2. Add English translation to `assets/i18n/en.json`
 3. Use descriptive keys: `field.company` not `label1`
 
 ## Testing
@@ -148,6 +151,6 @@ Your contributions make BuchISY better for everyone. We appreciate your time and
 
 ---
 
-**BuchISY** - Open Source Invoice Management by [Bergx2 GmbH](https://www.bergx2.de)
+**BuchISY** - Open Source GoBD Bookkeeping for Germany by [Bergx2 GmbH](https://www.bergx2.de)
 
 🌐 [www.buchisy.de](https://www.buchisy.de) | 💻 [GitHub](https://github.com/Bergx2/BuchISY)

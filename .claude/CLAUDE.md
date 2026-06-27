@@ -2,22 +2,37 @@
 
 ## What is BuchISY?
 
-BuchISY is a **desktop invoice management application** (macOS/Windows) that helps small businesses and freelancers organize invoices for bookkeeping. It extracts metadata from PDF invoices using either **Claude AI** (high accuracy) or **local heuristics** (offline), then organizes files into month-based folders with SQLite database and CSV exports.
+BuchISY is a **GoBD-compliant German bookkeeping pre-system** (Buchhaltungs-Vorsystem) desktop app (macOS/Windows) for small businesses and freelancers. It started as an invoice organizer (extract PDF metadata via **Claude AI** or **local heuristics**, file into month folders, SQLite + CSV) and has grown into a full bookkeeping suite: double-entry booking with VAT logic against an SKR04 chart, German VAT filings (UStVA/ZM), reports (SuSa/GuV/OPOS), DATEV/Lexware/GoBD exports, bank-statement import, and the GoBD trio of audit trail, period locking, and Verfahrensdokumentation.
+
+It is deliberately a **Vorsystem**: capture, book, lock, file VAT, and export a clean DATEV/receipt package for the tax advisor. It does **not** do a full annual close (HGB-Bilanz/Jahresabschluss) — SuSa/GuV are evaluations, not a Jahresabschluss.
 
 **Published by:** Bergx2 GmbH
 **Website:** [www.buchisy.de](https://www.buchisy.de)
-**Current Version:** v2.3
+**Current Version:** v2.16
+
+> **Note on this document:** the architecture below was written for an earlier "v2.3 invoice organizer" and still accurately describes the extraction/storage core. The accounting modules (booking, UStVA/ZM, SuSa/GuV/OPOS, Anlagen, Kassenbuch, bank import, audit, Festschreibung, exports) are summarized in **Core Features** and **Bookkeeping modules** below; many individual `internal/core/` and `internal/ui/` files for those features are not yet enumerated in the per-file lists.
 
 ## Core Features
 
+**Capture & extraction**
 - **Dual extraction modes:** Claude API (AI-powered) or local pattern matching
 - **Vision extraction:** Claude Vision API for scanned PDFs (platform-specific rendering)
-- **E-Invoice support:** XRechnung and ZUGFeRD structured data extraction
-- **SQLite database:** Single source of truth for all invoice data (v2.0+)
+- **E-Invoice support:** XRechnung and ZUGFeRD (CII) structured data extraction
+- **Multiple ingest paths:** drag-and-drop, clipboard paste, batch picker, watched scan inbox
 - **Smart organization:** Automatic file naming and month-based folder structure (YYYY-MM)
-- **CSV export:** Auto-generated `invoices.csv` per month from database
-- **Account mapping:** Remembers company→account assignments for faster processing
-- **File attachments:** Upload additional files (receipts, contracts) per invoice
+
+**Bookkeeping & tax**
+- **Double-entry booking:** multiple VAT lines, SKR04 chart, §13b reverse-charge, auto-booking rules engine (opt-in)
+- **VAT filings:** UStVA (official ELSTER Kennzahlen, PDF + XML), ZM (PDF + XML)
+- **Reports:** SuSa, GuV, OPOS (aging), Controlling, year overview
+- **Fixed assets (Anlagen):** linear AfA, Anlagenspiegel; **Kassenbuch:** per-Barkasse cash book
+- **Bank import:** CAMT.053 + MT940 with Belegabgleich/Erlös-Abgleich reconciliation
+
+**GoBD & data**
+- **SQLite database:** Single source of truth (tables: `invoices`, `audit_log`, `period_locks`)
+- **Audit trail** (Änderungsprotokoll), **period locking** (Festschreibung), gap-free Belegnummern
+- **Multi-profile (Mandanten):** per-profile chart + booking rules under `profiles/<name>/`
+- **Exports:** auto CSV, DATEV-EXTF, Lexware, GoBD/DATEV-Belegpaket ZIP, Verfahrensdokumentation
 - **Multi-language:** German (primary) and English with i18n support
 - **Privacy-first:** API keys stored in OS keychain, local processing available
 
@@ -83,7 +98,7 @@ buchisy/
 │   └── logging/            # Structured logging
 │       └── logger.go       # File-based logger with levels
 ├── assets/
-│   ├── i18n/               # Translation files (de.toml, en.toml)
+│   ├── i18n/               # Translation files (de.json, en.json)
 │   ├── icon.png            # App icon
 │   └── embed.go            # Asset embedding
 ├── .github/                # GitHub configuration
@@ -267,7 +282,7 @@ buchisy/
 
 **Responsibility:** Localization support
 
-- Loads `.toml` translation files from `assets/i18n/`
+- Loads `.json` translation files from `assets/i18n/` (`de.json`, `en.json`)
 - Supports German (de) and English (en)
 - Fallback to German if translations missing
 - Embedded in binary via `embed.go`
@@ -332,37 +347,47 @@ buchisy/
 - Contains ALL invoices across all months
 - SQLite with indexes for fast filtering
 
-**Schema:**
+**Schema (3 tables):**
+
+The `invoices` table has grown well beyond the original ~20 fields. Newer columns support booking and GoBD features: `steuerzeilen` (JSON tax lines), `buchung` / `buchung_ref` (booking + statement-line reference), `belegnummer`, `ausgangsrechnung` (outgoing-invoice flag), `exportiert`, `wechselkurs`, `rabatt`, `trinkgeld`, `bewirtung_anlass`/`bewirtung_teilnehmer`. See `internal/db/schema.go` for the authoritative column list.
+
 ```sql
-CREATE TABLE invoices (
+CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dateiname TEXT NOT NULL,
-    rechnungsdatum TEXT,
-    jahr TEXT,
-    monat TEXT,
-    auftraggeber TEXT,
-    verwendungszweck TEXT,
-    rechnungsnummer TEXT,
-    betrag_netto REAL,
-    steuersatz_prozent REAL,
-    steuersatz_betrag REAL,
-    bruttobetrag REAL,
-    waehrung TEXT,
-    gegenkonto INTEGER,
-    bankkonto TEXT,
-    bezahldatum TEXT,
-    teilzahlung INTEGER,
-    kommentar TEXT,
-    betrag_netto_eur REAL,
-    gebuehr REAL,
-    hat_anhaenge INTEGER,
-    ustidnr TEXT,
-    created_at DATETIME,
-    updated_at DATETIME,
-    UNIQUE(jahr, monat, dateiname)
+    rechnungsdatum TEXT, jahr TEXT, monat TEXT,
+    auftraggeber TEXT, verwendungszweck TEXT DEFAULT '-', rechnungsnummer TEXT,
+    betrag_netto REAL, steuersatz_prozent REAL, steuersatz_betrag REAL, bruttobetrag REAL,
+    waehrung TEXT, gegenkonto INTEGER, bankkonto TEXT, bezahldatum TEXT, teilzahlung BOOLEAN DEFAULT 0,
+    kommentar TEXT, betrag_netto_eur REAL, gebuehr REAL, hat_anhaenge BOOLEAN DEFAULT 0, ustidnr TEXT,
+    steuerzeilen TEXT, buchung TEXT, buchung_ref TEXT DEFAULT '', belegnummer TEXT DEFAULT '',
+    ausgangsrechnung INTEGER DEFAULT 0, exportiert INTEGER DEFAULT 0, wechselkurs REAL DEFAULT 0,
+    -- ...plus rabatt, trinkgeld, gebuehr_prozent, bewirtung_* (see schema.go)
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+-- NOTE: there is NO UNIQUE constraint on invoices. Duplicate detection is done
+-- in code (core/dedupe.go), not by the schema. Indexes:
+CREATE INDEX idx_invoices_monat          ON invoices(jahr, monat);
+CREATE INDEX idx_invoices_datum          ON invoices(rechnungsdatum);
+CREATE INDEX idx_invoices_auftraggeber   ON invoices(auftraggeber);
+CREATE INDEX idx_invoices_rechnungsnummer ON invoices(rechnungsnummer);
+CREATE INDEX idx_invoices_dateiname      ON invoices(dateiname);
 
-CREATE INDEX idx_jahr_monat ON invoices(jahr, monat);
+-- GoBD audit trail (append-only), written by core/audit.go via the repository
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+    aktion TEXT NOT NULL, entitaet TEXT, schluessel TEXT, details TEXT
+);
+CREATE INDEX idx_audit_ts ON audit_log(ts);
+
+-- Period locking / Festschreibung; CRUD is guarded against locked (jahr, monat)
+CREATE TABLE IF NOT EXISTS period_locks (
+    jahr TEXT NOT NULL, monat TEXT NOT NULL,
+    locked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(jahr, monat)
+);
 ```
 
 **Data Flow:**
@@ -510,7 +535,22 @@ Kommentar, BetragNetto_EUR, Gebuehr, HatAnhaenge, UStIdNr
 
 ## Version History
 
-### v2.3 (Current)
+### v2.4 – v2.16 (Current): the bookkeeping buildout
+A rapid series of feature epics (internally numbered Phase A–E20) turned BuchISY from an
+invoice organizer into a GoBD-compliant bookkeeping pre-system. Highlights:
+- **Booking engine:** double-entry, multiple VAT lines, SKR04 chart, §13b reverse-charge
+- **Revenue / Ausgangsrechnungen:** Erlöskonten, Soll-Besteuerung, revenue export classification
+- **VAT filings:** UStVA with official ELSTER Kennzahlen (PDF + XML), ZM (PDF + XML)
+- **Reports:** SuSa, GuV, OPOS (aging), Controlling, year overview
+- **Fixed assets / AfA** (Anlagen, Anlagenspiegel) and **Kassenbuch**
+- **Bank import:** CAMT.053 + MT940 with Belegabgleich/Erlös-Abgleich reconciliation
+- **Auto-booking rules engine** (opt-in, default off)
+- **Exports:** DATEV-EXTF, Lexware, GoBD/DATEV-Belegpaket ZIP
+- **GoBD:** audit trail (Änderungsprotokoll), period locking (Festschreibung), gap-free
+  Belegnummern, multi-profile (Mandanten), Verfahrensdokumentation
+- New DB tables `audit_log` and `period_locks`; `invoices` extended with booking/export columns
+
+### v2.3
 - Improved landing page (clearer hero messaging, benefit-focused)
 - Added Code of Conduct (Contributor Covenant)
 - Added Contributing guidelines

@@ -89,8 +89,8 @@ Fyne-Apps lassen sich auf Windows **nicht ohne C-Compiler** bauen. Bricht `go bu
 Ein Tag `vX.Y.Z` auf `main` löst die GitHub-Actions-Builds (Windows/macOS) aus und erstellt ein Release:
 
 ```powershell
-git tag -a v2.11.0 -m "Beschreibung"
-git push origin v2.11.0
+git tag -a v2.17.0 -m "Beschreibung"
+git push origin v2.17.0
 ```
 
 Fortschritt: <https://github.com/Bergx2/BuchISY/actions>.

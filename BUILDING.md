@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Go 1.22 or later
+- Go 1.25 or later (see `go.mod`)
 - Git
 - For Windows builds: MinGW-w64 or Visual Studio (for CGO)
 - For Docker builds: Docker installed and running
@@ -11,8 +11,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/bergx2/buchisy.git
-cd buchisy
+git clone https://github.com/Bergx2/BuchISY.git
+cd BuchISY
 
 # Download dependencies
 make deps
@@ -72,11 +72,10 @@ The workflow automatically:
 
 **⚠️ Important:** Cross-compiling from macOS has limitations because Fyne requires CGO for full functionality. The cross-compiled version may have reduced GUI features or may not work at all.
 
-If you still want to try:
+There is no dedicated macOS cross-compile script. Use the Docker path instead (see Option 4):
 
 ```bash
-# This will likely fail due to Fyne's CGO requirements
-./build-windows-from-mac.sh
+./build-windows-docker.sh
 ```
 
 #### Option 4: Use Docker
@@ -160,9 +159,12 @@ The embedded translations and Fyne framework result in ~60MB executables. This i
 After building:
 
 1. **Test translations**: Launch the app and check Settings → Language
-2. **Test file operations**: Try processing a sample PDF
-3. **Test Claude API**: If using Claude mode, verify API calls work
-4. **Test file dialogs**: Ensure file selection works properly
+2. **Test invoice extraction**: Process a sample PDF (Claude or Local mode)
+3. **Test the booking engine**: Create a booking and verify it posts to the SKR04 accounts
+4. **Test a report**: Generate a SuSa/GuV or UStVA for the current period
+5. **Test an export**: Run a DATEV/GoBD export and confirm the archive is produced
+6. **Test profiles (Mandanten)**: Switch profile and confirm data isolation
+7. **Test file dialogs**: Ensure file selection works properly
 
 ## Distribution
 

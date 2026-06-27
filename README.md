@@ -1,63 +1,66 @@
 # BuchISY
 
-**BuchISY** is a desktop application for Windows and macOS that helps you centralize and structure company invoices for easy transfer to your bookkeeping agency.
+**BuchISY** is a desktop application for Windows and macOS: a GoBD-compliant German bookkeeping pre-system (Buchhaltungs-Vorsystem) for small businesses and freelancers. It captures invoices and receipts, books them with proper double-entry VAT logic against an SKR04 chart of accounts, locks periods immutably, produces the German VAT filings, and hands your tax advisor a clean DATEV/receipt package.
 
 **Published by:** Bergx2 GmbH
 **Website:** [www.buchisy.de](https://www.buchisy.de)
+**Current Version:** v2.16
 
 > **Note:** The codebase is under heavy development and the documentation is constantly evolving. Give it a try and let us know what you think by [creating an issue](https://github.com/Bergx2/BuchISY/issues). Watch releases of this repo to get notified of updates. And give us a star if you like it!
 
-## 🆕 Version 2.3 - Polish & Refinements
+## What BuchISY does
 
-**New in v2.3:**
-- **Improved landing page** - Clearer hero messaging and benefit-focused copy
-- **Community foundation** - Code of Conduct and Contributing guidelines
-- **Sample PDFs** - XRechnung and ZUGFeRD examples for testing
-- **Security updates** - Updated dependencies (golang.org/x/crypto, net, sys, image)
-- **Website integration** - www.buchisy.de domain references throughout
-- **Documentation improvements** - Updated architecture docs and build instructions
+BuchISY started as an invoice organizer (drag a PDF in, extract the metadata, file it into a month folder) and has grown into a full bookkeeping pre-system. It is deliberately a **Vorsystem**: it does the day-to-day capture, booking, VAT, and export, then hands a clean package to your Steuerberater. It does **not** attempt a full annual close (HGB-Bilanz/Jahresabschluss) — SuSa/GuV are evaluations, not a Jahresabschluss.
 
-## Version 2.1 - ARM64 Fix & UI Improvements
+**Capture → Book → Lock → File → Export:**
+- **Capture:** drag-and-drop, clipboard paste, a watched scan inbox, or batch import. Extraction via Claude AI, local heuristics, or structured XRechnung/ZUGFeRD e-invoice data.
+- **Book:** double-entry bookings with multiple VAT lines, SKR04 accounts, §13b reverse-charge, and an opt-in auto-booking rules engine.
+- **Lock:** GoBD audit trail (Änderungsprotokoll) plus period locking (Festschreibung) and gap-free sequential receipt numbers.
+- **File:** UStVA and ZM tax filings with official ELSTER Kennzahlen, plus SuSa/GuV, OPOS, and Controlling reports.
+- **Export:** DATEV-EXTF, Lexware, and a GoBD/DATEV receipt package (Belegpaket) ready for the tax advisor.
 
-**New in v2.1:**
-- **Fixed PDF vision extraction crash** on macOS ARM64 (Apple Silicon)
-- Platform-specific PDF rendering (external commands for ARM64, go-fitz for others)
-- **Optimized invoice modal header** with unified file information layout
-- Real-time filename preview updates in new/edit dialogs
-- Fixed file picker horizontal scrolling
-- Comprehensive PDF processing documentation
-
-## 📦 Version 2.0 - Major Update!
-
-**⚠️ Breaking Changes (v2.0):**
-- SQLite database replaces CSV as source-of-truth
-- Field renames: Firmenname → Auftraggeber, Kurzbezeichnung → Verwendungszweck
-- CSV files are now auto-generated exports (backward compatible reading)
-
-**Features added in v2.0:**
-- SQLite database for faster, more reliable data management
-- USt-IdNr (VAT ID) field with automatic extraction
-- File attachments support
-- Currency conversion fields for foreign invoices
-- Comments/notes field
-- Sortable file picker with date column
-- Resizable dialogs with saved dimensions
-- Improved CSV export (configurable separator, encoding, quotes)
+> **Scope note:** earlier sections of this README described a "v2.3 invoice organizer." That framing is out of date. The feature list below reflects the current v2.16 product. See the [CHANGELOG](CHANGELOG.md) for the full release history.
 
 ## Features
 
-### Invoice Processing
-- **PDF Invoice Processing**: Drag-and-drop or select PDF invoices for automatic data extraction
+### Capture & Extraction
+- **Multiple ingest paths**: Drag-and-drop, clipboard paste (file path or raw image/screenshot), file/batch picker, and an auto-watched scan-inbox folder
 - **Dual Processing Modes**:
   - **Claude API**: High-accuracy extraction using Anthropic's Claude AI with Vision support for scanned PDFs
   - **Local Heuristics**: Offline extraction using pattern matching and rules for standard German invoices
-- **E-Invoice Support**: Process XRechnung and ZUGFeRD electronic invoices with structured XML data extraction
-- **Automatic Organization**: Organizes invoices by year-month (YYYY-MM) with customizable folder structure
+- **E-Invoice Support**: Process XRechnung and ZUGFeRD (CII) electronic invoices with structured XML data extraction
+- **Automatic Organization**: Organizes receipts by year-month (YYYY-MM) with customizable folder structure
 - **Smart Naming**: Flexible filename templates with tokens like `${Company}`, `${InvoiceNumber}`, `${GrossAmount}`, etc.
 - **Batch Processing**: Process multiple invoices in sequence with automatic metadata extraction
 
+### Bookkeeping & Tax
+- **Double-entry booking engine**: Multiple VAT lines, SKR04 chart of accounts, §13b reverse-charge, gift/travel/Kfz rules
+- **Revenue / outgoing invoices**: Erlöskonten, Soll-Besteuerung (Forderung 1400 → Bank on payment), revenue export classification
+- **VAT filings**: UStVA (Umsatzsteuer-Voranmeldung) with official ELSTER Kennzahlen, month/quarter/year, PDF + ELSTER XML; ZM (Zusammenfassende Meldung) per customer VAT-ID, PDF + XML
+- **Reports**: SuSa (trial balance), GuV (P&L), OPOS (open items with aging buckets), Controlling (income/expense per account), per-year KPI overview
+- **Fixed assets (Anlagen)**: Asset register, linear AfA (time-apportioned), GWG hint at ≤800 €, Anlagenspiegel PDF
+- **Cash book (Kassenbuch)**: Per-Barkasse ledger with opening-balance carry-over and cash-coverage checks
+- **Auto-booking rules engine**: Per-supplier/keyword booking templates, opt-in autobook (default off) with a plausibility gate
+
+### Bank reconciliation
+- **Statement import**: In-house CAMT.053 (ISO 20022) and MT940 parsers with automatic format detection
+- **Belegabgleich / Erlös-Abgleich**: Scored matching of invoices to bank-statement lines, grouped/partial payments, alias learning, and a "missing receipts" list
+
+### GoBD compliance
+- **Audit trail**: Append-only Änderungsprotokoll for create/update/delete/lock/unlock events
+- **Period locking (Festschreibung)**: Lock a month immutably; locked periods are guarded across edit/delete, including cross-month moves
+- **Gap-free receipt numbers**: Sequential Belegnummern per profile/year with renumbering
+- **Multi-profile (Mandanten)**: Separate chart, rules, and data per company profile
+- **Verfahrensdokumentation**: GoBD-required process documentation generated as a PDF from the profile's own settings
+
+### Exports
+- **CSV**: Auto-generated `invoices.csv` per month from the database
+- **DATEV-EXTF** Buchungsstapel and **Lexware** CSV
+- **GoBD/DATEV-Belegpaket**: ZIP bundling the EXTF Stapel + linked receipt images + `manifest.csv` + GoBD `index.xml` (GDPdU/Z3)
+- **Reports as PDF**: Belegliste, Rechnungsausgangsbuch, Verfahrensdokumentation, and a full backup ZIP
+
 ### Data Management
-- **SQLite Database**: Fast, reliable SQLite database as source-of-truth (v2.0!)
+- **SQLite Database**: Fast, reliable SQLite database as source-of-truth
 - **Invoice Table Display**: View, sort, and manage all invoices for the selected month
 - **Edit Functionality**: Modify existing invoice data with automatic file renaming
 - **Delete & Cleanup**: Remove unwanted entries with automatic file and database management
@@ -140,6 +143,8 @@ MACOSX_DEPLOYMENT_TARGET=15.0 make package-macos
 # Run the application
 ./build/buchisy
 ```
+
+For detailed build instructions (Windows cross-compilation, Docker, CI) see [BUILDING.md](BUILDING.md). For setting up the app and dev environment on a new machine, see [SETUP.md](SETUP.md).
 
 ## Usage
 
@@ -235,12 +240,13 @@ Access via the "Einstellungen" button.
 
 **Processing (Verarbeitung)**:
 - **Mode**: Claude API or Local
-- **Model**: Claude model to use (e.g., `claude-3-5-sonnet-20241022`)
+- **Model**: Claude model to use (default: `claude-sonnet-4-6`)
 - **API Key**: Your Anthropic API key (stored securely in OS keychain)
 
 **Accounts (Konten)**:
-- **Default Account**: Default account code (default: 2000 - Ausgaben)
-- **Custom Accounts**: Add up to 10 custom accounts with code and label
+- **Chart of accounts**: SKR04-style accounts; the account picker searches by code and name
+- **Default Account**: Default counter-account (Gegenkonto) for new bookings
+- **Custom Accounts**: Add custom accounts with code and label
 - **Remember Mappings**: Automatically remember which account you assign to each company
 
 **Language (Sprache)**:
@@ -264,7 +270,7 @@ Access via the "Einstellungen" button.
 4. Copy the key and paste it into BuchISY Settings
 5. The key will be securely stored in your system keychain (macOS Keychain or Windows Credential Manager)
 
-## Data Storage (v2.0)
+## Data Storage
 
 ### SQLite Database (Source-of-Truth)
 - **Location**: `~/Library/Application Support/BuchISY/invoices.db` (macOS) or `%APPDATA%\BuchISY\invoices.db` (Windows)
@@ -289,7 +295,7 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
 - **Decimal separator**: Comma or dot (matches your preference)
 - **Backward compatible**: Can read old CSV files with Firmenname/Kurzbezeichnung columns
 
-## File Structure (v2.0)
+## File Structure
 
 ```
 ~/Documents/BuchISY/              # Default storage root
@@ -305,9 +311,12 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
     ...
 
 ~/Library/Application Support/BuchISY/  # macOS config
-  invoices.db                     # SQLite database (SOURCE-OF-TRUTH!) (NEW!)
+  invoices.db                     # SQLite database (SOURCE-OF-TRUTH!)
   settings.json                   # App settings
   company_accounts.json           # Company→Account mappings
+  profiles/                       # Per-profile (Mandant) chart + booking rules
+    Bergx2/
+    ...
   logs/                           # Application logs
 
 # Windows equivalent:
@@ -315,14 +324,15 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
   invoices.db
   settings.json
   company_accounts.json
+  profiles\
   logs\
 ```
 
 ## Upgrading
 
-### From v2.x to v2.3
+### Within the v2.x series
 
-**Good news:** v2.3 is a **non-breaking update** with community improvements and documentation enhancements. Simply download the latest version and replace your existing installation. All your data remains compatible.
+Releases in the v2.x series are **non-breaking** for your data. Download the latest version and replace your existing installation — `invoices.db` and your config in `~/Library/Application Support/BuchISY/` (macOS) or `%APPDATA%\BuchISY\` (Windows) stay compatible and are migrated automatically on startup when needed.
 
 ### From v1.x to v2.0+
 
@@ -334,7 +344,7 @@ Each month folder contains an auto-generated `invoices.csv` file with the follow
 **Migration Options:**
 
 **Option 1: Fresh Start (Recommended)**
-1. Install v2.1
+1. Install the latest version
 2. Start adding new invoices
 3. Old CSV files remain accessible for reference
 
@@ -436,56 +446,38 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## Roadmap
 
-### Completed Features ✅
+### Shipped ✅
 
-**v2.3:**
-- [x] **Improved landing page** - Clearer hero messaging, benefit-focused copy
-- [x] **Code of Conduct** - Contributor Covenant for open community
-- [x] **Contributing guidelines** - Comprehensive guide for contributors
-- [x] **Sample PDFs** - XRechnung and ZUGFeRD examples included
-- [x] **Security updates** - Updated all dependencies with security patches
-- [x] **Website integration** - www.buchisy.de domain throughout docs
-- [x] **Documentation improvements** - Updated architecture and build docs
+**Capture & data foundation:**
+- [x] **SQLite database** as source-of-truth, with auto-generated CSV export
+- [x] **Claude Vision** support for scanned PDFs (platform-specific rendering, ARM64 fix)
+- [x] **E-invoice support** (XRechnung, ZUGFeRD / CII)
+- [x] **Multiple ingest paths**: drag-and-drop, clipboard paste, batch, watched scan inbox
+- [x] **File attachments**, currency conversion, comments, USt-IdNr extraction
+- [x] **Global search** across months, sortable file picker, keyboard navigation
 
-**v2.1:**
-- [x] **Fixed PDF vision crash** on macOS ARM64 (Apple Silicon)
-- [x] **Platform-specific PDF rendering** (external commands for ARM64, go-fitz for others)
-- [x] **Optimized invoice modal UI** with unified header layout
-- [x] **Real-time filename preview** in new/edit dialogs
-- [x] **Fixed file picker scrolling** with optimized column widths
+**Bookkeeping & tax:**
+- [x] **Double-entry booking engine** with multiple VAT lines, SKR04, §13b reverse-charge
+- [x] **Revenue / outgoing invoices** (Ausgangsrechnungen, Soll-Besteuerung)
+- [x] **UStVA** with official ELSTER Kennzahlen (PDF + XML) and **ZM** (PDF + XML)
+- [x] **SuSa, GuV, OPOS, Controlling** reports
+- [x] **Fixed assets / AfA** (Anlagen, Anlagenspiegel) and **Kassenbuch**
+- [x] **Auto-booking rules engine** (opt-in)
 
-**v2.0:**
-- [x] **SQLite database** as source-of-truth
-- [x] **File attachments** support
-- [x] **Currency conversion** fields
-- [x] **Comments/notes** field
-- [x] **USt-IdNr** (VAT ID) extraction
-- [x] **Sortable file picker** with date column
-- [x] **Resizable dialogs** with saved dimensions
-- [x] Drag-and-drop support for PDF files
-- [x] Settings dialog with all configuration options
-- [x] Full invoice confirmation modal
-- [x] Edit functionality for existing invoices
-- [x] Claude Vision support for scanned PDFs
-- [x] E-invoice support (XRechnung, ZUGFeRD)
-- [x] Tooltips for long text fields
-- [x] Date picker with calendar widget
-- [x] Company-to-account mapping memory
-- [x] Customizable CSV column order
-- [x] Configurable CSV format (separator, encoding, quotes)
+**Bank & exports:**
+- [x] **CAMT.053 + MT940** bank-statement import with Belegabgleich/Erlös-Abgleich
+- [x] **DATEV-EXTF**, **Lexware**, and **GoBD/DATEV-Belegpaket** export
 
-### Planned Features
-- [ ] SQL-based search and filtering (coming in v2.4)
-- [ ] Batch processing with progress indicator
-- [ ] Advanced reporting and statistics
-- [ ] Export to Excel/JSON formats
-- [ ] Keyboard shortcuts for common operations
-- [ ] Dark mode support
-- [ ] Additional language support (French, Italian, Spanish)
-- [ ] Cloud backup/sync support
-- [ ] Invoice templates for recurring vendors
-- [ ] Email invoice import
-- [ ] Mobile companion app
+**GoBD compliance:**
+- [x] **Audit trail** (Änderungsprotokoll), **period locking** (Festschreibung)
+- [x] **Gap-free Belegnummern**, **multi-profile (Mandanten)**, **Verfahrensdokumentation**
+
+### Possible next steps
+- [ ] Shared multi-user database (concurrent access for a second team member)
+- [ ] Full HGB balance sheet / Jahresabschluss (currently out of scope by design)
+- [ ] Degressive AfA automation
+- [ ] Additional language support
+- [ ] DATEV online API integration
 
 ## License
 
@@ -512,6 +504,6 @@ You are free to use, modify, distribute, and sell this software without restrict
 
 ---
 
-**BuchISY** - Simplifying invoice management for small businesses.
+**BuchISY** - GoBD-compliant bookkeeping for small businesses and freelancers.
 
 🌐 [www.buchisy.de](https://www.buchisy.de) | 💻 [GitHub](https://github.com/Bergx2/BuchISY) | 🏢 [Bergx2 GmbH](https://www.bergx2.de)
