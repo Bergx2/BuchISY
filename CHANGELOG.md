@@ -15,9 +15,22 @@ and this project uses [semantic-ish versioning](https://semver.org/) via git tag
 - Documentation overhaul: README and `.claude/CLAUDE.md` rewritten to reflect the
   current product (a GoBD-compliant bookkeeping pre-system, v2.16) instead of the
   stale "v2.3 invoice organizer" framing.
+- Documentation completeness pass: documented ~18 previously-undocumented features
+  (UI zoom, keyboard map, filter chips, symbol legend, sum bar, global search,
+  Konten view, document preview, undo-on-delete, account picker Recent/Favorites,
+  payment accounts, DATEV identifiers, own-VAT-ID exclusion, reconciliation match
+  config, chart-of-accounts CSV import + SKR03/SKR04 switch, re-book-to-EUR,
+  Bewirtung/Trinkgeld/bar-bezahlt fields, manual booking editor, Kassenbericht /
+  cash-year-overview / Buchungsjournal PDFs, image receipts, PDF/Qonto statements).
 - Fixed developer-doc breakers: Go version 1.22 → 1.25 (BUILDING.md), i18n file
   format `.toml` → `.json` (CONTRIBUTING/CLAUDE), removed a reference to a
   non-existent cross-compile script.
+- Fixed a CLAUDE.md error: `db/maintenance.go` was described as providing "Vacuum"
+  and "Backup" — neither exists there (no Vacuum in the code; backup lives in
+  `core/backup.go`).
+- Added `docs/FUNCTIONAL_SPEC.md`: a complete, IST-exact, stack-independent functional
+  specification (data model, business rules with formulas, file formats, state machines,
+  algorithms) detailed enough to rebuild BuchISY on another stack with identical behavior.
 - Added this CHANGELOG.
 
 ---

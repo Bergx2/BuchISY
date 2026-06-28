@@ -2,8 +2,8 @@
 
 Kurzanleitung, um BuchISY auf einem anderen Laptop **zu nutzen** und/oder **weiterzuentwickeln**.
 
-> Alles ist auf GitHub (`Bergx2/BuchISY`). Ein `git clone` liefert den kompletten Quellcode,
-> `CLAUDE.md` und alle Pläne unter `docs/superpowers/plans/`.
+> Alles ist auf GitHub (`Bergx2/BuchISY`). Ein `git clone` liefert den kompletten Quellcode
+> und die Projektdokumentation unter `docs/`.
 
 ---
 
@@ -18,17 +18,19 @@ Auf einem **Windows-64-bit**-Rechner einfach starten. Zwei Wege:
 
 ### Daten & API-Key mitnehmen
 
-Die Daten liegen **nicht** in der `.exe`, sondern unter `%APPDATA%\BuchISY\`:
+Die Daten liegen **nicht** in der `.exe`, sondern unter `%APPDATA%\BuchISY\profiles\<Profilname>\`:
 
 | Datei/Ordner | Inhalt |
 |---|---|
 | `invoices.db` | SQLite-Datenbank (alle Belege) |
 | `settings.json` | Einstellungen |
 | `company_accounts.json` | Firma→Konto-Zuordnungen |
-| `profiles\` | SKR04-Kontenrahmen + Buchungsregeln je Profil (Bergx2, Boomstraat) |
+| `chart_skr04.json` | optionaler Kontenrahmen je Profil |
+| `buchungsregeln.json` | Buchungsregeln je Profil |
+| `booking_templates.json` | gelernte Auto-Buchungsregeln |
 | `logs\` | Logdateien |
 
-Zum Übertragen: den Ordner `%APPDATA%\BuchISY\` kopieren und auf dem neuen Laptop an dieselbe Stelle legen.
+Zum Übertragen: den Ordner `%APPDATA%\BuchISY\` inklusive `profiles\` kopieren und auf dem neuen Laptop an dieselbe Stelle legen. Belegdateien liegen separat im in den Einstellungen gewählten Ablageordner, standardmäßig `Dokumente\BuchISY`.
 
 > ⚠️ **Der Claude-API-Key wandert NICHT mit** — er liegt im Windows-Anmeldeinformations-Manager
 > (Dienst `BuchISY`), nicht im Datenordner. Auf dem neuen Laptop einmal in den **Einstellungen** neu eintragen.
@@ -84,6 +86,27 @@ Fyne-Apps lassen sich auf Windows **nicht ohne C-Compiler** bauen. Bricht `go bu
 
 ---
 
+## Build dauert ewig? (inkrementeller Rebuild > 1 Minute)
+
+Ein *inkrementeller* Rebuild (ein paar `.go`-Dateien geändert) dauert normal **wenige Sekunden** —
+nicht Minuten. Das Projekt ist klein; SQLite ist reines Go, go-fitz/MuPDF wird **nicht** bei jedem
+Build neu kompiliert (vorkompilierte Bibliothek), und Fynes C-Teile werden **gecacht**. Dauert ein
+inkrementeller Build trotzdem 10–20 Minuten, wirft die Windows-Maschine den Build-Cache weg oder
+scannt jede Datei:
+
+1. **Antivirus-Ausnahmen** (häufigste Ursache, Defender scannt den Go-Cache):
+   `Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"`, dito für
+   `"$env:USERPROFILE\go\pkg\mod"`, `"$env:TEMP"` und den Repo-Ordner.
+2. **Repo NICHT in OneDrive/synchronisierten Ordnern** halten — nach `C:\dev\BuchISY` o. ä. legen.
+3. Schneller Entwickel-Build: `make dev` (statt `make all`/Packaging).
+
+Vollständige Diagnose und Befehle: siehe `BUILDING.md` → **„Slow Windows builds"**.
+
+> Hinweis: Das ist ein **Umgebungs**-Problem der Maschine, kein Stack-Problem — ein Stack-Wechsel
+> (z. B. Rust/Tauri) löst es nicht; dessen Cold-Build dauert selbst mehrere Minuten.
+
+---
+
 ## Release bauen & veröffentlichen
 
 Ein Tag `vX.Y.Z` auf `main` löst die GitHub-Actions-Builds (Windows/macOS) aus und erstellt ein Release:
@@ -99,12 +122,10 @@ Fortschritt: <https://github.com/Bergx2/BuchISY/actions>.
 
 ## Was NICHT über das Repo mitkommt
 
-- **Daten** (`%APPDATA%\BuchISY\`) und **API-Key** (Credential Manager) — siehe Abschnitt 1.
-- **Claude-Code-Projektgedächtnis** (`~/.claude/...`) — laptop-lokal; Code + Pläne im Repo bleiben verfügbar.
+- **Daten** (`%APPDATA%\BuchISY\` plus Ablageordner) und **API-Key** (Credential Manager) — siehe Abschnitt 1.
 
 ---
 
 ## Architektur-Überblick
 
-Siehe `.claude/CLAUDE.md` (vollständige Architektur) und `README.md` (Nutzer-Doku).
-Implementierungspläne der Phasen A–E10 liegen in `docs/superpowers/plans/`.
+Siehe `README.md` (Nutzer-Doku) und `docs/REBUILD_GUIDE.md` / `docs/FUNCTIONAL_SPEC.md` für die vollständige fachliche Rebuild-Dokumentation. Historische Implementierungspläne liegen in `docs/superpowers/`.
