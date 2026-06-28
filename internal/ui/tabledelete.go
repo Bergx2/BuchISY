@@ -61,9 +61,21 @@ func (a *App) showDeleteConfirmation(row core.CSVRow) {
 func (a *App) deleteInvoice(row core.CSVRow) {
 	a.logger.Info("Deleting invoice: %s", row.Dateiname)
 
-	// Build file path
-	targetFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
-	filePath := core.InvoiceFilePath(targetFolder, row)
+	// Locate by the invoice's OWN stored period (not the currently viewed month)
+	// so a receipt filed in / viewed from another month is still removed from
+	// both the DB and disk. Using the view month would silently delete nothing
+	// (mis-keyed WHERE) and leave a stale row that later trips duplicate checks.
+	srcYear := a.currentYear
+	if y, err := strconv.Atoi(row.Jahr); err == nil && y > 0 {
+		srcYear = y
+	}
+	srcMonth := int(a.currentMonth)
+	if m, err := strconv.Atoi(row.Monat); err == nil && m >= 1 && m <= 12 {
+		srcMonth = m
+	}
+
+	// Robustly resolve the file path (handles subfolders + cross-month).
+	filePath := a.resolveInvoicePath(row)
 
 	// Buffer file bytes BEFORE removal so Undo can restore the file.
 	data, _ := os.ReadFile(filePath) // nil if file doesn't exist — that's fine
@@ -81,8 +93,8 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 	}
 
 	// Delete from SQLite database
-	jahr := fmt.Sprintf("%04d", a.currentYear)
-	monat := fmt.Sprintf("%02d", a.currentMonth)
+	jahr := fmt.Sprintf("%04d", srcYear)
+	monat := fmt.Sprintf("%02d", srcMonth)
 	err := a.dbRepo.Delete(jahr, monat, row.Dateiname)
 	if err != nil {
 		a.showError(
@@ -95,7 +107,7 @@ func (a *App) deleteInvoice(row core.CSVRow) {
 	a.logger.Info("Deleted invoice from database: %s", row.Dateiname)
 
 	// Export updated data to CSV
-	csvPath := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	csvPath := a.storageManager.GetCSVPath(srcYear, time.Month(srcMonth))
 	if err := a.dbRepo.ExportToCSV(jahr, monat, csvPath, a.csvRepo); err != nil {
 		a.logger.Warn("Failed to export to CSV after delete: %v", err)
 		// Continue even if CSV export fails
