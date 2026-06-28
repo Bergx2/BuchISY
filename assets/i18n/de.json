@@ -276,6 +276,7 @@
   "reconcile.group": "%d Belege",
   "reconcile.linkAll": "Alle verknüpfen",
   "reconcile.partial": "Teilzahlung",
+  "reconcile.split": "Aufteilung",
   "status.cashCovered": "Bar gedeckt",
   "status.cashUncovered": "Bar nicht gedeckt",
   "status.cashConfirmed": "Barkasse bestätigt",

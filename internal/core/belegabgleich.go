@@ -168,9 +168,9 @@ func dayDistance(a, b string) int {
 // GroupMatch holds one n:1 grouped-payment result: N invoice filenames summing
 // to a single statement line's Betrag.
 type GroupMatch struct {
-	Dateinamen []string        // invoice Dateiname values in the group
+	Dateinamen []string         // invoice Dateiname values in the group
 	Line       StatementBooking // the statement line that matches the sum
-	File       string          // source statement file (filled by the caller)
+	File       string           // source statement file (filled by the caller)
 }
 
 // findGroupedPayments is the internal implementation of grouped-payment matching.
@@ -270,6 +270,104 @@ func FindGroupedPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchC
 // statement cache.
 func FindGroupedRevenuePayments(invoices []CSVRow, lines []StatementBooking, cfg MatchConfig) []GroupMatch {
 	return findGroupedPayments(invoices, lines, cfg, true)
+}
+
+// SplitMatch is the inverse of GroupMatch: ONE invoice whose EUR gross equals
+// the SUM of several statement lines (e.g. a monthly bank-fee statement settled
+// as separate per-transaction debits). File is filled by the caller from the
+// statement cache.
+type SplitMatch struct {
+	Dateiname string
+	File      string
+	Lines     []StatementBooking
+}
+
+// splitWindowDays bounds how far statement lines may sit from the invoice date
+// for a split match. Generous (a billing period plus slack) because the
+// individual charges of a periodic statement accrue across the whole month,
+// far from the statement's own date — unlike a 1:1 payment.
+const splitWindowDays = 62
+
+// maxSplitLines caps the subset size searched, keeping the subset-sum bounded.
+const maxSplitLines = 8
+
+// FindSplitPayments finds, for each invoice, a set of 2..maxSplitLines statement
+// DEBIT lines whose Betrag sum equals the invoice's EUR gross, within
+// splitWindowDays of the invoice date. One disjoint result per invoice (first
+// subset found wins); lines are not reused across invoices. The mirror of
+// FindGroupedPayments (which sums invoices to one line). File is left empty —
+// the caller fills it from the statement cache.
+func FindSplitPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchConfig) []SplitMatch {
+	usedLine := map[[2]int]bool{} // (page,lineIdx) already claimed by an earlier split
+	var results []SplitMatch
+
+	for _, inv := range invoices {
+		target := InvoiceEURAmount(inv)
+		if target <= 0 {
+			continue
+		}
+		invDate := inv.Bezahldatum
+		if invDate == "" {
+			invDate = inv.Rechnungsdatum
+		}
+
+		// Candidate debit lines within the window, not already used.
+		var cand []StatementBooking
+		for _, l := range lines {
+			if l.IstGutschrift || l.Betrag <= 0 {
+				continue
+			}
+			if usedLine[[2]int{l.Page, l.LineIdx}] {
+				continue
+			}
+			if dayDistance(invDate, l.Date) > splitWindowDays {
+				continue
+			}
+			cand = append(cand, l)
+		}
+		// Need at least 2 lines to be a "split" (a single line is a 1:1 match).
+		if len(cand) < 2 {
+			continue
+		}
+
+		if subset, ok := subsetSum(cand, target, maxSplitLines); ok {
+			results = append(results, SplitMatch{Dateiname: inv.Dateiname, Lines: subset})
+			for _, l := range subset {
+				usedLine[[2]int{l.Page, l.LineIdx}] = true
+			}
+		}
+	}
+	return results
+}
+
+// subsetSum returns a subset of size 2..maxK whose Betrag sums to target (±0.01),
+// found via depth-first search with sum pruning. Returns the first such subset
+// (deterministic by input order) or ok=false.
+func subsetSum(lines []StatementBooking, target float64, maxK int) ([]StatementBooking, bool) {
+	var chosen []StatementBooking
+	var dfs func(start int, sum float64) bool
+	dfs = func(start int, sum float64) bool {
+		if len(chosen) >= 2 && absf(sum-target) <= 0.01 {
+			return true
+		}
+		if len(chosen) >= maxK || sum > target+0.01 {
+			return false
+		}
+		for i := start; i < len(lines); i++ {
+			chosen = append(chosen, lines[i])
+			if dfs(i+1, round2(sum+lines[i].Betrag)) {
+				return true
+			}
+			chosen = chosen[:len(chosen)-1]
+		}
+		return false
+	}
+	if dfs(0, 0) {
+		out := make([]StatementBooking, len(chosen))
+		copy(out, chosen)
+		return out, true
+	}
+	return nil, false
 }
 
 // partialPaymentLines is the internal implementation of partial-payment matching.

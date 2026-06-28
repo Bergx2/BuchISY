@@ -276,6 +276,7 @@
   "reconcile.group": "%d receipts",
   "reconcile.linkAll": "Link all",
   "reconcile.partial": "Partial payment",
+  "reconcile.split": "Split",
   "status.cashCovered": "Cash covered",
   "status.cashUncovered": "Cash uncovered",
   "status.cashConfirmed": "Cash confirmed",

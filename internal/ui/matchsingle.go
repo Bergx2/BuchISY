@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -39,23 +40,32 @@ func (a *App) matchInvoiceWithStatement(row core.CSVRow, parent fyne.Window, onL
 		line  core.StatementBooking
 		score float64
 	}
+	// splitCand is a 1→N match: several statement lines from one file whose sum
+	// equals the receipt's gross (e.g. a fee statement settled as separate debits).
+	type splitCand struct {
+		file  string
+		lines []core.StatementBooking
+	}
 	var cands []cand
+	var splits []splitCand
 	for _, name := range a.listStatements(row.Bankkonto) {
 		lines, err := core.ParseStatementBookings(filepath.Join(a.statementFolder(row.Bankkonto), name))
 		if err != nil {
 			a.logger.Warn("Einzelabgleich: parse %s: %v", name, err)
 			continue
 		}
-		kind, scored := core.MatchInvoiceToStatement(row, lines, cfg)
-		if kind == core.MatchNone {
-			continue
+		if kind, scored := core.MatchInvoiceToStatement(row, lines, cfg); kind != core.MatchNone {
+			for _, sc := range scored {
+				cands = append(cands, cand{file: name, line: sc.Line, score: sc.Score})
+			}
 		}
-		for _, sc := range scored {
-			cands = append(cands, cand{file: name, line: sc.Line, score: sc.Score})
+		// 1→N: the receipt's gross may equal the sum of several debits.
+		for _, sm := range core.FindSplitPayments([]core.CSVRow{row}, lines, cfg) {
+			splits = append(splits, splitCand{file: name, lines: sm.Lines})
 		}
 	}
 
-	if len(cands) == 0 {
+	if len(cands) == 0 && len(splits) == 0 {
 		a.showInfo("Abgleich", fmt.Sprintf(
 			"Keine passende Auszugszeile gefunden (%s, %s).\n\nPrüfe, ob der Kontoauszug für „%s\" importiert ist.",
 			row.Rechnungsdatum, formatMoney(core.InvoiceEURAmount(row), "EUR", sep), row.Bankkonto))
@@ -103,6 +113,48 @@ func (a *App) matchInvoiceWithStatement(row core.CSVRow, parent fyne.Window, onL
 		})
 		linkBtn.Importance = widget.LowImportance
 		box.Add(container.NewBorder(nil, nil, nil, linkBtn, newCopyableLabel(a.bundle, label)))
+	}
+
+	// 1→N split options: one button links ALL lines of the combination at once.
+	if len(splits) > 0 {
+		box.Add(widget.NewSeparator())
+		box.Add(widget.NewLabel(fmt.Sprintf(
+			"Aufteilung (mehrere Abbuchungen, Summe = %s):",
+			formatMoney(core.InvoiceEURAmount(row), "EUR", sep))))
+	}
+	for _, s := range splits {
+		s := s
+		parts := make([]string, len(s.lines))
+		refs := make([]core.BuchungRef, len(s.lines))
+		for i, l := range s.lines {
+			refs[i] = core.BuchungRef{StatementFilename: s.file, Page: l.Page, LineIdx: l.LineIdx}
+			parts[i] = fmt.Sprintf("%s −%s", l.Date, formatDecimal(l.Betrag, sep))
+		}
+		label := fmt.Sprintf("%d Zeilen: %s  (%s)",
+			len(s.lines), strings.Join(parts, " + "), filepath.Base(s.file))
+		linkAllBtn := widget.NewButton("Alle verknüpfen", func() {
+			row.BuchungRef = core.JoinBuchungRefs(refs)
+			if err := a.dbRepo.Update(row.Jahr, row.Monat, row.Dateiname, row); err != nil {
+				a.showError("Abgleich", err.Error())
+				return
+			}
+			if a.statementAliases != nil && len(s.lines) > 0 {
+				a.statementAliases.Learn(row.Auftraggeber, s.lines[0].Text)
+				if err := a.statementAliases.Save(); err != nil {
+					a.logger.Warn("Einzelabgleich: save aliases: %v", err)
+				}
+			}
+			a.loadInvoices()
+			a.showToast(fmt.Sprintf("✓ %d Auszugszeilen verknüpft", len(s.lines)))
+			if dlg != nil {
+				dlg.Hide()
+			}
+			if onLinked != nil {
+				onLinked(row)
+			}
+		})
+		linkAllBtn.Importance = widget.LowImportance
+		box.Add(container.NewBorder(nil, nil, nil, linkAllBtn, newCopyableLabel(a.bundle, label)))
 	}
 
 	dlg = dialog.NewCustom("Mit Kontoauszug abgleichen", a.bundle.T("common.close"),

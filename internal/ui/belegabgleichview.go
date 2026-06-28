@@ -241,6 +241,13 @@ func (a *App) showBelegabgleich() {
 
 	// ── Step 3: Greedy auto-link by score; claim each statement line at most once ──
 	claimed := map[string]bool{}
+	// Seed with lines already linked by ANY receipt (including multi-line split
+	// links), so detection never re-offers an already-claimed statement line.
+	for _, row := range rows {
+		for _, ref := range core.ParseBuchungRefs(row.BuchungRef) {
+			claimed[ref.String()] = true
+		}
+	}
 
 	refKey := func(file string, page, lineIdx int) string {
 		return core.BuchungRef{StatementFilename: file, Page: page, LineIdx: lineIdx}.String()
@@ -353,9 +360,13 @@ func (a *App) showBelegabgleich() {
 		row        core.CSVRow
 		candidates []scoredWithFile
 	}
+	type splitSuggestion struct {
+		split core.SplitMatch
+	}
 
 	var groupSuggestions []groupSuggestion
 	var partialSuggestions []partialSuggestion
+	var splitSuggestions []splitSuggestion
 
 	// Track which accounts we've already processed to avoid duplicate group detection.
 	groupProcessedAcct := map[string]bool{}
@@ -424,6 +435,24 @@ func (a *App) showBelegabgleich() {
 					groupSuggestions = append(groupSuggestions, groupSuggestion{group: g})
 				}
 			}
+
+			// Detect splits (1 receipt → several statement lines) PER FILE, over
+			// invoices not already consumed by a group. Mirror of grouping.
+			splitInvoices := map[string]bool{}
+			for _, sl := range unclaimedByFile(stmtCache[row.Bankkonto], claimed, refKey) {
+				var avail []core.CSVRow
+				for _, inv := range unmatchedInvoices {
+					if groupedInvoices[inv.Dateiname] || splitInvoices[inv.Dateiname] {
+						continue
+					}
+					avail = append(avail, inv)
+				}
+				for _, sm := range core.FindSplitPayments(avail, sl.lines, cfg) {
+					sm.File = sl.file
+					splitInvoices[sm.Dateiname] = true
+					splitSuggestions = append(splitSuggestions, splitSuggestion{split: sm})
+				}
+			}
 		}
 	}
 
@@ -434,8 +463,10 @@ func (a *App) showBelegabgleich() {
 	// Build the set of all currently-linked statement-line keys from the year's rows.
 	linkedSet := map[string]bool{}
 	for _, row := range rows {
-		if row.BuchungRef != "" {
-			linkedSet[row.BuchungRef] = true
+		// Expand multi-line split refs into individual line keys so each
+		// settled statement line counts as matched in the tie-out.
+		for _, ref := range core.ParseBuchungRefs(row.BuchungRef) {
+			linkedSet[ref.String()] = true
 		}
 	}
 
@@ -708,7 +739,7 @@ func (a *App) showBelegabgleich() {
 			linkRow := lr
 
 			bruttoStr := formatMoney(linkRow.Bruttobetrag, linkRow.Waehrung, a.settings.DecimalSeparator)
-			lineDisplay := core.ParseBuchungRef(linkRow.BuchungRef).Display()
+			lineDisplay := core.BuchungRefDisplay(linkRow.BuchungRef)
 			rowLabel := fmt.Sprintf("%s · %s · %s · %s",
 				linkRow.Belegnummer,
 				linkRow.Auftraggeber,
@@ -743,7 +774,7 @@ func (a *App) showBelegabgleich() {
 	// Build dialog content.
 	var content fyne.CanvasObject
 
-	if len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 && len(cashConfirmRows) == 0 {
+	if len(suggestions) == 0 && len(groupSuggestions) == 0 && len(partialSuggestions) == 0 && len(splitSuggestions) == 0 && len(cashConfirmRows) == 0 {
 		vbox := container.NewVBox(widget.NewLabel(a.bundle.T("reconcile.none")))
 		if statusBlock := buildReconcileStatusBlock(); statusBlock != nil {
 			vbox.Add(statusBlock)
@@ -764,7 +795,7 @@ func (a *App) showBelegabgleich() {
 		// Show the bank/creditcard suggestion summary header only when there are
 		// actual statement suggestions to confirm (avoids "0 Vorschläge" when
 		// the dialog was opened solely because of unconfirmed cash receipts).
-		if len(suggestions) > 0 || len(groupSuggestions) > 0 || len(partialSuggestions) > 0 {
+		if len(suggestions) > 0 || len(groupSuggestions) > 0 || len(partialSuggestions) > 0 || len(splitSuggestions) > 0 {
 			headerText := a.bundle.T("reconcile.summary", len(suggestions))
 			header := widget.NewLabel(headerText)
 			header.TextStyle = fyne.TextStyle{Bold: true}
@@ -1021,6 +1052,66 @@ func (a *App) showBelegabgleich() {
 			}
 
 			vbox.Add(container.NewBorder(nil, nil, nil, linkAllBtn, lbl))
+		}
+
+		// ── Split (1 receipt → several debits) rows ──────────────────────────
+		for _, ss := range splitSuggestions {
+			sm := ss.split // capture for closure safety
+
+			var invRow core.CSVRow
+			for _, r2 := range rows {
+				if r2.Dateiname == sm.Dateiname {
+					invRow = r2
+					break
+				}
+			}
+			invAmtStr := formatMoney(core.InvoiceEURAmount(invRow), "EUR", a.settings.DecimalSeparator)
+
+			refs := make([]core.BuchungRef, len(sm.Lines))
+			lineParts := make([]string, len(sm.Lines))
+			for i, l := range sm.Lines {
+				refs[i] = core.BuchungRef{StatementFilename: sm.File, Page: l.Page, LineIdx: l.LineIdx}
+				lineParts[i] = fmt.Sprintf("S.%d Z.%d · %s · %s",
+					l.Page+1, l.LineIdx, l.Date,
+					formatMoney(l.Betrag, "EUR", a.settings.DecimalSeparator))
+			}
+			filePart := ""
+			if sm.File != "" {
+				filePart = " (" + filepath.Base(sm.File) + ")"
+			}
+			rowLabel := fmt.Sprintf("[%s] %s · %s  =  %s%s",
+				a.bundle.T("reconcile.split"),
+				strings.TrimSpace(invRow.Belegnummer+" "+invRow.Auftraggeber),
+				invAmtStr,
+				strings.Join(lineParts, "  +  "),
+				filePart,
+			)
+			lbl := widget.NewLabel(rowLabel)
+			lbl.Wrapping = fyne.TextWrapWord
+
+			linkSplitBtn := widget.NewButton(a.bundle.T("reconcile.linkAll"), nil)
+			linkSplitBtn.OnTapped = func() {
+				// Guard: bail if any of the lines was claimed in the meantime.
+				for _, r := range refs {
+					if claimed[r.String()] {
+						lbl.SetText("⚠ " + a.bundle.T("reconcile.lineTaken"))
+						linkSplitBtn.Disable()
+						return
+					}
+				}
+				invRow.BuchungRef = core.JoinBuchungRefs(refs)
+				if err := a.dbRepo.Update(invRow.Jahr, invRow.Monat, invRow.Dateiname, invRow); err != nil {
+					a.logger.Warn("Belegabgleich split link Update %s: %v", invRow.Dateiname, err)
+				}
+				for _, r := range refs {
+					claimed[r.String()] = true
+				}
+				linkSplitBtn.Disable()
+				lbl.SetText("✓ " + rowLabel)
+				a.loadInvoices()
+			}
+
+			vbox.Add(container.NewBorder(nil, nil, nil, linkSplitBtn, lbl))
 		}
 
 		// ── Partial (1:n) payment rows ───────────────────────────────────────

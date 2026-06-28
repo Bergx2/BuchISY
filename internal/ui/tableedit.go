@@ -323,11 +323,23 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	// Ablagemonat (filing month) — prefilled with the folder the invoice
 	// currently lives in.
+	// Ablage (filing period) defaults to the invoice's OWN stored Jahr/Monat —
+	// not the currently viewed month — so reopening a receipt that was filed in
+	// another month (e.g. moved to 02.2026 while the year view sits on June)
+	// shows its real filing month instead of reverting to the view's month.
+	filingYear := a.currentYear
+	if y, err := strconv.Atoi(strings.TrimSpace(row.Jahr)); err == nil && y > 0 {
+		filingYear = y
+	}
+	filingMonth := a.currentMonth
+	if m, err := strconv.Atoi(strings.TrimSpace(row.Monat)); err == nil && m >= 1 && m <= 12 {
+		filingMonth = time.Month(m)
+	}
 	yearSelect := widget.NewSelect(generateYearOptions(), nil)
-	yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+	yearSelect.SetSelected(fmt.Sprintf("%d", filingYear))
 	monthSelect := widget.NewSelect(generateMonthOptions(a.bundle), nil)
-	monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth),
-		a.bundle.T(fmt.Sprintf("month.%02d", int(a.currentMonth)))))
+	monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(filingMonth),
+		a.bundle.T(fmt.Sprintf("month.%02d", int(filingMonth)))))
 
 	// Editable filename field.
 	filenameEntry := widget.NewEntry()
@@ -596,7 +608,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	recomputeStatementPath := func() {
 		statementPreviewPath = ""
 		if row.BuchungRef != "" && row.BuchungRef != core.CashConfirmedRef {
-			if ref := core.ParseBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
+			if ref := core.FirstBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
 				p := filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename)
 				if core.FileExists(p) {
 					statementPreviewPath = p
@@ -616,7 +628,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	// foreign-currency invoices (the statement is in EUR, not the invoice
 	// currency). Falls back to the invoice's EUR amount.
 	statementMatchAmount := func() float64 {
-		if ref := core.ParseBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
+		if ref := core.FirstBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
 			if lines, err := core.ParseStatementBookings(
 				filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename)); err == nil {
 				for _, l := range lines {
@@ -792,7 +804,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		case row.BuchungRef == core.CashConfirmedRef:
 			abgleichStatus.Add(widget.NewLabel("✓ Bar bestätigt (Kasse)."))
 		case row.BuchungRef != "":
-			abgleichStatus.Add(newCopyableLabel(a.bundle, "✓ Abgeglichen: "+core.ParseBuchungRef(row.BuchungRef).Display()))
+			abgleichStatus.Add(newCopyableLabel(a.bundle, "✓ Abgeglichen: "+core.BuchungRefDisplay(row.BuchungRef)))
 		case at == core.AccountTypeBank || at == core.AccountTypeCreditCard:
 			matchBtn := widget.NewButton("Mit Kontoauszug abgleichen", func() {
 				a.matchInvoiceWithStatement(row, editWin, func(updated core.CSVRow) {
@@ -1140,7 +1152,19 @@ func (a *App) updateInvoice(
 	if err := os.MkdirAll(targetFolder, 0755); err != nil {
 		return fmt.Errorf("failed to create target folder: %w", err)
 	}
-	sameMonth := targetYear == a.currentYear && targetMonth == a.currentMonth
+	// Source period = the invoice's OWN stored Jahr/Monat (where the DB row and
+	// file actually live), NOT the currently viewed month. Using the view month
+	// would mis-key the UPDATE/move when editing from a year view or after the
+	// receipt was filed in another month.
+	srcYearInt := a.currentYear
+	if y, err := strconv.Atoi(strings.TrimSpace(originalRow.Jahr)); err == nil && y > 0 {
+		srcYearInt = y
+	}
+	srcMonthInt := int(a.currentMonth)
+	if m, err := strconv.Atoi(strings.TrimSpace(originalRow.Monat)); err == nil && m >= 1 && m <= 12 {
+		srcMonthInt = m
+	}
+	sameMonth := targetYear == srcYearInt && int(targetMonth) == srcMonthInt
 
 	// Move the file FIRST — before any DB write — so a move failure
 	// leaves the CSVs and the invoice untouched and retryable. The move
@@ -1189,8 +1213,8 @@ func (a *App) updateInvoice(
 
 	// SQLite is the source of truth. Jahr/Monat columns track the filing
 	// period (target folder), not the invoice date.
-	srcJahr := fmt.Sprintf("%04d", a.currentYear)
-	srcMonat := fmt.Sprintf("%02d", int(a.currentMonth))
+	srcJahr := fmt.Sprintf("%04d", srcYearInt)
+	srcMonat := fmt.Sprintf("%02d", srcMonthInt)
 	tgtJahr := newMeta.Jahr
 	tgtMonat := newMeta.Monat
 
@@ -1204,7 +1228,7 @@ func (a *App) updateInvoice(
 	a.logger.Info("Updated invoice in database: %s", finalName)
 
 	// Export affected month(s) to CSV (database is source of truth).
-	srcCSV := a.storageManager.GetCSVPath(a.currentYear, a.currentMonth)
+	srcCSV := a.storageManager.GetCSVPath(srcYearInt, time.Month(srcMonthInt))
 	if err := a.dbRepo.ExportToCSV(srcJahr, srcMonat, srcCSV, a.csvRepo); err != nil {
 		a.logger.Warn("Failed to export source month to CSV after update: %v", err)
 	}

@@ -441,25 +441,62 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	rememberCheck := widget.NewCheck(a.bundle.T("checkbox.rememberMap"), nil)
 	rememberCheck.SetChecked(a.settings.RememberCompanyAccount)
 
-	// Ablagemonat (filing month) — prefilled with the currently viewed
-	// month, lets the user file the invoice in a different folder than
-	// the current selection (e.g. file a Nov invoice under Dec).
+	// Ablagemonat (filing month) — defaults to the SCANNED invoice date, so a
+	// receipt dated in another month (e.g. a cash receipt from May entered while
+	// June is the selected view) is filed in its own month instead of the viewed
+	// one. Falls back to the viewed month when the date is missing/unparsable.
+	filingYear, filingMonth := a.currentYear, a.currentMonth
+	if y, mo, ok := parseFilingYearMonth(meta.Rechnungsdatum); ok {
+		filingYear, filingMonth = y, mo
+	}
+
 	yearSelect := widget.NewSelect(generateYearOptions(), nil)
-	yearSelect.SetSelected(fmt.Sprintf("%d", a.currentYear))
+	yearSelect.SetSelected(fmt.Sprintf("%d", filingYear))
 
 	// Pre-allocate the next sequential Belegnummer for the dialog's filing year
 	// so it shows in the live filename preview (${Belegnr}) and is stored on save.
 	// Read, not reserved, so cancelling the dialog leaves no gap. Keyed on the
 	// year prefix, matching the filing-year default; the filing-month dropdown
-	// does not change the filename, so the year prefix stays the dialog-open year.
-	nextBelegnr, err := a.dbRepo.NextBelegnummer(fmt.Sprintf("%04d", a.currentYear))
+	// does not change the filename, so the year prefix stays the filing year.
+	nextBelegnr, err := a.dbRepo.NextBelegnummer(fmt.Sprintf("%04d", filingYear))
 	if err != nil {
 		a.logger.Warn("Failed to compute next Belegnummer: %v", err)
 		nextBelegnr = ""
 	}
 	monthSelect := widget.NewSelect(generateMonthOptions(a.bundle), nil)
-	monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(a.currentMonth),
-		a.bundle.T(fmt.Sprintf("month.%02d", int(a.currentMonth)))))
+	monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(filingMonth),
+		a.bundle.T(fmt.Sprintf("month.%02d", int(filingMonth)))))
+
+	// Keep the filing year/month following the invoice date as the user edits it,
+	// until they pick a filing month manually (then we stop overriding their
+	// choice). syncingFiling guards against the programmatic SetSelected below
+	// being mistaken for a manual pick.
+	filingManuallyPicked := false
+	syncingFiling := false
+	syncFilingFromDate := func() {
+		if filingManuallyPicked {
+			return
+		}
+		y, mo, ok := parseFilingYearMonth(dateEntry.Text)
+		if !ok {
+			return
+		}
+		syncingFiling = true
+		yearSelect.SetSelected(fmt.Sprintf("%d", y))
+		monthSelect.SetSelected(fmt.Sprintf("%02d - %-12s", int(mo),
+			a.bundle.T(fmt.Sprintf("month.%02d", int(mo)))))
+		syncingFiling = false
+	}
+	yearSelect.OnChanged = func(string) {
+		if !syncingFiling {
+			filingManuallyPicked = true
+		}
+	}
+	monthSelect.OnChanged = func(string) {
+		if !syncingFiling {
+			filingManuallyPicked = true
+		}
+	}
 
 	// Original filename (entry for copy-paste, keep enabled for proper dark mode colors)
 	originalEntry := widget.NewEntry()
@@ -952,6 +989,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		if prevDateChanged != nil {
 			prevDateChanged(s)
 		}
+		syncFilingFromDate() // keep filing year/month aligned with the date
 		refreshWarnings()
 	}
 	prevAusgangsChanged := ausgangsrechnungCheck.OnChanged
@@ -1485,6 +1523,24 @@ func (a *App) autoBookInvoice(mainPath string, attachments []string, meta core.M
 		booking,
 		nextBelegnr,
 	)
+}
+
+// parseFilingYearMonth extracts (year, month) from a DD.MM.YYYY date string,
+// used to default the filing year/month to the scanned invoice date. Returns
+// ok=false for an empty or unparsable date so the caller keeps its fallback.
+func parseFilingYearMonth(date string) (int, time.Month, bool) {
+	parts := strings.Split(strings.TrimSpace(date), ".")
+	if len(parts) != 3 {
+		return 0, 0, false
+	}
+	var m, y int
+	if _, err := fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &m); err != nil || m < 1 || m > 12 {
+		return 0, 0, false
+	}
+	if _, err := fmt.Sscanf(strings.TrimSpace(parts[2]), "%d", &y); err != nil || y < 1900 {
+		return 0, 0, false
+	}
+	return y, time.Month(m), true
 }
 
 // parseFloat parses a user-entered amount, tolerating thousands separators.

@@ -124,6 +124,30 @@ func TestInvoiceWarnings13b(t *testing.T) {
 	if hasWarn(InvoiceWarnings(rc13bDomestic), "§13b") || hasWarn(InvoiceWarnings(rc13bDomestic), "Reverse-Charge") {
 		t.Error("must not warn for a domestic EUR 0%-VAT expense without foreign signal")
 	}
+
+	// Foreign bank fee (FR VAT-ID, 0% VAT) booked to a financial-charges account
+	// (SKR03 4970) is a §4 Nr.8-exempt financial service → no §13b warning.
+	bankFee := CSVRow{
+		BetragNetto: 6.80, SteuersatzBetrag: 0, Bruttobetrag: 6.80,
+		Gegenkonto: 4970, Waehrung: "EUR", VATID: "FR12345678901",
+		Buchung: Booking{Entries: []BookingEntry{
+			{Konto: 4970, Betrag: 6.80, Soll: true},
+			{Konto: 1200, Betrag: 6.80, Soll: false},
+		}},
+	}
+	if hasWarn(InvoiceWarnings(bankFee), "§13b") || hasWarn(InvoiceWarnings(bankFee), "Reverse-Charge") {
+		t.Error("must not warn §13b for an exempt foreign bank fee booked to 4970")
+	}
+	// Sanity: the SAME foreign 0% expense on a normal expense account still warns.
+	bankFeeWrongAcct := bankFee
+	bankFeeWrongAcct.Gegenkonto = 4980
+	bankFeeWrongAcct.Buchung = Booking{Entries: []BookingEntry{
+		{Konto: 4980, Betrag: 6.80, Soll: true},
+		{Konto: 1200, Betrag: 6.80, Soll: false},
+	}}
+	if !hasWarn(InvoiceWarnings(bankFeeWrongAcct), "§13b") && !hasWarn(InvoiceWarnings(bankFeeWrongAcct), "Reverse-Charge") {
+		t.Error("expected §13b warning for a foreign 0% expense on a non-financial account")
+	}
 }
 
 func TestInvoiceWarningsAsOf(t *testing.T) {

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -81,6 +82,90 @@ func TestFindGroupedPayments(t *testing.T) {
 	}
 }
 
+func TestFindSplitPayments(t *testing.T) {
+	cfg := DefaultMatchConfig()
+	// One receipt (a monthly bank-fee statement) totalling 6.80, settled as four
+	// separate debits across March. Statement date end of month → uses the
+	// generous split window (the 1.70 on 03.03 is ~28 days away).
+	invoices := []CSVRow{
+		{Dateiname: "fees.pdf", Auftraggeber: "Qonto", Rechnungsdatum: "31.03.2026", Bruttobetrag: 6.80, Waehrung: "EUR"},
+	}
+	lines := []StatementBooking{
+		{Page: 0, LineIdx: 1, Date: "03.03.2026", Text: "Kartenzahlung Gebühr", Betrag: 1.70},
+		{Page: 0, LineIdx: 2, Date: "11.03.2026", Text: "Kartenzahlung Gebühr", Betrag: 1.70},
+		{Page: 0, LineIdx: 3, Date: "19.03.2026", Text: "Kartenzahlung Gebühr", Betrag: 1.70},
+		{Page: 0, LineIdx: 4, Date: "27.03.2026", Text: "Kartenzahlung Gebühr", Betrag: 1.70},
+		{Page: 0, LineIdx: 9, Date: "15.03.2026", Text: "Unrelated", Betrag: 50.00},
+	}
+	got := FindSplitPayments(invoices, lines, cfg)
+	if len(got) != 1 || got[0].Dateiname != "fees.pdf" {
+		t.Fatalf("expected one split for fees.pdf, got %+v", got)
+	}
+	if len(got[0].Lines) != 4 {
+		t.Fatalf("expected 4 lines summing to 6.80, got %d: %+v", len(got[0].Lines), got[0].Lines)
+	}
+
+	// Credit lines must never be used for an expense split.
+	credit := []StatementBooking{
+		{Page: 0, LineIdx: 1, Date: "03.03.2026", Betrag: 3.40, IstGutschrift: true},
+		{Page: 0, LineIdx: 2, Date: "11.03.2026", Betrag: 3.40, IstGutschrift: true},
+	}
+	if g := FindSplitPayments(invoices, credit, cfg); len(g) != 0 {
+		t.Errorf("credit lines must be skipped for expense split, got %+v", g)
+	}
+
+	// A single line equal to the gross is a 1:1 match, NOT a split.
+	single := []StatementBooking{{Page: 0, LineIdx: 1, Date: "31.03.2026", Betrag: 6.80}}
+	if g := FindSplitPayments(invoices, single, cfg); len(g) != 0 {
+		t.Errorf("single full line must not be a split, got %+v", g)
+	}
+
+	// Lines outside the generous window must be excluded (Jan vs Mar invoice).
+	far := []StatementBooking{
+		{Page: 0, LineIdx: 1, Date: "03.01.2026", Betrag: 3.40},
+		{Page: 0, LineIdx: 2, Date: "05.01.2026", Betrag: 3.40},
+	}
+	if g := FindSplitPayments(invoices, far, cfg); len(g) != 0 {
+		t.Errorf("out-of-window lines must be excluded, got %+v", g)
+	}
+}
+
+func TestParseBuchungRefsRoundTrip(t *testing.T) {
+	refs := []BuchungRef{
+		{StatementFilename: "Auszug_Maerz.pdf", Page: 0, LineIdx: 1},
+		{StatementFilename: "Auszug_Maerz.pdf", Page: 0, LineIdx: 4},
+		{StatementFilename: "Auszug_Maerz.pdf", Page: 1, LineIdx: 2},
+	}
+	joined := JoinBuchungRefs(refs)
+	parsed := ParseBuchungRefs(joined)
+	if len(parsed) != 3 {
+		t.Fatalf("round-trip lost refs: %q → %+v", joined, parsed)
+	}
+	for i := range refs {
+		if parsed[i] != refs[i] {
+			t.Errorf("ref %d: got %+v, want %+v", i, parsed[i], refs[i])
+		}
+	}
+	// A legacy single ref still parses to exactly one.
+	if p := ParseBuchungRefs("stmt.pdf|0|3"); len(p) != 1 || p[0].LineIdx != 3 {
+		t.Errorf("single ref must parse to one element, got %+v", p)
+	}
+	// Empty → nil; FirstBuchungRef → zero.
+	if p := ParseBuchungRefs(""); p != nil {
+		t.Errorf("empty must be nil, got %+v", p)
+	}
+	if !FirstBuchungRef("").IsZero() {
+		t.Error("FirstBuchungRef(\"\") must be zero")
+	}
+	if FirstBuchungRef(joined).LineIdx != 1 {
+		t.Errorf("FirstBuchungRef must return the first line, got %+v", FirstBuchungRef(joined))
+	}
+	// Multi-ref display mentions the count.
+	if d := BuchungRefDisplay(joined); !strings.Contains(d, "3 Zeilen") {
+		t.Errorf("multi display should mention 3 Zeilen, got %q", d)
+	}
+}
+
 func TestPartialPaymentLines(t *testing.T) {
 	lines := []StatementBooking{
 		{Page: 0, LineIdx: 1, Date: "10.01.2026", Text: "Teilzahlung 1", Betrag: 50},
@@ -133,8 +218,8 @@ func TestMatchRevenueToStatement(t *testing.T) {
 	cfg := DefaultMatchConfig()
 	row := CSVRow{Auftraggeber: "Acme Ltd", Ausgangsrechnung: true, Bruttobetrag: 1190, Rechnungsdatum: "10.01.2026"}
 	lines := []StatementBooking{
-		{Page: 0, LineIdx: 1, Date: "12.01.2026", Text: "Acme Ltd Zahlung", Betrag: 1190, IstGutschrift: true},  // incoming credit → match
-		{Page: 0, LineIdx: 2, Date: "12.01.2026", Text: "Acme Ltd", Betrag: 1190, IstGutschrift: false},          // debit → must NOT match
+		{Page: 0, LineIdx: 1, Date: "12.01.2026", Text: "Acme Ltd Zahlung", Betrag: 1190, IstGutschrift: true}, // incoming credit → match
+		{Page: 0, LineIdx: 2, Date: "12.01.2026", Text: "Acme Ltd", Betrag: 1190, IstGutschrift: false},        // debit → must NOT match
 	}
 	kind, cands := MatchRevenueToStatement(row, lines, cfg)
 	if kind == MatchNone || len(cands) != 1 {

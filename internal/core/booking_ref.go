@@ -63,6 +63,68 @@ func ParseBuchungRef(s string) BuchungRef {
 	}
 }
 
+// buchungRefSep separates multiple statement-line references in a single
+// CSVRow.BuchungRef value (1 receipt → N statement lines, e.g. a bank-fee
+// statement settled as several separate debits). A value with no separator is
+// a single ref and parses exactly as before — fully backward compatible.
+const buchungRefSep = ";"
+
+// ParseBuchungRefs parses one or more refs from a BuchungRef value. A plain
+// single ref yields a one-element slice; an empty/garbage value yields nil.
+func ParseBuchungRefs(s string) []BuchungRef {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var out []BuchungRef
+	for _, part := range strings.Split(s, buchungRefSep) {
+		if r := ParseBuchungRef(part); !r.IsZero() {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// JoinBuchungRefs renders multiple refs into the wire format. Zero refs are
+// skipped; the result is "" when nothing remains.
+func JoinBuchungRefs(refs []BuchungRef) string {
+	var parts []string
+	for _, r := range refs {
+		if !r.IsZero() {
+			parts = append(parts, r.String())
+		}
+	}
+	return strings.Join(parts, buchungRefSep)
+}
+
+// FirstBuchungRef returns the first parsed ref (or zero), for callers that only
+// need one line (e.g. "open the statement at this line").
+func FirstBuchungRef(s string) BuchungRef {
+	refs := ParseBuchungRefs(s)
+	if len(refs) == 0 {
+		return BuchungRef{}
+	}
+	return refs[0]
+}
+
+// BuchungRefDisplay is the multi-ref-aware version of BuchungRef.Display(): a
+// single ref reads as before; several refs read "<file> · N Zeilen: S.1 Z.3, …".
+func BuchungRefDisplay(s string) string {
+	refs := ParseBuchungRefs(s)
+	switch len(refs) {
+	case 0:
+		return ""
+	case 1:
+		return refs[0].Display()
+	default:
+		short := make([]string, len(refs))
+		for i, r := range refs {
+			short[i] = fmt.Sprintf("S.%d Z.%d", r.Page+1, r.LineIdx)
+		}
+		return fmt.Sprintf("%s · %d Zeilen: %s", refs[0].StatementFilename, len(refs), strings.Join(short, ", "))
+	}
+}
+
 // EnsureBookingsParsed makes sure StatementMetadata.Bookings is current
 // for the given PDF. If the file's mtime hasn't changed since the last
 // parse, nothing happens; otherwise the parser runs and the result is

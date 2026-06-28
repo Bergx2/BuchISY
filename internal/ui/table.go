@@ -354,8 +354,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 							hoverLabel.tooltip = it.bundle.T("status.cashConfirmed")
 							hoverLabel.alwaysTooltip = true
 						case row.BuchungRef != "":
-							ref := core.ParseBuchungRef(row.BuchungRef)
-							hoverLabel.tooltip = it.bundle.T("status.linked") + " — " + ref.Display()
+							hoverLabel.tooltip = it.bundle.T("status.linked") + " — " + core.BuchungRefDisplay(row.BuchungRef)
 							hoverLabel.alwaysTooltip = true
 						case it.app != nil && it.app.isCashAccount(row.Bankkonto):
 							if it.app.cashUncovered[row.Dateiname] {
@@ -1076,7 +1075,7 @@ func (it *InvoiceTable) valueForColumn(row core.CSVRow, colID string) string {
 			return "✓ " + it.bundle.T("status.cashConfirmed")
 		}
 		if row.BuchungRef != "" {
-			return "✓ " + core.ParseBuchungRef(row.BuchungRef).Display() // linked
+			return "✓ " + core.BuchungRefDisplay(row.BuchungRef) // linked (1 or more lines)
 		}
 		if it.app != nil && it.app.isCashAccount(row.Bankkonto) {
 			if it.app.cashUncovered[row.Dateiname] {

@@ -57,8 +57,11 @@ func InvoiceWarningsAsOf(row CSVRow, today time.Time) []string {
 	// have a §13b booking (Vorsteuer-RC 1577/1407, Umsatzsteuer-RC 1787/3837).
 	// Fire when: incoming invoice, 0% VAT, positive amount, no §13b account in
 	// the booking, AND a foreign-supplier signal (non-EUR currency OR non-DE EU
-	// VAT-ID on the supplier).
-	if !row.Ausgangsrechnung && row.SteuersatzBetrag == 0 && row.Bruttobetrag > 0 {
+	// VAT-ID on the supplier). Suppressed for tax-exempt financial services
+	// (§ 4 Nr. 8 UStG, e.g. foreign bank/card fees) — there §13b does not apply;
+	// the signal is the expense being booked to a bank-charges account.
+	if !row.Ausgangsrechnung && row.SteuersatzBetrag == 0 && row.Bruttobetrag > 0 &&
+		!isFinancialChargeBooking(row) {
 		has13b := false
 		for _, e := range row.Buchung.Entries {
 			if e.Konto == 1577 || e.Konto == 1787 || e.Konto == 1407 || e.Konto == 3837 {
@@ -110,6 +113,24 @@ func InvoiceWarningsAsOf(row CSVRow, today time.Time) []string {
 	}
 
 	return w
+}
+
+// isFinancialChargeBooking reports whether an expense is booked as a financial
+// service / bank charge — "Nebenkosten des Geldverkehrs" (SKR03 4970, SKR04
+// 6855). Such services are VAT-exempt under § 4 Nr. 8 UStG, so the §13b
+// reverse-charge nudge would be a false positive for a foreign bank's fees.
+// Checks the Gegenkonto and any Soll entry of the booking.
+func isFinancialChargeBooking(row CSVRow) bool {
+	isCharge := func(konto int) bool { return konto == 4970 || konto == 6855 }
+	if isCharge(row.Gegenkonto) {
+		return true
+	}
+	for _, e := range row.Buchung.Entries {
+		if e.Soll && isCharge(e.Konto) {
+			return true
+		}
+	}
+	return false
 }
 
 // InvoiceWarnings returns advisory (non-blocking) plausibility warnings for an
