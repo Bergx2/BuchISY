@@ -337,11 +337,16 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	teilnehmerEntry := widget.NewEntry()
 	teilnehmerEntry.SetText(meta.BewirtungTeilnehmer)
 	teilnehmerEntry.SetPlaceHolder(a.bundle.T("field.bewirtungTeilnehmer"))
+	// Alternative to electronic entry: Anlass/Teilnehmer handwritten on the
+	// receipt/attachment. When checked, the missing-details warning is suppressed.
+	aufBelegCheck := widget.NewCheck(a.bundle.T("field.bewirtungAufBeleg"), nil)
+	aufBelegCheck.SetChecked(meta.BewirtungAngabenAufBeleg)
 	bewirtungBox := container.NewVBox(
 		widget.NewLabel(a.bundle.T("field.bewirtungAnlass")),
 		anlassEntry,
 		widget.NewLabel(a.bundle.T("field.bewirtungTeilnehmer")),
 		teilnehmerEntry,
+		aufBelegCheck,
 	)
 	bewirtungBox.Hide()
 
@@ -586,9 +591,30 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	if tmpl, ok := a.bookingTemplates.Get(meta.Auftraggeber); ok {
 		category = tmpl.Kategorie
 	}
+	// Auto-suggest a special category (e.g. Bewirtung → 70/30 split) when there
+	// is no learned template that already picks one. The user still confirms it
+	// in the dropdown before saving; autoSuggestedCategory drives the #1 hint.
+	autoSuggestedCategory := ""
+	if category == "standard" {
+		if cat, ok := a.bookingRules.SuggestCategory(selectedAccount, meta.Auftraggeber+" "+meta.Verwendungszweck); ok {
+			category = cat
+			autoSuggestedCategory = cat
+		}
+	}
 	catOptions, catKeyByLabel := a.bookingCategoryOptions()
 	categorySelect := widget.NewSelect(catOptions, nil)
 	categorySelect.SetSelected(a.bookingCategoryLabel(category))
+
+	// #1: hint that the category was auto-detected (e.g. Bewirtung) so the user
+	// knows it's a suggestion to confirm. Hidden as soon as they change it.
+	categoryHint := widget.NewLabel("")
+	categoryHint.Importance = widget.LowImportance
+	categoryHint.Wrapping = fyne.TextWrapWord
+	categoryHint.Hide()
+	if autoSuggestedCategory != "" {
+		categoryHint.SetText("ℹ " + a.bundle.T("booking.category.autodetected"))
+		categoryHint.Show()
+	}
 
 	bookingPrev := newBookingPreview(a)
 	var manualBooking *core.Booking
@@ -657,6 +683,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		}
 	}
 	categorySelect.OnChanged = func(string) {
+		categoryHint.Hide() // user has reviewed the category → no longer "auto"
 		recomputeBooking()
 		updateBewirtungVisibility()
 	}
@@ -785,17 +812,20 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 
 	refreshWarnings := func() {
 		warnings := core.InvoiceWarnings(core.CSVRow{
-			BetragNetto:      core.SumNetto(ed.Lines()),
-			SteuersatzBetrag: core.SumMwSt(ed.Lines()),
-			Bruttobetrag:     ed.Brutto(),
-			Trinkgeld:        ed.Trinkgeld(),
-			Gegenkonto:       selectedAccount,
-			Waehrung:         core.CurrencyCodeFromOption(currencySelect.Selected),
-			Wechselkurs:      parseDecimal(kursEntry.Text),
-			Rechnungsdatum:   dateEntry.Text,
-			VATID:            vatIDEntry.Text,
-			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
-			Buchung:          bookingPrev.last, // for the Bewirtung-70/30 check
+			BetragNetto:              core.SumNetto(ed.Lines()),
+			SteuersatzBetrag:         core.SumMwSt(ed.Lines()),
+			Bruttobetrag:             ed.Brutto(),
+			Trinkgeld:                ed.Trinkgeld(),
+			Gegenkonto:               selectedAccount,
+			Waehrung:                 core.CurrencyCodeFromOption(currencySelect.Selected),
+			Wechselkurs:              parseDecimal(kursEntry.Text),
+			Rechnungsdatum:           dateEntry.Text,
+			VATID:                    vatIDEntry.Text,
+			Ausgangsrechnung:         ausgangsrechnungCheck.Checked,
+			Buchung:                  bookingPrev.last, // for the Bewirtung-70/30 check
+			BewirtungAnlass:          anlassEntry.Text,
+			BewirtungTeilnehmer:      teilnehmerEntry.Text,
+			BewirtungAngabenAufBeleg: aufBelegCheck.Checked,
 		})
 		if len(warnings) == 0 {
 			warningsLabel.Hide()
@@ -870,6 +900,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		section(a.bundle.T("booking.section"), selectableForm(a.bundle,
 			fi(a.bundle.T("booking.category"), container.NewBorder(nil, nil, nil,
 				container.NewHBox(editBookingBtn, autoBookingBtn), categorySelect)),
+			fi("", categoryHint),
 			fi("", bookingPrev.container),
 		)),
 		bewirtungBox,
@@ -939,6 +970,11 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 
 	// VAT-ID edits affect the format/ZM warnings; refresh the live strip.
 	vatIDEntry.OnChanged = func(string) { refreshWarnings() }
+
+	// Bewirtung Anlass/Teilnehmer/auf-Beleg affect the missing-details warning.
+	anlassEntry.OnChanged = func(string) { refreshWarnings() }
+	teilnehmerEntry.OnChanged = func(string) { refreshWarnings() }
+	aufBelegCheck.OnChanged = func(bool) { refreshWarnings() }
 
 	// Initial warnings evaluation.
 	refreshWarnings()
@@ -1031,6 +1067,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 				commentEntry.Text,
 				strings.TrimSpace(anlassEntry.Text),
 				strings.TrimSpace(teilnehmerEntry.Text),
+				aufBelegCheck.Checked,
 				parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
 				parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
 				parseFloat(rabattEntry.Text, a.settings.DecimalSeparator),
@@ -1062,17 +1099,20 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		}
 
 		warnings := core.InvoiceWarnings(core.CSVRow{
-			BetragNetto:      core.SumNetto(ed.Lines()),
-			SteuersatzBetrag: core.SumMwSt(ed.Lines()),
-			Bruttobetrag:     ed.Brutto(),
-			Trinkgeld:        ed.Trinkgeld(),
-			Gegenkonto:       selectedAccount,
-			Waehrung:         core.CurrencyCodeFromOption(currencySelect.Selected),
-			Wechselkurs:      parseDecimal(kursEntry.Text),
-			Rechnungsdatum:   dateEntry.Text,
-			VATID:            vatIDEntry.Text,
-			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
-			Buchung:          bookingPrev.last, // for the Bewirtung-70/30 check
+			BetragNetto:              core.SumNetto(ed.Lines()),
+			SteuersatzBetrag:         core.SumMwSt(ed.Lines()),
+			Bruttobetrag:             ed.Brutto(),
+			Trinkgeld:                ed.Trinkgeld(),
+			Gegenkonto:               selectedAccount,
+			Waehrung:                 core.CurrencyCodeFromOption(currencySelect.Selected),
+			Wechselkurs:              parseDecimal(kursEntry.Text),
+			Rechnungsdatum:           dateEntry.Text,
+			VATID:                    vatIDEntry.Text,
+			Ausgangsrechnung:         ausgangsrechnungCheck.Checked,
+			Buchung:                  bookingPrev.last, // for the Bewirtung-70/30 check
+			BewirtungAnlass:          anlassEntry.Text,
+			BewirtungTeilnehmer:      teilnehmerEntry.Text,
+			BewirtungAngabenAufBeleg: aufBelegCheck.Checked,
 		})
 		if len(warnings) > 0 {
 			msg := a.bundle.T("warnings.intro") + "\n• " + strings.Join(warnings, "\n• ")
@@ -1159,6 +1199,7 @@ func (a *App) saveInvoice(
 	comment string,
 	bewirtungAnlass string,
 	bewirtungTeilnehmer string,
+	bewirtungAufBeleg bool,
 	netEUR float64,
 	fee float64,
 	rabatt float64,
@@ -1174,33 +1215,34 @@ func (a *App) saveInvoice(
 ) error {
 	// Build meta
 	meta := core.Meta{
-		Belegnummer:         belegnummer,
-		Auftraggeber:        company,
-		Verwendungszweck:    shortDesc,
-		Rechnungsnummer:     invoiceNum,
-		VATID:               strings.TrimSpace(vatID),
-		Rechnungsdatum:      invoiceDate,
-		Bezahldatum:         paymentDate,
-		TaxLines:            taxLines,
-		Trinkgeld:           trinkgeld,
-		BetragNetto:         core.SumNetto(taxLines),
-		SteuersatzProzent:   core.PrimarySatz(taxLines),
-		SteuersatzBetrag:    core.SumMwSt(taxLines),
-		Bruttobetrag:        core.ComputeBrutto(taxLines, trinkgeld),
-		Waehrung:            currency,
-		Gegenkonto:          account,
-		Bankkonto:           bankAccount,
-		Teilzahlung:         partialPayment,
-		Kommentar:           comment,
-		BewirtungAnlass:     bewirtungAnlass,
-		BewirtungTeilnehmer: bewirtungTeilnehmer,
-		BetragNetto_EUR:     netEUR,
-		Gebuehr:             fee,
-		Rabatt:              rabatt,
-		Wechselkurs:         wechselkurs,
-		GebuehrProzent:      gebuehrProzent,
-		HatAnhaenge:         len(attachments) > 0,
-		Ausgangsrechnung:    ausgangsrechnung,
+		Belegnummer:              belegnummer,
+		Auftraggeber:             company,
+		Verwendungszweck:         shortDesc,
+		Rechnungsnummer:          invoiceNum,
+		VATID:                    strings.TrimSpace(vatID),
+		Rechnungsdatum:           invoiceDate,
+		Bezahldatum:              paymentDate,
+		TaxLines:                 taxLines,
+		Trinkgeld:                trinkgeld,
+		BetragNetto:              core.SumNetto(taxLines),
+		SteuersatzProzent:        core.PrimarySatz(taxLines),
+		SteuersatzBetrag:         core.SumMwSt(taxLines),
+		Bruttobetrag:             core.ComputeBrutto(taxLines, trinkgeld),
+		Waehrung:                 currency,
+		Gegenkonto:               account,
+		Bankkonto:                bankAccount,
+		Teilzahlung:              partialPayment,
+		Kommentar:                comment,
+		BewirtungAnlass:          bewirtungAnlass,
+		BewirtungTeilnehmer:      bewirtungTeilnehmer,
+		BewirtungAngabenAufBeleg: bewirtungAufBeleg,
+		BetragNetto_EUR:          netEUR,
+		Gebuehr:                  fee,
+		Rabatt:                   rabatt,
+		Wechselkurs:              wechselkurs,
+		GebuehrProzent:           gebuehrProzent,
+		HatAnhaenge:              len(attachments) > 0,
+		Ausgangsrechnung:         ausgangsrechnung,
 	}
 
 	// Extract year and month from invoice date (for filename template only)
@@ -1429,6 +1471,7 @@ func (a *App) autoBookInvoice(mainPath string, attachments []string, meta core.M
 		meta.Kommentar,
 		meta.BewirtungAnlass,
 		meta.BewirtungTeilnehmer,
+		meta.BewirtungAngabenAufBeleg,
 		meta.BetragNetto_EUR,
 		meta.Gebuehr,
 		meta.Rabatt,

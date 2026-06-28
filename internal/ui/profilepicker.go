@@ -38,7 +38,7 @@ func (a *App) buildProfilePicker() fyne.CanvasObject {
 	title := widget.NewLabelWithStyle("Firma wählen", fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true})
 	subtitle := widget.NewLabelWithStyle(
-		"Wähle ein Profil aus oder lege ein neues an.",
+		"Wähle ein Profil aus.",
 		fyne.TextAlignCenter, fyne.TextStyle{})
 
 	list := container.NewVBox()
@@ -51,12 +51,22 @@ func (a *App) buildProfilePicker() fyne.CanvasObject {
 		list.Add(a.profileCard(p))
 	}
 
+	// "Neues Profil" is rarely used once set up (a profile is created maybe once
+	// every few years), so it's a small, low-key link. Exception: with no
+	// profiles yet (first run) it's the only possible action, so keep it a
+	// prominent, full-width CTA.
 	newBtn := widget.NewButtonWithIcon("Neues Profil",
 		theme.ContentAddIcon(), func() { a.promptNewProfile() })
-	newBtn.Importance = widget.HighImportance
+	var footer fyne.CanvasObject
+	if len(profiles) == 0 {
+		newBtn.Importance = widget.HighImportance
+		footer = container.NewPadded(newBtn)
+	} else {
+		newBtn.Importance = widget.LowImportance
+		footer = container.NewCenter(newBtn)
+	}
 
 	header := container.NewVBox(title, subtitle, widget.NewSeparator())
-	footer := container.NewPadded(newBtn)
 	return container.NewBorder(header, footer, nil, nil, container.NewVScroll(list))
 }
 

@@ -92,6 +92,14 @@ func InvoiceWarningsAsOf(row CSVRow, today time.Time) []string {
 		w = append(w, "Bewirtung ohne 70/30-Aufteilung — Kategorie \"Bewirtung\" wählen (nur 70 % abziehbar, § 4 Abs. 5 EStG)")
 	}
 
+	// Bewirtung needs Anlass + Teilnehmer (§ 4 Abs. 5 Nr. 2 EStG). Accept either
+	// electronic entry of BOTH fields OR the flag that they are handwritten on
+	// the receipt/attachment. Only nag for an actual Bewirtung booking.
+	if hasBewAbz && !row.BewirtungAngabenAufBeleg &&
+		(strings.TrimSpace(row.BewirtungAnlass) == "" || strings.TrimSpace(row.BewirtungTeilnehmer) == "") {
+		w = append(w, "Bewirtung: Anlass und Teilnehmer fehlen (§ 4 Abs. 5 EStG) — elektronisch eintragen oder als \"handschriftlich auf Beleg\" markieren")
+	}
+
 	// VAT-ID format check
 	if vatID := strings.TrimSpace(row.VATID); vatID != "" {
 		// Normalize: remove spaces, uppercase

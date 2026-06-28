@@ -65,6 +65,25 @@ func TestInvoiceWarnings(t *testing.T) {
 	if hasWarn(InvoiceWarnings(bewSplit), "70/30") {
 		t.Error("must not warn when Bewirtung is correctly split 70/30")
 	}
+
+	// Bewirtung booking but no Anlass/Teilnehmer and not marked on-receipt → warn.
+	bewNoDetails := bewSplit // has a 4650 entry → it's a Bewirtung
+	if !hasWarn(InvoiceWarnings(bewNoDetails), "Anlass und Teilnehmer fehlen") {
+		t.Error("expected a missing-Anlass/Teilnehmer warning for a Bewirtung without details")
+	}
+	// Same booking, but details entered electronically → no missing-details warning.
+	bewWithDetails := bewSplit
+	bewWithDetails.BewirtungAnlass = "Projektbesprechung"
+	bewWithDetails.BewirtungTeilnehmer = "A. Müller, B. Schmidt"
+	if hasWarn(InvoiceWarnings(bewWithDetails), "Anlass und Teilnehmer fehlen") {
+		t.Error("must not warn when Anlass/Teilnehmer are filled in electronically")
+	}
+	// Same booking, details handwritten on the receipt → no missing-details warning.
+	bewOnReceipt := bewSplit
+	bewOnReceipt.BewirtungAngabenAufBeleg = true
+	if hasWarn(InvoiceWarnings(bewOnReceipt), "Anlass und Teilnehmer fehlen") {
+		t.Error("must not warn when details are marked as handwritten on the receipt")
+	}
 }
 
 func TestInvoiceWarnings13b(t *testing.T) {

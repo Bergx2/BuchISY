@@ -8,38 +8,42 @@ import (
 
 // Meta represents the invoice metadata extracted from a PDF.
 type Meta struct {
-	Belegnummer       string     // Sequential receipt number per profile+year, "YYYY-NNNN"
-	Auftraggeber      string     // Company name (previously Firmenname)
-	Verwendungszweck  string     // Purpose/description (previously Kurzbezeichnung)
-	Rechnungsnummer   string     // Invoice number
-	VATID             string     // counterparty VAT-ID: supplier (incoming) or customer (Ausgangsrechnung); used for the ZM
-	BetragNetto       float64    // Net amount
-	SteuersatzProzent float64    // Tax rate in percent
-	SteuersatzBetrag  float64    // Tax amount
-	Bruttobetrag      float64    // Gross amount
-	TaxLines          []TaxLine  // VAT lines; aggregates above are their sums
-	Trinkgeld         float64    // tip, no VAT, only part of Bruttobetrag
-	Waehrung          string     // Currency (EUR, USD, etc.)
-	Rechnungsdatum    string     // Invoice date DD.MM.YYYY
-	Jahr              string     // Year YYYY
-	Monat             string     // Month MM
-	Gegenkonto        int        // Account code
-	KontoVorschlaege  []int      // transient: AI-suggested Gegenkonten for unknown suppliers (not persisted)
-	Bankkonto         string     // Bank account
-	Bezahldatum       string     // Payment date DD.MM.YYYY
-	BarBezahlt        bool       `json:"-"` // transient: invoice was paid in cash (bar/Bargeld); not persisted to DB or CSV
-	Teilzahlung       bool       // Partial payment flag
-	Ausgangsrechnung  bool       // true = outgoing/revenue invoice (Erlös)
-	Dateiname         string     // Final filename
-	Kommentar           string  // Comment/note for this invoice
-	BewirtungAnlass     string  // Occasion/purpose for entertainment expenses (§ 4 Abs. 5 EStG)
-	BewirtungTeilnehmer string  // Participants for entertainment expenses (§ 4 Abs. 5 EStG)
-	BetragNetto_EUR     float64 // Net amount in default currency (EUR) for foreign currency invoices
-	Gebuehr             float64 // Fee (e.g., currency exchange fee)
-	Rabatt            float64    // Third-party rebate / platform voucher (gross rebate deducted from payment)
-	Wechselkurs       float64    // Exchange rate used for currency conversion
-	GebuehrProzent    float64    // Fee rate in percent (e.g., currency exchange fee %)
-	HatAnhaenge       bool       // Indicates if invoice has additional file attachments
+	Belegnummer         string    // Sequential receipt number per profile+year, "YYYY-NNNN"
+	Auftraggeber        string    // Company name (previously Firmenname)
+	Verwendungszweck    string    // Purpose/description (previously Kurzbezeichnung)
+	Rechnungsnummer     string    // Invoice number
+	VATID               string    // counterparty VAT-ID: supplier (incoming) or customer (Ausgangsrechnung); used for the ZM
+	BetragNetto         float64   // Net amount
+	SteuersatzProzent   float64   // Tax rate in percent
+	SteuersatzBetrag    float64   // Tax amount
+	Bruttobetrag        float64   // Gross amount
+	TaxLines            []TaxLine // VAT lines; aggregates above are their sums
+	Trinkgeld           float64   // tip, no VAT, only part of Bruttobetrag
+	Waehrung            string    // Currency (EUR, USD, etc.)
+	Rechnungsdatum      string    // Invoice date DD.MM.YYYY
+	Jahr                string    // Year YYYY
+	Monat               string    // Month MM
+	Gegenkonto          int       // Account code
+	KontoVorschlaege    []int     // transient: AI-suggested Gegenkonten for unknown suppliers (not persisted)
+	Bankkonto           string    // Bank account
+	Bezahldatum         string    // Payment date DD.MM.YYYY
+	BarBezahlt          bool      `json:"-"` // transient: invoice was paid in cash (bar/Bargeld); not persisted to DB or CSV
+	Teilzahlung         bool      // Partial payment flag
+	Ausgangsrechnung    bool      // true = outgoing/revenue invoice (Erlös)
+	Dateiname           string    // Final filename
+	Kommentar           string    // Comment/note for this invoice
+	BewirtungAnlass     string    // Occasion/purpose for entertainment expenses (§ 4 Abs. 5 EStG)
+	BewirtungTeilnehmer string    // Participants for entertainment expenses (§ 4 Abs. 5 EStG)
+	// BewirtungAngabenAufBeleg = true when Anlass/Teilnehmer are handwritten on
+	// the receipt/attachment instead of entered electronically; suppresses the
+	// "Anlass/Teilnehmer fehlen" warning for an otherwise-valid Bewirtung.
+	BewirtungAngabenAufBeleg bool
+	BetragNetto_EUR          float64 // Net amount in default currency (EUR) for foreign currency invoices
+	Gebuehr                  float64 // Fee (e.g., currency exchange fee)
+	Rabatt                   float64 // Third-party rebate / platform voucher (gross rebate deducted from payment)
+	Wechselkurs              float64 // Exchange rate used for currency conversion
+	GebuehrProzent           float64 // Fee rate in percent (e.g., currency exchange fee %)
+	HatAnhaenge              bool    // Indicates if invoice has additional file attachments
 	// BuchungRef is "<statementFilename>|<page>|<lineIdx>" pointing to
 	// a booking on a bank statement; empty when this invoice is not
 	// linked to a statement. The statement is identified within the
@@ -85,48 +89,48 @@ type BankAccount struct {
 	AccountType       string `json:"account_type"`       // bank | creditcard | cash
 	SettlementAccount string `json:"settlement_account"` // account that settles a credit card monthly
 	SKR04Konto        int    `json:"skr04_konto,omitempty"`
-	IsCreditCard      bool   `json:"is_credit_card"`     // legacy flag, kept only for migration
+	IsCreditCard      bool   `json:"is_credit_card"` // legacy flag, kept only for migration
 }
 
 // Settings represents the application settings.
 type Settings struct {
-	StorageRoot            string        `json:"storage_root"`
-	ScanInboxFolder        string        `json:"scan_inbox_folder"`
-	UseMonthSubfolders     bool          `json:"use_month_subfolders"`
-	NamingTemplate         string        `json:"naming_template"`
-	DecimalSeparator       string        `json:"decimal_separator"`
-	CurrencyDefault        string        `json:"currency_default"`
-	AnthropicModel         string        `json:"anthropic_model"`
-	AnthropicAPIKeyRef     string        `json:"anthropic_api_key_ref"`
-	Language               string        `json:"language"`
-	ProcessingMode         string        `json:"processing_mode"` // "claude" or "local"
-	DefaultAccount         int           `json:"default_account"`
-	Accounts               []Account     `json:"accounts"`
-	DefaultBankAccount     string        `json:"default_bank_account"`
-	DefaultBankAccountIBAN string        `json:"default_bank_account_iban"`
-	BankAccounts           []BankAccount `json:"bank_accounts"`
-	RememberCompanyAccount bool          `json:"remember_company_account"`
-	AutoSelectAccount      bool          `json:"auto_select_account"`
-	LastUsedFolder         string        `json:"last_used_folder"`      // Last folder for Belege / attachments
-	LastStatementFolder    string        `json:"last_statement_folder"` // Last folder for Kontoauszüge
-	OwnVATID               string        `json:"own_vat_id"`            // The user's own company VAT-ID — excluded during auto-extract
-	DatevBeraterNr         string        `json:"datev_berater_nr,omitempty"` // optional DATEV consultant number
-	DatevMandantNr         string        `json:"datev_mandant_nr,omitempty"` // optional DATEV client number
-	DatevWJBeginn          string        `json:"datev_wj_beginn,omitempty"`  // fiscal-year start YYYYMMDD (optional)
-	DebugMode              bool          `json:"debug_mode"`            // Enable verbose debug logging
-	WindowWidth            int           `json:"window_width"`          // Window width in pixels
-	WindowHeight           int           `json:"window_height"`         // Window height in pixels
-	WindowX                int           `json:"window_x"`              // Window X position
-	WindowY                int           `json:"window_y"`              // Window Y position
-	DialogWidth            int           `json:"dialog_width"`          // Invoice dialog width in pixels
-	DialogHeight           int           `json:"dialog_height"`         // Invoice dialog height in pixels
-	CSVSeparator           string        `json:"csv_separator"`         // CSV field separator: "," (comma), ";" (semicolon), "\t" (tab)
-	CSVEncoding            string        `json:"csv_encoding"`          // CSV file encoding: "ISO-8859-1" or "UTF-8"
-	ColumnOrder            []string      `json:"column_order"`          // Order of columns in table and CSV
-	UIScale                float32       `json:"ui_scale"`              // UI zoom factor (1.0 = 100%)
-	PreviewSplitOffset         float64       `json:"preview_split_offset"`          // Divider position in the confirmation window (0..1)
-	MatchDateWindowDays        int           `json:"matchDateWindowDays,omitempty"` // Reconciliation date window in days (0 = use default)
-	MatchForeignTolerancePct   float64       `json:"matchForeignTolerancePct,omitempty"` // Reconciliation foreign-currency tolerance % (0 = use default)
+	StorageRoot              string        `json:"storage_root"`
+	ScanInboxFolder          string        `json:"scan_inbox_folder"`
+	UseMonthSubfolders       bool          `json:"use_month_subfolders"`
+	NamingTemplate           string        `json:"naming_template"`
+	DecimalSeparator         string        `json:"decimal_separator"`
+	CurrencyDefault          string        `json:"currency_default"`
+	AnthropicModel           string        `json:"anthropic_model"`
+	AnthropicAPIKeyRef       string        `json:"anthropic_api_key_ref"`
+	Language                 string        `json:"language"`
+	ProcessingMode           string        `json:"processing_mode"` // "claude" or "local"
+	DefaultAccount           int           `json:"default_account"`
+	Accounts                 []Account     `json:"accounts"`
+	DefaultBankAccount       string        `json:"default_bank_account"`
+	DefaultBankAccountIBAN   string        `json:"default_bank_account_iban"`
+	BankAccounts             []BankAccount `json:"bank_accounts"`
+	RememberCompanyAccount   bool          `json:"remember_company_account"`
+	AutoSelectAccount        bool          `json:"auto_select_account"`
+	LastUsedFolder           string        `json:"last_used_folder"`                   // Last folder for Belege / attachments
+	LastStatementFolder      string        `json:"last_statement_folder"`              // Last folder for Kontoauszüge
+	OwnVATID                 string        `json:"own_vat_id"`                         // The user's own company VAT-ID — excluded during auto-extract
+	DatevBeraterNr           string        `json:"datev_berater_nr,omitempty"`         // optional DATEV consultant number
+	DatevMandantNr           string        `json:"datev_mandant_nr,omitempty"`         // optional DATEV client number
+	DatevWJBeginn            string        `json:"datev_wj_beginn,omitempty"`          // fiscal-year start YYYYMMDD (optional)
+	DebugMode                bool          `json:"debug_mode"`                         // Enable verbose debug logging
+	WindowWidth              int           `json:"window_width"`                       // Window width in pixels
+	WindowHeight             int           `json:"window_height"`                      // Window height in pixels
+	WindowX                  int           `json:"window_x"`                           // Window X position
+	WindowY                  int           `json:"window_y"`                           // Window Y position
+	DialogWidth              int           `json:"dialog_width"`                       // Invoice dialog width in pixels
+	DialogHeight             int           `json:"dialog_height"`                      // Invoice dialog height in pixels
+	CSVSeparator             string        `json:"csv_separator"`                      // CSV field separator: "," (comma), ";" (semicolon), "\t" (tab)
+	CSVEncoding              string        `json:"csv_encoding"`                       // CSV file encoding: "ISO-8859-1" or "UTF-8"
+	ColumnOrder              []string      `json:"column_order"`                       // Order of columns in table and CSV
+	UIScale                  float32       `json:"ui_scale"`                           // UI zoom factor (1.0 = 100%)
+	PreviewSplitOffset       float64       `json:"preview_split_offset"`               // Divider position in the confirmation window (0..1)
+	MatchDateWindowDays      int           `json:"matchDateWindowDays,omitempty"`      // Reconciliation date window in days (0 = use default)
+	MatchForeignTolerancePct float64       `json:"matchForeignTolerancePct,omitempty"` // Reconciliation foreign-currency tolerance % (0 = use default)
 }
 
 // DefaultSettings returns the default application settings.
@@ -185,41 +189,42 @@ type MetaExtractor interface {
 
 // CSVRow represents a row in the invoices CSV file.
 type CSVRow struct {
-	Belegnummer       string // Sequential receipt number per profile+year, "YYYY-NNNN"
-	Dateiname         string
-	Rechnungsdatum    string
-	Jahr              string
-	Monat             string
-	Auftraggeber      string
-	Verwendungszweck  string
-	Rechnungsnummer   string
-	VATID             string // counterparty VAT-ID: supplier (incoming) or customer (Ausgangsrechnung)
-	BetragNetto       float64
-	SteuersatzProzent float64
-	SteuersatzBetrag  float64
-	Bruttobetrag      float64
-	TaxLines          []TaxLine
-	Trinkgeld         float64
-	Waehrung          string
-	Gegenkonto        int
-	Bankkonto         string
-	Bezahldatum       string
-	Teilzahlung       bool
-	Ausgangsrechnung  bool
-	Kommentar           string
-	BewirtungAnlass     string
-	BewirtungTeilnehmer string
-	BetragNetto_EUR     float64
-	Gebuehr           float64
-	Rabatt            float64 // Third-party rebate / platform voucher (gross rebate deducted from payment)
-	Wechselkurs       float64
-	GebuehrProzent    float64
-	HatAnhaenge       bool
-	AnzahlAnhaenge    int
-	Unterordner       string // "" | "Bar" | "Ausgangsrechnungen"
-	BuchungRef        string // statementFilename|page|lineIdx (within the Bankkonto's folder)
-	Buchung           Booking
-	Exportiert        bool
+	Belegnummer              string // Sequential receipt number per profile+year, "YYYY-NNNN"
+	Dateiname                string
+	Rechnungsdatum           string
+	Jahr                     string
+	Monat                    string
+	Auftraggeber             string
+	Verwendungszweck         string
+	Rechnungsnummer          string
+	VATID                    string // counterparty VAT-ID: supplier (incoming) or customer (Ausgangsrechnung)
+	BetragNetto              float64
+	SteuersatzProzent        float64
+	SteuersatzBetrag         float64
+	Bruttobetrag             float64
+	TaxLines                 []TaxLine
+	Trinkgeld                float64
+	Waehrung                 string
+	Gegenkonto               int
+	Bankkonto                string
+	Bezahldatum              string
+	Teilzahlung              bool
+	Ausgangsrechnung         bool
+	Kommentar                string
+	BewirtungAnlass          string
+	BewirtungTeilnehmer      string
+	BewirtungAngabenAufBeleg bool
+	BetragNetto_EUR          float64
+	Gebuehr                  float64
+	Rabatt                   float64 // Third-party rebate / platform voucher (gross rebate deducted from payment)
+	Wechselkurs              float64
+	GebuehrProzent           float64
+	HatAnhaenge              bool
+	AnzahlAnhaenge           int
+	Unterordner              string // "" | "Bar" | "Ausgangsrechnungen"
+	BuchungRef               string // statementFilename|page|lineIdx (within the Bankkonto's folder)
+	Buchung                  Booking
+	Exportiert               bool
 	// Documentation columns for foreign-currency invoices.
 	// Set by the CSV/PDF export layer (not persisted in the DB):
 	//   Originalwaehrung      = the original currency code before EUR normalisation
@@ -237,78 +242,80 @@ func (m Meta) ToCSVRow() CSVRow {
 	}
 
 	return CSVRow{
-		Belegnummer:       m.Belegnummer,
-		Dateiname:         m.Dateiname,
-		Rechnungsdatum:    m.Rechnungsdatum,
-		Jahr:              m.Jahr,
-		Monat:             m.Monat,
-		Auftraggeber:      m.Auftraggeber,
-		Verwendungszweck:  verwendungszweck,
-		Rechnungsnummer:   m.Rechnungsnummer,
-		VATID:             m.VATID,
-		BetragNetto:       m.BetragNetto,
-		SteuersatzProzent: m.SteuersatzProzent,
-		SteuersatzBetrag:  m.SteuersatzBetrag,
-		Bruttobetrag:      m.Bruttobetrag,
-		TaxLines:          m.TaxLines,
-		Trinkgeld:         m.Trinkgeld,
-		Waehrung:          m.Waehrung,
-		Gegenkonto:        m.Gegenkonto,
-		Bankkonto:         m.Bankkonto,
-		Bezahldatum:       m.Bezahldatum,
-		Teilzahlung:       m.Teilzahlung,
-		Ausgangsrechnung:  m.Ausgangsrechnung,
-		Kommentar:           m.Kommentar,
-		BewirtungAnlass:     m.BewirtungAnlass,
-		BewirtungTeilnehmer: m.BewirtungTeilnehmer,
-		BetragNetto_EUR:     m.BetragNetto_EUR,
-		Gebuehr:           m.Gebuehr,
-		Rabatt:            m.Rabatt,
-		Wechselkurs:       m.Wechselkurs,
-		GebuehrProzent:    m.GebuehrProzent,
-		HatAnhaenge:       m.HatAnhaenge,
-		BuchungRef:        m.BuchungRef,
-		Buchung:           m.Buchung,
-		Exportiert:        m.Exportiert,
+		Belegnummer:              m.Belegnummer,
+		Dateiname:                m.Dateiname,
+		Rechnungsdatum:           m.Rechnungsdatum,
+		Jahr:                     m.Jahr,
+		Monat:                    m.Monat,
+		Auftraggeber:             m.Auftraggeber,
+		Verwendungszweck:         verwendungszweck,
+		Rechnungsnummer:          m.Rechnungsnummer,
+		VATID:                    m.VATID,
+		BetragNetto:              m.BetragNetto,
+		SteuersatzProzent:        m.SteuersatzProzent,
+		SteuersatzBetrag:         m.SteuersatzBetrag,
+		Bruttobetrag:             m.Bruttobetrag,
+		TaxLines:                 m.TaxLines,
+		Trinkgeld:                m.Trinkgeld,
+		Waehrung:                 m.Waehrung,
+		Gegenkonto:               m.Gegenkonto,
+		Bankkonto:                m.Bankkonto,
+		Bezahldatum:              m.Bezahldatum,
+		Teilzahlung:              m.Teilzahlung,
+		Ausgangsrechnung:         m.Ausgangsrechnung,
+		Kommentar:                m.Kommentar,
+		BewirtungAnlass:          m.BewirtungAnlass,
+		BewirtungTeilnehmer:      m.BewirtungTeilnehmer,
+		BewirtungAngabenAufBeleg: m.BewirtungAngabenAufBeleg,
+		BetragNetto_EUR:          m.BetragNetto_EUR,
+		Gebuehr:                  m.Gebuehr,
+		Rabatt:                   m.Rabatt,
+		Wechselkurs:              m.Wechselkurs,
+		GebuehrProzent:           m.GebuehrProzent,
+		HatAnhaenge:              m.HatAnhaenge,
+		BuchungRef:               m.BuchungRef,
+		Buchung:                  m.Buchung,
+		Exportiert:               m.Exportiert,
 	}
 }
 
 // ToMeta converts CSVRow to Meta.
 func (r CSVRow) ToMeta() Meta {
 	return Meta{
-		Belegnummer:       r.Belegnummer,
-		Dateiname:         r.Dateiname,
-		Rechnungsdatum:    r.Rechnungsdatum,
-		Jahr:              r.Jahr,
-		Monat:             r.Monat,
-		Auftraggeber:      r.Auftraggeber,
-		Verwendungszweck:  r.Verwendungszweck,
-		Rechnungsnummer:   r.Rechnungsnummer,
-		VATID:             r.VATID,
-		BetragNetto:       r.BetragNetto,
-		SteuersatzProzent: r.SteuersatzProzent,
-		SteuersatzBetrag:  r.SteuersatzBetrag,
-		Bruttobetrag:      r.Bruttobetrag,
-		TaxLines:          r.TaxLines,
-		Trinkgeld:         r.Trinkgeld,
-		Waehrung:          r.Waehrung,
-		Gegenkonto:        r.Gegenkonto,
-		Bankkonto:         r.Bankkonto,
-		Bezahldatum:       r.Bezahldatum,
-		Teilzahlung:       r.Teilzahlung,
-		Ausgangsrechnung:  r.Ausgangsrechnung,
-		Kommentar:           r.Kommentar,
-		BewirtungAnlass:     r.BewirtungAnlass,
-		BewirtungTeilnehmer: r.BewirtungTeilnehmer,
-		BetragNetto_EUR:     r.BetragNetto_EUR,
-		Gebuehr:           r.Gebuehr,
-		Rabatt:            r.Rabatt,
-		Wechselkurs:       r.Wechselkurs,
-		GebuehrProzent:    r.GebuehrProzent,
-		HatAnhaenge:       r.HatAnhaenge,
-		BuchungRef:        r.BuchungRef,
-		Buchung:           r.Buchung,
-		Exportiert:        r.Exportiert,
+		Belegnummer:              r.Belegnummer,
+		Dateiname:                r.Dateiname,
+		Rechnungsdatum:           r.Rechnungsdatum,
+		Jahr:                     r.Jahr,
+		Monat:                    r.Monat,
+		Auftraggeber:             r.Auftraggeber,
+		Verwendungszweck:         r.Verwendungszweck,
+		Rechnungsnummer:          r.Rechnungsnummer,
+		VATID:                    r.VATID,
+		BetragNetto:              r.BetragNetto,
+		SteuersatzProzent:        r.SteuersatzProzent,
+		SteuersatzBetrag:         r.SteuersatzBetrag,
+		Bruttobetrag:             r.Bruttobetrag,
+		TaxLines:                 r.TaxLines,
+		Trinkgeld:                r.Trinkgeld,
+		Waehrung:                 r.Waehrung,
+		Gegenkonto:               r.Gegenkonto,
+		Bankkonto:                r.Bankkonto,
+		Bezahldatum:              r.Bezahldatum,
+		Teilzahlung:              r.Teilzahlung,
+		Ausgangsrechnung:         r.Ausgangsrechnung,
+		Kommentar:                r.Kommentar,
+		BewirtungAnlass:          r.BewirtungAnlass,
+		BewirtungTeilnehmer:      r.BewirtungTeilnehmer,
+		BewirtungAngabenAufBeleg: r.BewirtungAngabenAufBeleg,
+		BetragNetto_EUR:          r.BetragNetto_EUR,
+		Gebuehr:                  r.Gebuehr,
+		Rabatt:                   r.Rabatt,
+		Wechselkurs:              r.Wechselkurs,
+		GebuehrProzent:           r.GebuehrProzent,
+		HatAnhaenge:              r.HatAnhaenge,
+		BuchungRef:               r.BuchungRef,
+		Buchung:                  r.Buchung,
+		Exportiert:               r.Exportiert,
 	}
 }
 

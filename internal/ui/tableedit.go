@@ -199,11 +199,16 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	teilnehmerEntry := widget.NewEntry()
 	teilnehmerEntry.SetText(meta.BewirtungTeilnehmer)
 	teilnehmerEntry.SetPlaceHolder(a.bundle.T("field.bewirtungTeilnehmer"))
+	// Alternative to electronic entry: Anlass/Teilnehmer handwritten on the
+	// receipt/attachment. When checked, the missing-details warning is suppressed.
+	aufBelegCheck := widget.NewCheck(a.bundle.T("field.bewirtungAufBeleg"), nil)
+	aufBelegCheck.SetChecked(meta.BewirtungAngabenAufBeleg)
 	bewirtungBox := container.NewVBox(
 		widget.NewLabel(a.bundle.T("field.bewirtungAnlass")),
 		anlassEntry,
 		widget.NewLabel(a.bundle.T("field.bewirtungTeilnehmer")),
 		teilnehmerEntry,
+		aufBelegCheck,
 	)
 	bewirtungBox.Hide()
 
@@ -414,9 +419,31 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	if inferred := core.InferBookingCategory(row.Buchung); inferred != "" {
 		category = inferred
 	}
+	// When the stored booking is a plain "standard" posting (not manual, not an
+	// already-recognised special category), auto-suggest a special category —
+	// e.g. an invoice booked fully on the Bewirtung account gets "Bewirtung"
+	// proposed so re-saving applies the 70/30 split. The user confirms it first.
+	autoSuggestedCategory := ""
+	if category == "standard" && !row.Buchung.Manuell {
+		if cat, ok := a.bookingRules.SuggestCategory(selectedAccount, meta.Auftraggeber+" "+meta.Verwendungszweck); ok {
+			category = cat
+			autoSuggestedCategory = cat
+		}
+	}
 	catOptions, catKeyByLabel := a.bookingCategoryOptions()
 	categorySelect := widget.NewSelect(catOptions, nil)
 	categorySelect.SetSelected(a.bookingCategoryLabel(category))
+
+	// #1: hint that the category was auto-detected so the user knows it's a
+	// suggestion to confirm (re-saving applies the split). Hidden once changed.
+	categoryHint := widget.NewLabel("")
+	categoryHint.Importance = widget.LowImportance
+	categoryHint.Wrapping = fyne.TextWrapWord
+	categoryHint.Hide()
+	if autoSuggestedCategory != "" {
+		categoryHint.SetText("ℹ " + a.bundle.T("booking.category.autodetected"))
+		categoryHint.Show()
+	}
 
 	bookingPrev := newBookingPreview(a)
 	var manualBooking *core.Booking
@@ -473,6 +500,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		}
 	}
 	categorySelect.OnChanged = func(string) {
+		categoryHint.Hide() // user has reviewed the category → no longer "auto"
 		recomputeBooking()
 		updateBewirtungVisibility()
 	}
@@ -516,17 +544,20 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 
 	refreshWarnings = func() {
 		warnings := core.InvoiceWarnings(core.CSVRow{
-			BetragNetto:      core.SumNetto(ed.Lines()),
-			SteuersatzBetrag: core.SumMwSt(ed.Lines()),
-			Bruttobetrag:     ed.Brutto(),
-			Trinkgeld:        ed.Trinkgeld(),
-			Gegenkonto:       selectedAccount,
-			Waehrung:         core.CurrencyCodeFromOption(currencySelect.Selected),
-			Wechselkurs:      parseDecimal(kursEntry.Text),
-			Rechnungsdatum:   dateEntry.Text,
-			VATID:            vatIDEntry.Text,
-			Ausgangsrechnung: ausgangsrechnungCheck.Checked,
-			Buchung:          bookingPrev.last,
+			BetragNetto:              core.SumNetto(ed.Lines()),
+			SteuersatzBetrag:         core.SumMwSt(ed.Lines()),
+			Bruttobetrag:             ed.Brutto(),
+			Trinkgeld:                ed.Trinkgeld(),
+			Gegenkonto:               selectedAccount,
+			Waehrung:                 core.CurrencyCodeFromOption(currencySelect.Selected),
+			Wechselkurs:              parseDecimal(kursEntry.Text),
+			Rechnungsdatum:           dateEntry.Text,
+			VATID:                    vatIDEntry.Text,
+			Ausgangsrechnung:         ausgangsrechnungCheck.Checked,
+			Buchung:                  bookingPrev.last,
+			BewirtungAnlass:          anlassEntry.Text,
+			BewirtungTeilnehmer:      teilnehmerEntry.Text,
+			BewirtungAngabenAufBeleg: aufBelegCheck.Checked,
 		})
 		if len(warnings) == 0 {
 			warningsLabel.Hide()
@@ -838,6 +869,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		section(a.bundle.T("booking.section"), selectableForm(a.bundle,
 			fi(a.bundle.T("booking.category"), container.NewBorder(nil, nil, nil,
 				container.NewHBox(editBookingBtn, autoBookingBtn), categorySelect)),
+			fi("", categoryHint),
 			fi("", bookingPrev.container),
 			fi("Kontoauszug-Abgleich", abgleichStatus),
 			fi("AfA / Anlage", afaStatus),
@@ -868,6 +900,11 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		refreshWarnings()
 	}
 	vatIDEntry.OnChanged = func(string) { refreshWarnings() }
+
+	// Bewirtung Anlass/Teilnehmer/auf-Beleg affect the missing-details warning.
+	anlassEntry.OnChanged = func(string) { refreshWarnings() }
+	teilnehmerEntry.OnChanged = func(string) { refreshWarnings() }
+	aufBelegCheck.OnChanged = func(bool) { refreshWarnings() }
 
 	// Initial warnings evaluation — once the full form is assembled.
 	refreshWarnings()
@@ -950,6 +987,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 			commentEntry.Text,
 			strings.TrimSpace(anlassEntry.Text),
 			strings.TrimSpace(teilnehmerEntry.Text),
+			aufBelegCheck.Checked,
 			parseFloat(netEUREntry.Text, a.settings.DecimalSeparator),
 			parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
 			parseFloat(rabattEntry.Text, a.settings.DecimalSeparator),
@@ -1031,6 +1069,7 @@ func (a *App) updateInvoice(
 	comment string,
 	bewirtungAnlass string,
 	bewirtungTeilnehmer string,
+	bewirtungAufBeleg bool,
 	netEUR float64,
 	fee float64,
 	rabatt float64,
@@ -1048,33 +1087,34 @@ func (a *App) updateInvoice(
 	willHaveAttachments := originalRow.HatAnhaenge
 
 	newMeta := core.Meta{
-		Belegnummer:         strings.TrimSpace(belegnummer), // editable: manual correction/override
-		Auftraggeber:        company,
-		Verwendungszweck:    shortDesc,
-		Rechnungsnummer:     invoiceNum,
-		VATID:               strings.TrimSpace(vatID),
-		Rechnungsdatum:      invoiceDate,
-		Bezahldatum:         paymentDate,
-		TaxLines:            taxLines,
-		Trinkgeld:           trinkgeld,
-		BetragNetto:         core.SumNetto(taxLines),
-		SteuersatzProzent:   core.PrimarySatz(taxLines),
-		SteuersatzBetrag:    core.SumMwSt(taxLines),
-		Bruttobetrag:        core.ComputeBrutto(taxLines, trinkgeld),
-		Waehrung:            currency,
-		Gegenkonto:          account,
-		Bankkonto:           bankAccount,
-		Teilzahlung:         partialPayment,
-		Kommentar:           comment,
-		BewirtungAnlass:     bewirtungAnlass,
-		BewirtungTeilnehmer: bewirtungTeilnehmer,
-		BetragNetto_EUR:     netEUR,
-		Gebuehr:             fee,
-		Rabatt:              rabatt,
-		Wechselkurs:         wechselkurs,
-		GebuehrProzent:      gebuehrProzent,
-		HatAnhaenge:         willHaveAttachments,
-		Ausgangsrechnung:    ausgangsrechnung,
+		Belegnummer:              strings.TrimSpace(belegnummer), // editable: manual correction/override
+		Auftraggeber:             company,
+		Verwendungszweck:         shortDesc,
+		Rechnungsnummer:          invoiceNum,
+		VATID:                    strings.TrimSpace(vatID),
+		Rechnungsdatum:           invoiceDate,
+		Bezahldatum:              paymentDate,
+		TaxLines:                 taxLines,
+		Trinkgeld:                trinkgeld,
+		BetragNetto:              core.SumNetto(taxLines),
+		SteuersatzProzent:        core.PrimarySatz(taxLines),
+		SteuersatzBetrag:         core.SumMwSt(taxLines),
+		Bruttobetrag:             core.ComputeBrutto(taxLines, trinkgeld),
+		Waehrung:                 currency,
+		Gegenkonto:               account,
+		Bankkonto:                bankAccount,
+		Teilzahlung:              partialPayment,
+		Kommentar:                comment,
+		BewirtungAnlass:          bewirtungAnlass,
+		BewirtungTeilnehmer:      bewirtungTeilnehmer,
+		BewirtungAngabenAufBeleg: bewirtungAufBeleg,
+		BetragNetto_EUR:          netEUR,
+		Gebuehr:                  fee,
+		Rabatt:                   rabatt,
+		Wechselkurs:              wechselkurs,
+		GebuehrProzent:           gebuehrProzent,
+		HatAnhaenge:              willHaveAttachments,
+		Ausgangsrechnung:         ausgangsrechnung,
 	}
 	parts := strings.Split(invoiceDate, ".")
 	if len(parts) == 3 {

@@ -1,4 +1,4 @@
-﻿package db
+package db
 
 import (
 	"database/sql"
@@ -89,6 +89,7 @@ func (r *Repository) initSchema() error {
 		"ALTER TABLE invoices ADD COLUMN ausgangsrechnung INTEGER DEFAULT 0",
 		"ALTER TABLE invoices ADD COLUMN bewirtung_anlass TEXT DEFAULT ''",
 		"ALTER TABLE invoices ADD COLUMN bewirtung_teilnehmer TEXT DEFAULT ''",
+		"ALTER TABLE invoices ADD COLUMN bewirtung_auf_beleg INTEGER DEFAULT 0",
 	} {
 		if _, err := r.db.Exec(col); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -123,7 +124,8 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
 			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
-			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung,
+			bewirtung_auf_beleg
 		) VALUES (
 			?, ?, ?, ?,
 			?, ?, ?,
@@ -132,7 +134,8 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 			?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
-			?, ?, ?, ?, ?
+			?, ?, ?, ?, ?,
+			?
 		)
 	`
 
@@ -145,6 +148,7 @@ func (r *Repository) Insert(row core.CSVRow) (int64, error) {
 		row.BetragNetto_EUR, row.Gebuehr, row.Rabatt, row.HatAnhaenge, row.VATID,
 		row.Trinkgeld, core.MarshalTaxLines(row.TaxLines), core.MarshalBooking(row.Buchung), 0,
 		row.Wechselkurs, row.GebuehrProzent, row.BuchungRef, row.Belegnummer, row.Ausgangsrechnung,
+		row.BewirtungAngabenAufBeleg,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert invoice: %w", err)
@@ -229,6 +233,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 			buchung_ref = ?,
 			belegnummer = ?,
 			ausgangsrechnung = ?,
+			bewirtung_auf_beleg = ?,
 			jahr = ?,
 			monat = ?
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
@@ -265,6 +270,7 @@ func (r *Repository) Update(jahr, monat string, oldDateiname string, row core.CS
 		row.BuchungRef,
 		row.Belegnummer,
 		row.Ausgangsrechnung,
+		row.BewirtungAngabenAufBeleg,
 		row.Jahr, row.Monat,
 		jahr, monat, oldDateiname,
 	)
@@ -413,6 +419,7 @@ func scanInvoiceRows(rows *sql.Rows) ([]core.CSVRow, error) {
 		var rabatt sql.NullFloat64
 		var bewirtungAnlass sql.NullString
 		var bewirtungTeilnehmer sql.NullString
+		var bewirtungAufBeleg sql.NullInt64
 		err := rows.Scan(
 			&row.Dateiname, &row.Rechnungsdatum, &row.Jahr, &row.Monat,
 			&row.Auftraggeber, &row.Verwendungszweck, &row.Rechnungsnummer,
@@ -422,6 +429,7 @@ func scanInvoiceRows(rows *sql.Rows) ([]core.CSVRow, error) {
 			&row.BetragNetto_EUR, &row.Gebuehr, &rabatt, &row.HatAnhaenge, &row.VATID,
 			&trinkgeld, &steuerzeilen, &buchung, &exportiert,
 			&wechselkurs, &gebuehrProzent, &buchungRef, &belegnummer, &ausgangsrechnung,
+			&bewirtungAufBeleg,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -436,6 +444,7 @@ func scanInvoiceRows(rows *sql.Rows) ([]core.CSVRow, error) {
 		row.Ausgangsrechnung = ausgangsrechnung.Int64 != 0
 		row.BewirtungAnlass = bewirtungAnlass.String
 		row.BewirtungTeilnehmer = bewirtungTeilnehmer.String
+		row.BewirtungAngabenAufBeleg = bewirtungAufBeleg.Int64 != 0
 
 		row.TaxLines = core.ParseTaxLines(steuerzeilen.String)
 		if len(row.TaxLines) == 0 {
@@ -465,7 +474,8 @@ func (r *Repository) List(jahr, monat string) ([]core.CSVRow, error) {
 			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
 			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
-			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung,
+			bewirtung_auf_beleg
 		FROM invoices
 		WHERE jahr = ? AND monat = ?
 		ORDER BY rechnungsdatum DESC, dateiname ASC
@@ -500,7 +510,8 @@ func (r *Repository) SearchInvoices(query string) ([]core.CSVRow, error) {
 			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
 			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
-			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung,
+			bewirtung_auf_beleg
 		FROM invoices
 		WHERE LOWER(auftraggeber) LIKE ?
 		   OR LOWER(verwendungszweck) LIKE ?
@@ -612,7 +623,8 @@ func (r *Repository) getByKey(jahr, monat, dateiname string) (core.CSVRow, bool,
 			kommentar, bewirtung_anlass, bewirtung_teilnehmer,
 			betrag_netto_eur, gebuehr, rabatt, hat_anhaenge, ustidnr,
 			trinkgeld, steuerzeilen, buchung, exportiert,
-			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung
+			wechselkurs, gebuehr_prozent, buchung_ref, belegnummer, ausgangsrechnung,
+			bewirtung_auf_beleg
 		FROM invoices
 		WHERE jahr = ? AND monat = ? AND dateiname = ?
 		LIMIT 1
@@ -691,8 +703,8 @@ func (r *Repository) LockPeriod(jahr, monat string) error {
 		return fmt.Errorf("lock period: %w", err)
 	}
 	if auditErr := r.LogAudit(core.AuditEntry{
-		Aktion:   "lock",
-		Entitaet: "period",
+		Aktion:     "lock",
+		Entitaet:   "period",
 		Schluessel: jahr + "-" + monat,
 	}); auditErr != nil {
 		log.Printf("[WARN] audit_log lock failed: %v", auditErr)
@@ -711,8 +723,8 @@ func (r *Repository) UnlockPeriod(jahr, monat string) error {
 		return fmt.Errorf("unlock period: %w", err)
 	}
 	if auditErr := r.LogAudit(core.AuditEntry{
-		Aktion:   "unlock",
-		Entitaet: "period",
+		Aktion:     "unlock",
+		Entitaet:   "period",
 		Schluessel: jahr + "-" + monat,
 	}); auditErr != nil {
 		log.Printf("[WARN] audit_log unlock failed: %v", auditErr)

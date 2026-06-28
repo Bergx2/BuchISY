@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // SettingsManager handles loading and saving application settings.
@@ -94,6 +95,11 @@ func GetProfileConfigDir(profile string) (string, error) {
 // ListProfiles returns the names of all existing profiles (the directory
 // names under <AppData>/BuchISY/profiles). A missing profiles directory
 // yields an empty list, not an error.
+//
+// Automatic backup snapshots (directories named "<profile>.backup-<timestamp>",
+// e.g. left behind by a config migration) are NOT real company profiles and are
+// excluded so they don't clutter the profile picker. The backup directories
+// stay on disk as a safety net — they are just hidden from the selectable list.
 func ListProfiles() ([]string, error) {
 	root, err := GetConfigDir()
 	if err != nil {
@@ -108,11 +114,18 @@ func ListProfiles() ([]string, error) {
 	}
 	names := []string{}
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() && !isBackupProfileDir(e.Name()) {
 			names = append(names, e.Name())
 		}
 	}
 	return names, nil
+}
+
+// isBackupProfileDir reports whether a profiles/ subdirectory is an automatic
+// backup snapshot rather than a real profile. Convention: the name contains
+// ".backup-" (followed by a timestamp), e.g. "Bergx2 GmbH.backup-20260623-080533".
+func isBackupProfileDir(name string) bool {
+	return strings.Contains(name, ".backup-")
 }
 
 // GetDocumentsDir returns the user's Documents directory.

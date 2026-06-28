@@ -434,11 +434,12 @@ func TestBewirtungRoundTrip(t *testing.T) {
 
 	// Insert with both Bewirtung fields set to non-empty strings.
 	if _, err := repo.Insert(core.CSVRow{
-		Dateiname:           "bewirtung.pdf",
-		Jahr:                "2026",
-		Monat:               "07",
-		BewirtungAnlass:     "Kundengespräch Projekt Alpha",
-		BewirtungTeilnehmer: "Max Mustermann, Anna Schmidt",
+		Dateiname:                "bewirtung.pdf",
+		Jahr:                     "2026",
+		Monat:                    "07",
+		BewirtungAnlass:          "Kundengespräch Projekt Alpha",
+		BewirtungTeilnehmer:      "Max Mustermann, Anna Schmidt",
+		BewirtungAngabenAufBeleg: true,
 	}); err != nil {
 		t.Fatalf("Insert with Bewirtung: %v", err)
 	}
@@ -456,10 +457,14 @@ func TestBewirtungRoundTrip(t *testing.T) {
 	if rows[0].BewirtungTeilnehmer != "Max Mustermann, Anna Schmidt" {
 		t.Errorf("BewirtungTeilnehmer not persisted via Insert/List: %q", rows[0].BewirtungTeilnehmer)
 	}
+	if !rows[0].BewirtungAngabenAufBeleg {
+		t.Errorf("BewirtungAngabenAufBeleg not persisted via Insert/List")
+	}
 
 	// Update: change both fields.
 	rows[0].BewirtungAnlass = "Jahresabschlussfeier"
 	rows[0].BewirtungTeilnehmer = "Team Berlin (5 Personen)"
+	rows[0].BewirtungAngabenAufBeleg = false
 	if err := repo.Update("2026", "07", "bewirtung.pdf", rows[0]); err != nil {
 		t.Fatalf("Update with Bewirtung: %v", err)
 	}
@@ -473,6 +478,9 @@ func TestBewirtungRoundTrip(t *testing.T) {
 	}
 	if rows[0].BewirtungTeilnehmer != "Team Berlin (5 Personen)" {
 		t.Errorf("BewirtungTeilnehmer not persisted via Update: %q", rows[0].BewirtungTeilnehmer)
+	}
+	if rows[0].BewirtungAngabenAufBeleg {
+		t.Errorf("BewirtungAngabenAufBeleg not cleared via Update")
 	}
 }
 

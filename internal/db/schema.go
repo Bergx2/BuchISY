@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 	kommentar TEXT,
 	bewirtung_anlass TEXT,
 	bewirtung_teilnehmer TEXT,
+	bewirtung_auf_beleg INTEGER DEFAULT 0,
 	betrag_netto_eur REAL,
 	gebuehr REAL,
 	rabatt REAL DEFAULT 0,

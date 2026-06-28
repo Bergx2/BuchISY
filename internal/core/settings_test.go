@@ -77,6 +77,23 @@ func TestListProfiles(t *testing.T) {
 	if len(names) != 2 {
 		t.Errorf("expected 2 profiles, got %v", names)
 	}
+
+	// Automatic backup snapshots must be excluded from the picker list.
+	if err := os.MkdirAll(filepath.Join(base, "Bergx2.backup-20260623-080533"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	names, err = ListProfiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 {
+		t.Errorf("backup dir must be hidden; expected 2 profiles, got %v", names)
+	}
+	for _, n := range names {
+		if isBackupProfileDir(n) {
+			t.Errorf("backup directory leaked into profile list: %q", n)
+		}
+	}
 }
 
 func TestPaymentAccountSKR04(t *testing.T) {
