@@ -1117,6 +1117,19 @@ func joinRowValues(values []string) string {
 	return strings.Join(values, "\t")
 }
 
+// CopySelectedRow returns the currently selected row's values joined by tab,
+// or "" if nothing is selected. Backs the Ctrl+C (ShortcutCopy) handler.
+func (it *InvoiceTable) CopySelectedRow() string {
+	if it.selectedRow < 0 || it.selectedRow >= len(it.filtered) {
+		return ""
+	}
+	vals := make([]string, 0, len(it.columnOrder))
+	for _, colID := range it.columnOrder {
+		vals = append(vals, it.getCellValue(it.selectedRow, colID))
+	}
+	return joinRowValues(vals)
+}
+
 // SelectByDateiname selects and scrolls to the row whose Dateiname
 // matches name. No-op if not found.
 func (it *InvoiceTable) SelectByDateiname(name string) {
@@ -1158,6 +1171,21 @@ func (it *InvoiceTable) RegisterKeyHandler(cv fyne.Canvas) {
 			it.openSelected()
 		case fyne.KeyDelete, fyne.KeyBackspace:
 			it.deleteSelected()
+		}
+	})
+
+	// Ctrl/Cmd+C copies the selected row. Fyne routes copy to the focused
+	// widget first (Entry gets Entry-copy); the table is not Shortcutable,
+	// so it falls through to this canvas handler.
+	// IMPORTANT: canvas.AddShortcut persists on the window canvas across
+	// SetContent, so it would also fire in Konten mode (no invoice table).
+	// Gate on Belege mode + a live table to avoid copying stale rows.
+	cv.AddShortcut(&fyne.ShortcutCopy{}, func(fyne.Shortcut) {
+		if it.app == nil || it.app.viewMode != "" || it.app.invoiceTable != it {
+			return
+		}
+		if s := it.CopySelectedRow(); s != "" {
+			fyne.CurrentApp().Clipboard().SetContent(s)
 		}
 	})
 }

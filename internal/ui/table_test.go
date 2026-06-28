@@ -13,3 +13,10 @@ func TestJoinRowValues(t *testing.T) {
 		t.Errorf("joinRowValues single = %q", got)
 	}
 }
+
+func TestCopySelectedRow_EmptyWhenNoSelection(t *testing.T) {
+	it := &InvoiceTable{selectedRow: -1}
+	if got := it.CopySelectedRow(); got != "" {
+		t.Fatalf("expected empty string with no selection, got %q", got)
+	}
+}
