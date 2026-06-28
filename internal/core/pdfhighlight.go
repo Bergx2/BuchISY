@@ -229,6 +229,21 @@ func HighlightRects(path string, values []string, dpi float64) ([][]Rect, error)
 // frames the whole block, not just the amount line. X/W are left at 0 (the
 // caller widens to full page width); only the vertical extent is meaningful.
 func StatementBlockRects(path string, values []string, dpi float64) ([][]Rect, error) {
+	return statementRects(path, values, dpi, true)
+}
+
+// StatementRowRects is like StatementBlockRects but frames ONLY the matched row
+// itself (not the whole booking block), using the same top-origin/scaled
+// coordinate handling and gap-centering. Used to mark each linked amount line
+// without ballooning onto neighbouring bookings.
+func StatementRowRects(path string, values []string, dpi float64) ([][]Rect, error) {
+	return statementRects(path, values, dpi, false)
+}
+
+// statementRects is the shared implementation. wholeBlock=true extends each
+// match up to its dated header and down across detail rows (whole booking);
+// wholeBlock=false frames just the matched row.
+func statementRects(path string, values []string, dpi float64, wholeBlock bool) ([][]Rect, error) {
 	f, r, err := pdf.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open PDF for highlighting: %w", err)
@@ -312,13 +327,14 @@ func StatementBlockRects(path string, values []string, dpi float64) ([][]Rect, e
 			if !vis[k].match {
 				continue
 			}
-			start := k // walk up to the dated row that starts this booking
-			for start > 0 && !vis[start].dated {
-				start--
-			}
-			end := k // extend down across undated detail rows
-			for end+1 < len(vis) && !vis[end+1].dated {
-				end++
+			start, end := k, k
+			if wholeBlock {
+				for start > 0 && !vis[start].dated { // walk up to the dated header
+					start--
+				}
+				for end+1 < len(vis) && !vis[end+1].dated { // extend down across details
+					end++
+				}
 			}
 			if topOrigin {
 				// Center the frame edges in the gaps to neighbouring bookings: it

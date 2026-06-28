@@ -131,16 +131,18 @@ type previewHighlight struct {
 	strokeWidth float32
 	fullWidth   bool     // expand each rect to the full page width (frame the whole row)
 	blockMode   bool     // frame the whole statement booking block (all its lines), not one row
+	rowMode     bool     // frame just the matched statement row(s) (statement coord handling, no block extension)
 	values      []string // when set, search ONLY these (instead of all meta values)
 }
 
 var (
 	hlYellowFill = previewHighlight{fill: color.NRGBA{R: 255, G: 235, B: 0, A: 90}}
-	// Green frame for linked statement lines: full-width row band per matched
-	// AMOUNT (no blockMode — block extension on Qonto's columnar layout swallowed
-	// unrelated bookings and framed wrong totals). Matches every linked amount,
-	// on any page.
-	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 210, B: 0, A: 55}, stroke: color.NRGBA{R: 0, G: 150, B: 0, A: 255}, strokeWidth: 3, fullWidth: true}
+	// Green frame for linked statement lines: full-width band over each matched
+	// AMOUNT row. rowMode (not blockMode) frames just the matched row using the
+	// statement coordinate handling (top-origin + gap-centering) — block
+	// extension on Qonto's columnar layout swallowed unrelated bookings, while
+	// the plain amount-box highlight mis-positioned the band by a line.
+	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 210, B: 0, A: 55}, stroke: color.NRGBA{R: 0, G: 150, B: 0, A: 255}, strokeWidth: 3, fullWidth: true, rowMode: true}
 )
 
 func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) (fyne.CanvasObject, *pdfPreviewStrip) {
@@ -160,10 +162,15 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 			searchVals = hl.values // statement: only the booking amount, so a single line is framed
 		}
 		var rectsPerPage [][]core.Rect
-		if hl.blockMode {
+		switch {
+		case hl.rowMode:
+			// Statement: frame just the matched amount row(s), with the same
+			// top-origin/scaled handling the block path uses.
+			rectsPerPage, _ = core.StatementRowRects(mainPath, searchVals, previewDPI)
+		case hl.blockMode:
 			// Statement: frame the entire booking block (date row + detail rows).
 			rectsPerPage, _ = core.StatementBlockRects(mainPath, searchVals, previewDPI)
-		} else {
+		default:
 			rectsPerPage, _ = core.HighlightRects(mainPath, searchVals, previewDPI)
 		}
 
@@ -172,7 +179,8 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 		// generous padding; a whole block is already tall, so pad it only lightly.
 		if hl.fullWidth {
 			padFrac := float32(0.30)
-			if hl.blockMode {
+			if hl.blockMode || hl.rowMode {
+				// Band already spans the row (gap-centered) — pad only lightly.
 				padFrac = 0.06
 			}
 			for pi := range rectsPerPage {
