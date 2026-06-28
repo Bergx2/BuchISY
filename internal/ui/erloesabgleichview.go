@@ -488,7 +488,7 @@ func (a *App) showErloesAbgleich() {
 				string(lineRunes),
 				baseName,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			confirmBtn := widget.NewButton(a.bundle.T("erloesabgleich.confirm"), nil)
@@ -612,7 +612,7 @@ func (a *App) showErloesAbgleich() {
 				string(lineRunes),
 				filePart,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			linkAllBtn := widget.NewButton(a.bundle.T("reconcile.linkAll"), nil)
@@ -690,7 +690,7 @@ func (a *App) showErloesAbgleich() {
 				string(lineRunes),
 				baseName,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			confirmBtn := widget.NewButton(a.bundle.T("erloesabgleich.confirm"), nil)

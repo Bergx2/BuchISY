@@ -40,17 +40,19 @@ func (a *App) showOpenItems() {
 
 		tbl := widget.NewTable(
 			func() (int, int) { return totalRows, 6 },
-			func() fyne.CanvasObject { return widget.NewLabel("") },
+			func() fyne.CanvasObject { return newHoverLabel(nil, nil) },
 			func(id widget.TableCellID, o fyne.CanvasObject) {
-				lbl := o.(*widget.Label)
-				lbl.TextStyle = fyne.TextStyle{}
-				lbl.Alignment = fyne.TextAlignLeading
+				hl := o.(*hoverLabel)
+				// CRITICAL: cells are recycled — reset every style field on every update.
+				hl.tooltip = ""
+				hl.TextStyle = fyne.TextStyle{}
+				hl.Alignment = fyne.TextAlignLeading
 
 				// Header row
 				if id.Row == 0 {
-					lbl.TextStyle = fyne.TextStyle{Bold: true}
+					hl.TextStyle = fyne.TextStyle{Bold: true}
 					if id.Col < len(headers) {
-						lbl.SetText(headers[id.Col])
+						hl.SetText(headers[id.Col])
 					}
 					return
 				}
@@ -59,15 +61,15 @@ func (a *App) showOpenItems() {
 
 				// Totals row
 				if dataIdx == len(items) {
-					lbl.TextStyle = fyne.TextStyle{Bold: true}
+					hl.TextStyle = fyne.TextStyle{Bold: true}
 					switch id.Col {
 					case 0:
-						lbl.SetText(a.bundle.T("opos.total"))
+						hl.SetText(a.bundle.T("opos.total"))
 					case 3:
-						lbl.Alignment = fyne.TextAlignTrailing
-						lbl.SetText(fmtAmt(gesamt))
+						hl.Alignment = fyne.TextAlignTrailing
+						hl.SetText(fmtAmt(gesamt))
 					default:
-						lbl.SetText("")
+						hl.SetText("")
 					}
 					return
 				}
@@ -75,19 +77,19 @@ func (a *App) showOpenItems() {
 				item := items[dataIdx]
 				switch id.Col {
 				case 0:
-					lbl.SetText(item.Belegnummer)
+					hl.SetText(item.Belegnummer)
 				case 1:
-					lbl.SetText(item.Datum)
+					hl.SetText(item.Datum)
 				case 2:
-					lbl.SetText(item.Partner)
+					hl.SetText(item.Partner)
 				case 3:
-					lbl.Alignment = fyne.TextAlignTrailing
-					lbl.SetText(fmtAmt(item.Betrag))
+					hl.Alignment = fyne.TextAlignTrailing
+					hl.SetText(fmtAmt(item.Betrag))
 				case 4:
-					lbl.Alignment = fyne.TextAlignTrailing
-					lbl.SetText(fmt.Sprintf("%d", item.AgeDays))
+					hl.Alignment = fyne.TextAlignTrailing
+					hl.SetText(fmt.Sprintf("%d", item.AgeDays))
 				case 5:
-					lbl.SetText(item.Bucket)
+					hl.SetText(item.Bucket)
 				}
 			},
 		)
