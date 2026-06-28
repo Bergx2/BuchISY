@@ -662,19 +662,18 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		isStatement := statementPreviewPath != "" && path == statementPreviewPath
 		if isStatement {
 			hl = hlGreenFrame
-			// Frame exactly the linked booking(s) by date+amount — so a 1→N split
-			// highlights each debit (incl. on other pages) without small-amount
-			// collisions. Falls back to a bare amount search when nothing is linked.
-			var lms []core.LineMatch
+			// Frame each linked booking's amount row (every line of a 1→N split,
+			// on any page). Falls back to the invoice gross when nothing is linked.
+			var vals []string
 			for _, l := range linkedStatementLines() {
-				lms = append(lms, core.LineMatch{Date: l.Date, Betrag: l.Betrag})
+				dot := fmt.Sprintf("%.2f", l.Betrag)
+				vals = append(vals, dot, strings.ReplaceAll(dot, ".", ","))
 			}
-			if len(lms) > 0 {
-				hl.lineMatches = lms
-			} else {
+			if len(vals) == 0 {
 				dot := fmt.Sprintf("%.2f", core.InvoiceEURAmount(row))
-				hl.values = []string{dot, strings.ReplaceAll(dot, ".", ",")}
+				vals = []string{dot, strings.ReplaceAll(dot, ".", ",")}
 			}
+			hl.values = vals
 		}
 		content, strip := renderPreviewContent(path, meta, hl)
 		preview.Objects = []fyne.CanvasObject{content}

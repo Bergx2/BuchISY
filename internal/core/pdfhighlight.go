@@ -10,7 +10,7 @@ import (
 	"github.com/ledongthuc/pdf"
 )
 
-// stmtDateRe matches a leading transaction date like "11/05" or "11.05" — the
+// stmtDateRe matches a leading transaction date like "11/05" or "11.05" â€” the
 // marker that starts a new statement booking block (detail lines have none).
 var stmtDateRe = regexp.MustCompile(`^\d{1,2}[/.]\d{1,2}(\D|$)`)
 
@@ -67,7 +67,7 @@ func pdfBoxToPixel(b pdfBox, pageHeight, dpi float64) Rect {
 
 // pdfBoxToPixelTopOrigin maps a box whose Y is TOP-origin in a coordinate space
 // of height coordHeight (which differs from the MediaBox) onto the rendered
-// image. Some PDFs — e.g. bank statements generated from HTML — report text in
+// image. Some PDFs â€” e.g. bank statements generated from HTML â€” report text in
 // a top-origin space scaled relative to the page, so text Y runs past the
 // MediaBox height and the normal bottom-origin flip lands the rect off-page.
 // Only Y/H need be accurate for the full-width statement frame; X/W are
@@ -106,7 +106,7 @@ func valueBoxInRow(frags []pdf.Text, value string) (box pdfBox, ok bool) {
 	matched := false
 	// If the search value is a money amount, match it tolerantly: any numeric
 	// token in the row with the same digit signature (so "1234.56" matches
-	// "1.234,56", "573,15 €", etc.). Non-amounts fall back to a literal search.
+	// "1.234,56", "573,15 â‚¬", etc.). Non-amounts fall back to a literal search.
 	if vd, isAmt := amountDigits(value); isAmt {
 		for _, loc := range numTokenRe.FindAllStringIndex(full, -1) {
 			if td, ok := amountDigits(full[loc[0]:loc[1]]); ok && td == vd {
@@ -290,7 +290,7 @@ func StatementBlockRects(path string, values []string, dpi float64) ([][]Rect, e
 		}
 		topOrigin := maxY > pageHeight*1.02
 
-		// Order rows visually top→bottom (GetTextByRow's order can be reversed
+		// Order rows visually topâ†’bottom (GetTextByRow's order can be reversed
 		// for top-origin/scaled PDFs, so sort explicitly).
 		order := make([]int, len(infos))
 		for i := range order {
@@ -339,162 +339,6 @@ func StatementBlockRects(path string, values []string, dpi float64) ([][]Rect, e
 				vTop, vBot := vis[start].hiY, vis[end].loY // top-most edge, bottom-most edge
 				rects = append(rects, pdfBoxToPixel(pdfBox{y: vBot, h: vTop - vBot}, pageHeight, dpi))
 			}
-		}
-		result = append(result, rects)
-	}
-	return result, nil
-}
-
-// LineMatch identifies ONE statement booking for precise highlighting: its date
-// (as stored in StatementBooking.Date) and its amount. A block is framed only
-// when it carries BOTH, so small/common amounts (0,18 etc.) no longer collide
-// with unrelated bookings the way a bare amount search does.
-type LineMatch struct {
-	Date   string
-	Betrag float64
-}
-
-// dayMonthRe extracts the leading "DD.MM" (or "DD/MM") from a date string, used
-// to match a block's dated header robustly across year-format differences.
-var dayMonthRe = regexp.MustCompile(`\d{1,2}[./]\d{1,2}`)
-
-// StatementBlockRectsForLines frames the booking block of each given (date,
-// amount) line. Unlike StatementBlockRects (which searches a bare amount across
-// the whole page and frames every match), it requires the block's dated header
-// to carry the line's day/month AND some row in the block to carry the amount —
-// so linking several small debits highlights exactly those bookings.
-func StatementBlockRectsForLines(path string, lines []LineMatch, dpi float64) ([][]Rect, error) {
-	type wantKey struct{ dm, sig string }
-	var wants []wantKey
-	for _, l := range lines {
-		sig, ok := amountDigits(fmt.Sprintf("%.2f", l.Betrag))
-		if !ok {
-			continue
-		}
-		wants = append(wants, wantKey{dm: dayMonthRe.FindString(l.Date), sig: sig})
-	}
-	if len(wants) == 0 {
-		return nil, nil
-	}
-
-	f, r, err := pdf.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open PDF for highlighting: %w", err)
-	}
-	defer f.Close()
-
-	total := r.NumPage()
-	result := make([][]Rect, 0, total)
-	for pageNum := 1; pageNum <= total; pageNum++ {
-		page := r.Page(pageNum)
-		if page.V.IsNull() {
-			result = append(result, nil)
-			continue
-		}
-		rows, err := page.GetTextByRow()
-		if err != nil {
-			result = append(result, nil)
-			continue
-		}
-		pageHeight := pageHeightPoints(page)
-
-		type rinfo struct {
-			loY, hiY float64
-			dated    bool
-			text     string
-			sigs     map[string]bool
-		}
-		maxY := 0.0
-		infos := make([]rinfo, len(rows))
-		for i, row := range rows {
-			frags := []pdf.Text(row.Content)
-			var sb strings.Builder
-			loY, hiY := math.Inf(1), math.Inf(-1)
-			for _, fr := range frags {
-				sb.WriteString(fr.S)
-				fh := fr.FontSize
-				if fh <= 0 {
-					fh = 8
-				}
-				if fr.Y < loY {
-					loY = fr.Y
-				}
-				if fr.Y+fh > hiY {
-					hiY = fr.Y + fh
-				}
-			}
-			if hiY > maxY {
-				maxY = hiY
-			}
-			text := sb.String()
-			sigs := map[string]bool{}
-			for _, loc := range numTokenRe.FindAllStringIndex(text, -1) {
-				if td, ok := amountDigits(text[loc[0]:loc[1]]); ok {
-					sigs[td] = true
-				}
-			}
-			infos[i] = rinfo{loY: loY, hiY: hiY, dated: stmtDateRe.MatchString(strings.TrimSpace(text)), text: text, sigs: sigs}
-		}
-		topOrigin := maxY > pageHeight*1.02
-
-		order := make([]int, len(infos))
-		for i := range order {
-			order[i] = i
-		}
-		sort.SliceStable(order, func(a, b int) bool {
-			if topOrigin {
-				return infos[order[a]].loY < infos[order[b]].loY
-			}
-			return infos[order[a]].hiY > infos[order[b]].hiY
-		})
-		vis := make([]rinfo, len(order))
-		for k, idx := range order {
-			vis[k] = infos[idx]
-		}
-
-		var rects []Rect
-		for start := 0; start < len(vis); start++ {
-			if !vis[start].dated {
-				continue
-			}
-			end := start
-			for end+1 < len(vis) && !vis[end+1].dated {
-				end++
-			}
-			// Union of amount signatures over the whole block; date from the header.
-			blockSigs := map[string]bool{}
-			for k := start; k <= end; k++ {
-				for s := range vis[k].sigs {
-					blockSigs[s] = true
-				}
-			}
-			header := strings.TrimSpace(vis[start].text)
-			matched := false
-			for _, w := range wants {
-				if blockSigs[w.sig] && (w.dm == "" || strings.Contains(header, w.dm)) {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				if topOrigin {
-					vTop := vis[start].loY
-					if start > 0 {
-						vTop = (vis[start-1].hiY + vis[start].loY) / 2
-					}
-					vBot := vis[end].hiY
-					if end+1 < len(vis) {
-						vBot = (vis[end].hiY + vis[end+1].loY) / 2
-					} else {
-						vBot += (vis[end].hiY - vis[end].loY) * 0.5
-					}
-					rects = append(rects, pdfBoxToPixelTopOrigin(pdfBox{y: vTop, h: vBot - vTop}, pageHeight, maxY, dpi))
-				} else {
-					vTop, vBot := vis[start].hiY, vis[end].loY
-					rects = append(rects, pdfBoxToPixel(pdfBox{y: vBot, h: vTop - vBot}, pageHeight, dpi))
-				}
-			}
-			start = end // skip block interior
 		}
 		result = append(result, rects)
 	}
