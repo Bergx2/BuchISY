@@ -317,6 +317,7 @@ func (a *App) startProfile(profile string) {
 	a.window.CenterOnScreen()
 
 	a.window.SetContent(a.buildUI())
+	a.window.SetMainMenu(a.buildMainMenu())
 
 	// Start watching the scan-inbox folder for new PDFs.
 	newScanWatcher(a).start()
