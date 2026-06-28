@@ -510,44 +510,50 @@ func (it *InvoiceTable) ChipRow() *fyne.Container { return it.chipRow }
 // look up what ✓ / ⚠ / ○ mean.
 func (it *InvoiceTable) LegendButton() *widget.Button {
 	return widget.NewButton("?", func() {
-		if it.window == nil {
-			return
-		}
-		title := widget.NewLabelWithStyle(
-			it.bundle.T("legend.title"),
-			fyne.TextAlignLeading,
-			fyne.TextStyle{Bold: true},
-		)
-		// Each row: symbol label + meaning label side by side.
-		row := func(sym, key string) *fyne.Container {
-			symLbl := widget.NewLabelWithStyle(sym, fyne.TextAlignCenter, fyne.TextStyle{})
-			symLbl.Wrapping = fyne.TextWrapOff
-			meanLbl := widget.NewLabel(it.bundle.T(key))
-			meanLbl.Wrapping = fyne.TextWrapWord
-			return container.NewBorder(nil, nil, symLbl, nil, meanLbl)
-		}
-		rows := container.NewVBox(
-			title,
-			widget.NewSeparator(),
-			row("✓", "legend.linked"),
-			row("✓", "legend.cashConfirmed"),
-			row("✓", "legend.cashCovered"),
-			row("⚠", "legend.uncovered"),
-			row("○", "legend.open"),
-			row("✓", "legend.partial"),
-			row("✓", "legend.outgoing"),
-			row("✓", "legend.attachment"),
-		)
-		var popup *widget.PopUp
-		closeBtn := widget.NewButton(it.bundle.T("common.close"), func() {
-			if popup != nil {
-				popup.Hide()
-			}
-		})
-		content := container.NewVBox(rows, widget.NewSeparator(), container.NewCenter(closeBtn))
-		popup = widget.NewModalPopUp(container.NewPadded(content), it.window.Canvas())
-		popup.Show()
+		it.ShowLegend()
 	})
+}
+
+// ShowLegend opens the symbol-legend popup explaining what ✓ / ⚠ / ○
+// mean. Extracted from LegendButton so the global menu can reuse it.
+func (it *InvoiceTable) ShowLegend() {
+	if it.window == nil {
+		return
+	}
+	title := widget.NewLabelWithStyle(
+		it.bundle.T("legend.title"),
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Bold: true},
+	)
+	// Each row: symbol label + meaning label side by side.
+	row := func(sym, key string) *fyne.Container {
+		symLbl := widget.NewLabelWithStyle(sym, fyne.TextAlignCenter, fyne.TextStyle{})
+		symLbl.Wrapping = fyne.TextWrapOff
+		meanLbl := widget.NewLabel(it.bundle.T(key))
+		meanLbl.Wrapping = fyne.TextWrapWord
+		return container.NewBorder(nil, nil, symLbl, nil, meanLbl)
+	}
+	rows := container.NewVBox(
+		title,
+		widget.NewSeparator(),
+		row("✓", "legend.linked"),
+		row("✓", "legend.cashConfirmed"),
+		row("✓", "legend.cashCovered"),
+		row("⚠", "legend.uncovered"),
+		row("○", "legend.open"),
+		row("✓", "legend.partial"),
+		row("✓", "legend.outgoing"),
+		row("✓", "legend.attachment"),
+	)
+	var popup *widget.PopUp
+	closeBtn := widget.NewButton(it.bundle.T("common.close"), func() {
+		if popup != nil {
+			popup.Hide()
+		}
+	})
+	content := container.NewVBox(rows, widget.NewSeparator(), container.NewCenter(closeBtn))
+	popup = widget.NewModalPopUp(container.NewPadded(content), it.window.Canvas())
+	popup.Show()
 }
 
 // refreshChips rebuilds the chip row so the active chip is shown

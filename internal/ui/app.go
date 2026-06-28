@@ -856,8 +856,11 @@ func (a *App) applyAccentForMode() {
 	a.app.Settings().SetTheme(a.theme)
 }
 
-// buildTopBar creates the top toolbar.
-func (a *App) buildTopBar() fyne.CanvasObject {
+// buildPeriodSelectors constructs the year + month controls (creating
+// a.yearSelect / a.monthSelect) and the prev/next month buttons. It
+// returns the year wrap and the [◀ month ▶] group so callers (the top
+// bar today, the period header later) can place them.
+func (a *App) buildPeriodSelectors() (fyne.CanvasObject, fyne.CanvasObject) {
 	// "Now" markers used to draw a thin border around today's year/month
 	// inside the dropdown popups, regardless of which period is selected.
 	now := time.Now()
@@ -878,6 +881,10 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		a.onMonthChanged()
 	})
 	a.yearSelect.SetSelected(currentYearStr)
+
+	// Constrain the year select to a tighter width so the 4-digit value
+	// doesn't claim as much horizontal space as the long month names.
+	yearWrap := container.New(fixedWidthLayout{width: 90}, a.yearSelect)
 
 	// Month selector — prepend a "Ganzes Jahr" option that switches the
 	// table to show invoices from all 12 months of the selected year.
@@ -904,8 +911,46 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	})
 	a.monthSelect.SetSelected(currentMonthStr)
 
-	// Wrap month select in a container with minimum width
-	monthContainer := container.NewStack(a.monthSelect)
+	prev := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { a.stepMonth(-1) })
+	prev.Importance = widget.LowImportance
+	next := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { a.stepMonth(1) })
+	next.Importance = widget.LowImportance
+	monthControls := container.NewHBox(prev, container.NewStack(a.monthSelect), next)
+	return yearWrap, monthControls
+}
+
+// lockIndicator returns a small label showing the Festschreibung state
+// when the current month is locked, else an empty (invisible) object.
+func (a *App) lockIndicator() fyne.CanvasObject {
+	if !a.currentMonthLocked {
+		return container.NewWithoutLayout()
+	}
+	return widget.NewLabelWithStyle("🔒 "+a.bundle.T("period.locked.indicator"),
+		fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+}
+
+// showAbout shows the About dialog.
+func (a *App) showAbout() {
+	dialog.ShowInformation(a.bundle.T("menu.about"), a.bundle.T("app.about"), a.window)
+}
+
+// importMultiple opens the multi-file picker and enqueues the picks.
+func (a *App) importMultiple() {
+	a.showFilesPicker(func(paths []string) { a.enqueueSubmissions(paths) })
+}
+
+// showLegend opens the symbol legend via the invoice table. No-op when
+// the table isn't present (e.g. Konten mode).
+func (a *App) showLegend() {
+	if a.invoiceTable == nil {
+		return
+	}
+	a.invoiceTable.ShowLegend()
+}
+
+// buildTopBar creates the top toolbar.
+func (a *App) buildTopBar() fyne.CanvasObject {
+	yearWrap, monthControls := a.buildPeriodSelectors()
 
 	// Settings button (always visible — top-right corner with gear icon)
 	settingsBtn := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() {
@@ -951,10 +996,6 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), pos)
 	}
 
-	// Constrain the year select to a tighter width so the 4-digit value
-	// doesn't claim as much horizontal space as the long month names.
-	yearWrap := container.New(fixedWidthLayout{width: 90}, a.yearSelect)
-
 	// Upload card — feels like a real drop-zone now: subtle card
 	// background, upload icon, label and the two action buttons.
 	uploadIcon := widget.NewIcon(theme.UploadIcon())
@@ -986,21 +1027,10 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), e.AbsolutePosition)
 	})
 
-	prevMonthBtn := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
-		a.stepMonth(-1)
-	})
-	prevMonthBtn.Importance = widget.LowImportance
-	nextMonthBtn := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {
-		a.stepMonth(1)
-	})
-	nextMonthBtn.Importance = widget.LowImportance
-
 	rightControls := container.NewHBox(
 		yearWrap,
 		widget.NewLabel("-"),
-		prevMonthBtn,
-		monthContainer,
-		nextMonthBtn,
+		monthControls,
 		widget.NewSeparator(),
 		overflowBtn,
 		settingsBtn,
