@@ -837,8 +837,13 @@ func (a *App) buildStatusBar() fyne.CanvasObject {
 	}
 	lbl := newCopyableLabel(a.bundle, text)
 
+	hint := widget.NewLabelWithStyle(a.bundle.T("copy.hint"),
+		fyne.TextAlignTrailing, fyne.TextStyle{Italic: true})
+	hint.Importance = widget.LowImportance
+
 	bg := canvas.NewRectangle(cardBackgroundColor())
-	bar := container.NewStack(bg, container.NewPadded(lbl))
+	bar := container.NewStack(bg, container.NewBorder(nil, nil,
+		container.NewPadded(lbl), container.NewPadded(hint)))
 	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, bar)
 }
 

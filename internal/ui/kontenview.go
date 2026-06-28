@@ -703,7 +703,7 @@ func (a *App) buildKontenContent() fyne.CanvasObject {
 		body = emptyState(
 			theme.AccountIcon(),
 			"Bitte ein Konto wählen",
-			"Klick oben auf 'Konten ▾' um ein Zahlungskonto zu öffnen.",
+			"Wähle links in der Seitenleiste unter 'Buchen' ein Konto, oder öffne 'Konten (Bank)'.",
 			nil)
 	default:
 		body = a.buildKontenSplit()
