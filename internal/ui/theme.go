@@ -84,6 +84,18 @@ func (t *buchisyTheme) SetScale(s float32) {
 	t.scale = clampUIScale(s)
 }
 
+// Font returns Inter for all non-monospace styles; falls back to the
+// default theme for monospace (e.g. code blocks).
+func (t *buchisyTheme) Font(style fyne.TextStyle) fyne.Resource {
+	if style.Monospace {
+		return t.Theme.Font(style)
+	}
+	if style.Bold {
+		return resourceInterBoldTtf
+	}
+	return resourceInterRegularTtf
+}
+
 func (t *buchisyTheme) Size(name fyne.ThemeSizeName) float32 {
 	var base float32
 	switch name {
