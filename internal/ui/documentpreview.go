@@ -132,6 +132,10 @@ type previewHighlight struct {
 	fullWidth   bool     // expand each rect to the full page width (frame the whole row)
 	blockMode   bool     // frame the whole statement booking block (all its lines), not one row
 	values      []string // when set, search ONLY these (instead of all meta values)
+	// lineMatches: when set (statement preview), frame exactly these bookings by
+	// date+amount instead of searching bare amounts — avoids small-amount
+	// collisions when several debits are linked to one receipt (1→N split).
+	lineMatches []core.LineMatch
 }
 
 var (
@@ -156,10 +160,15 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 			searchVals = hl.values // statement: only the booking amount, so a single line is framed
 		}
 		var rectsPerPage [][]core.Rect
-		if hl.blockMode {
+		switch {
+		case hl.blockMode && len(hl.lineMatches) > 0:
+			// Statement with explicit linked lines: frame exactly those bookings
+			// by date+amount (precise for 1→N splits).
+			rectsPerPage, _ = core.StatementBlockRectsForLines(mainPath, hl.lineMatches, previewDPI)
+		case hl.blockMode:
 			// Statement: frame the entire booking block (date row + detail rows).
 			rectsPerPage, _ = core.StatementBlockRects(mainPath, searchVals, previewDPI)
-		} else {
+		default:
 			rectsPerPage, _ = core.HighlightRects(mainPath, searchVals, previewDPI)
 		}
 

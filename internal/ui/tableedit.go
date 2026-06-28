@@ -623,22 +623,35 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	var rebuildSwitcher func()
 	var delAttBtn *widget.Button // forward-declared so rebuildSwitcher can toggle it
 
-	// statementMatchAmount is the value to frame green on the linked statement:
-	// the matched line's OWN amount (from BuchungRef) — so it works for
-	// foreign-currency invoices (the statement is in EUR, not the invoice
-	// currency). Falls back to the invoice's EUR amount.
-	statementMatchAmount := func() float64 {
-		if ref := core.FirstBuchungRef(row.BuchungRef); ref.StatementFilename != "" {
-			if lines, err := core.ParseStatementBookings(
-				filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename)); err == nil {
-				for _, l := range lines {
-					if l.Page == ref.Page && l.LineIdx == ref.LineIdx {
-						return l.Betrag
-					}
+	// linkedStatementLines returns the StatementBooking for EVERY line referenced
+	// by the receipt's BuchungRef. A 1→N split links several lines (possibly on
+	// different pages), so this drives both the green frame on each matched line
+	// and the "abgeglichen" status list. Empty when nothing is linked / parsable.
+	linkedStatementLines := func() []core.StatementBooking {
+		cache := map[string][]core.StatementBooking{}
+		var out []core.StatementBooking
+		for _, ref := range core.ParseBuchungRefs(row.BuchungRef) {
+			if ref.StatementFilename == "" {
+				continue
+			}
+			lines, ok := cache[ref.StatementFilename]
+			if !ok {
+				parsed, err := core.ParseStatementBookings(
+					filepath.Join(a.statementFolder(row.Bankkonto), ref.StatementFilename))
+				if err != nil {
+					continue
+				}
+				cache[ref.StatementFilename] = parsed
+				lines = parsed
+			}
+			for _, l := range lines {
+				if l.Page == ref.Page && l.LineIdx == ref.LineIdx {
+					out = append(out, l)
+					break
 				}
 			}
 		}
-		return core.InvoiceEURAmount(row)
+		return out
 	}
 
 	swapPreview := func(path string) {
@@ -649,10 +662,19 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		isStatement := statementPreviewPath != "" && path == statementPreviewPath
 		if isStatement {
 			hl = hlGreenFrame
-			// Frame ONLY the matched line: search its exact amount on the
-			// (EUR) statement, not the invoice's foreign-currency gross.
-			dot := fmt.Sprintf("%.2f", statementMatchAmount())
-			hl.values = []string{dot, strings.ReplaceAll(dot, ".", ",")}
+			// Frame exactly the linked booking(s) by date+amount — so a 1→N split
+			// highlights each debit (incl. on other pages) without small-amount
+			// collisions. Falls back to a bare amount search when nothing is linked.
+			var lms []core.LineMatch
+			for _, l := range linkedStatementLines() {
+				lms = append(lms, core.LineMatch{Date: l.Date, Betrag: l.Betrag})
+			}
+			if len(lms) > 0 {
+				hl.lineMatches = lms
+			} else {
+				dot := fmt.Sprintf("%.2f", core.InvoiceEURAmount(row))
+				hl.values = []string{dot, strings.ReplaceAll(dot, ".", ",")}
+			}
 		}
 		content, strip := renderPreviewContent(path, meta, hl)
 		preview.Objects = []fyne.CanvasObject{content}
@@ -804,7 +826,20 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		case row.BuchungRef == core.CashConfirmedRef:
 			abgleichStatus.Add(widget.NewLabel("✓ Bar bestätigt (Kasse)."))
 		case row.BuchungRef != "":
-			abgleichStatus.Add(newCopyableLabel(a.bundle, "✓ Abgeglichen: "+core.BuchungRefDisplay(row.BuchungRef)))
+			if ls := linkedStatementLines(); len(ls) > 1 {
+				// 1→N split: show each linked statement line on its own row.
+				abgleichStatus.Add(widget.NewLabel(fmt.Sprintf("✓ Abgeglichen — %d Auszugszeilen:", len(ls))))
+				for _, l := range ls {
+					sign := "−"
+					if l.IstGutschrift {
+						sign = "+"
+					}
+					abgleichStatus.Add(newCopyableLabel(a.bundle, fmt.Sprintf("   • %s  %s%s  (S.%d Z.%d)",
+						l.Date, sign, formatDecimal(l.Betrag, a.settings.DecimalSeparator), l.Page+1, l.LineIdx)))
+				}
+			} else {
+				abgleichStatus.Add(newCopyableLabel(a.bundle, "✓ Abgeglichen: "+core.BuchungRefDisplay(row.BuchungRef)))
+			}
 		case at == core.AccountTypeBank || at == core.AccountTypeCreditCard:
 			matchBtn := widget.NewButton("Mit Kontoauszug abgleichen", func() {
 				a.matchInvoiceWithStatement(row, editWin, func(updated core.CSVRow) {

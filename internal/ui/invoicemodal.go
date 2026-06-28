@@ -1134,6 +1134,13 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 			}
 			a.loadInvoices()
 			confirmWin.Close()
+			// Offer to reconcile right away for a bank/credit-card expense, so the
+			// user doesn't have to re-find the invoice and open the edit dialog
+			// just to link it. Skipped during batch entry (would interrupt the
+			// per-file flow) and for outgoing invoices (those use Erlös-Abgleich).
+			if a.batchTotal <= 1 && !ausgangsrechnungCheck.Checked {
+				a.offerReconcileAfterSave(targetYear, targetMonth, nextBelegnr)
+			}
 		}
 
 		warnings := core.InvoiceWarnings(core.CSVRow{
@@ -1523,6 +1530,53 @@ func (a *App) autoBookInvoice(mainPath string, attachments []string, meta core.M
 		booking,
 		nextBelegnr,
 	)
+}
+
+// offerReconcileAfterSave asks, right after a new bank/credit-card receipt is
+// saved, whether to reconcile it against the statement now — so the user need
+// not re-find the invoice and reopen it in the edit dialog just to link it.
+// No-op for cash/other accounts, an already-linked row, or when no statement
+// has been imported for that account yet.
+func (a *App) offerReconcileAfterSave(year int, month time.Month, belegnr string) {
+	if strings.TrimSpace(belegnr) == "" {
+		return
+	}
+	jahr := fmt.Sprintf("%04d", year)
+	monat := fmt.Sprintf("%02d", int(month))
+	rows, err := a.dbRepo.List(jahr, monat)
+	if err != nil {
+		return
+	}
+	var saved core.CSVRow
+	found := false
+	for _, r := range rows {
+		if r.Belegnummer == belegnr {
+			saved, found = r, true
+			break
+		}
+	}
+	if !found || saved.BuchungRef != "" {
+		return
+	}
+	at := ""
+	for _, ba := range a.settings.BankAccounts {
+		if ba.Name == saved.Bankkonto {
+			at = ba.AccountType
+		}
+	}
+	if at != core.AccountTypeBank && at != core.AccountTypeCreditCard {
+		return
+	}
+	if len(a.listStatements(saved.Bankkonto)) == 0 {
+		return // no statement imported yet → nothing to match against
+	}
+	dialog.ShowConfirm("Abgleichen?",
+		"Beleg gespeichert. Jetzt mit dem Kontoauszug abgleichen?",
+		func(yes bool) {
+			if yes {
+				a.matchInvoiceWithStatement(saved, a.window, func(core.CSVRow) { a.loadInvoices() })
+			}
+		}, a.window)
 }
 
 // parseFilingYearMonth extracts (year, month) from a DD.MM.YYYY date string,

@@ -128,6 +128,31 @@ func TestFindSplitPayments(t *testing.T) {
 	if g := FindSplitPayments(invoices, far, cfg); len(g) != 0 {
 		t.Errorf("out-of-window lines must be excluded, got %+v", g)
 	}
+
+	// Exact-sum only: target 5.84 = 1.70+1.74+2.22+0.18 (4 lines). A stray 0.01
+	// line must NOT be pulled in to make 5.85 (would be within a loose ±0.01).
+	exactInv := []CSVRow{{Dateiname: "fees2.pdf", Rechnungsdatum: "31.03.2026", Bruttobetrag: 5.84, Waehrung: "EUR"}}
+	exactLines := []StatementBooking{
+		{Page: 0, LineIdx: 2, Date: "03.03.2026", Betrag: 1.70},
+		{Page: 0, LineIdx: 6, Date: "09.03.2026", Betrag: 1.74},
+		{Page: 0, LineIdx: 14, Date: "11.03.2026", Betrag: 2.22},
+		{Page: 0, LineIdx: 15, Date: "12.03.2026", Betrag: 0.01},
+		{Page: 0, LineIdx: 21, Date: "14.03.2026", Betrag: 0.18},
+	}
+	ex := FindSplitPayments(exactInv, exactLines, cfg)
+	if len(ex) != 1 || len(ex[0].Lines) != 4 {
+		t.Fatalf("expected exactly 4 lines summing to 5.84, got %+v", ex)
+	}
+	var sum float64
+	for _, l := range ex[0].Lines {
+		sum += l.Betrag
+		if l.Betrag == 0.01 {
+			t.Errorf("the stray 0.01 line must not be included: %+v", ex[0].Lines)
+		}
+	}
+	if round2(sum) != 5.84 {
+		t.Errorf("split sum = %.2f, want 5.84", sum)
+	}
 }
 
 func TestParseBuchungRefsRoundTrip(t *testing.T) {

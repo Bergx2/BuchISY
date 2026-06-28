@@ -344,13 +344,17 @@ func FindSplitPayments(invoices []CSVRow, lines []StatementBooking, cfg MatchCon
 // found via depth-first search with sum pruning. Returns the first such subset
 // (deterministic by input order) or ok=false.
 func subsetSum(lines []StatementBooking, target float64, maxK int) ([]StatementBooking, bool) {
+	// Exact cent match: amounts are 2-decimal, so a real combination sums to the
+	// target exactly. A loose tolerance (±0.01) would wrongly accept a combo that
+	// is one cent off — e.g. adding a stray 0,01 line — so use a sub-cent epsilon.
+	const eps = 0.005
 	var chosen []StatementBooking
 	var dfs func(start int, sum float64) bool
 	dfs = func(start int, sum float64) bool {
-		if len(chosen) >= 2 && absf(sum-target) <= 0.01 {
+		if len(chosen) >= 2 && absf(sum-target) <= eps {
 			return true
 		}
-		if len(chosen) >= maxK || sum > target+0.01 {
+		if len(chosen) >= maxK || sum > target+eps {
 			return false
 		}
 		for i := start; i < len(lines); i++ {
