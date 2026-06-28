@@ -233,6 +233,51 @@ func (a *App) autoFillNewStatements(folder string, names []string) {
 	}()
 }
 
+// switchToBelege returns to the Belege (invoice) view. Extracted from
+// viewToggleButtons so the workflow sidebar can trigger the same flow.
+func (a *App) switchToBelege() {
+	a.viewMode = ""
+	a.window.SetContent(a.buildUI())
+}
+
+// openKontenPicker shows a popup listing the configured Zahlungskonten;
+// picking one switches into that account's statement view. Extracted from
+// viewToggleButtons so the sidebar (which has no anchor button) can trigger
+// the same flow. Unlike the toggle-button version, the popup is shown as a
+// modal centered on the window canvas instead of anchored to a button.
+func (a *App) openKontenPicker() {
+	accounts := a.bankAccountOptionList()
+	if len(accounts) == 0 {
+		dialog.ShowInformation("Konten",
+			"Noch kein Zahlungskonto konfiguriert.\n"+
+				"Bitte in den Einstellungen anlegen.",
+			a.window)
+		return
+	}
+	// Custom popup with full-width buttons — fyne's NewMenuItem popup
+	// truncated long account names like "KSMSE …0712 Sparkasse".
+	var pop *widget.PopUp
+	list := container.NewVBox()
+	for _, name := range accounts {
+		n := name
+		btn := widget.NewButton(n, func() {
+			if pop != nil {
+				pop.Hide()
+			}
+			a.kontenAccount = n
+			a.viewMode = "konten"
+			a.window.SetContent(a.buildUI())
+		})
+		btn.Alignment = widget.ButtonAlignLeading
+		btn.Importance = widget.LowImportance
+		list.Add(btn)
+	}
+	// Modal popup auto-centers on the canvas — the sidebar has no button to
+	// anchor against, so we don't position it manually.
+	pop = widget.NewModalPopUp(list, a.window.Canvas())
+	pop.Show()
+}
+
 // viewToggleButtons returns the Belege / Konten toggle pair, with the
 // currently active mode rendered as HighImportance so it visually
 // stands out. The Konten button opens a popup of configured
@@ -240,8 +285,7 @@ func (a *App) autoFillNewStatements(folder string, names []string) {
 // view.
 func (a *App) viewToggleButtons() (*widget.Button, *widget.Button) {
 	belegeBtn := widget.NewButtonWithIcon("Belege", theme.DocumentIcon(), func() {
-		a.viewMode = ""
-		a.window.SetContent(a.buildUI())
+		a.switchToBelege()
 	})
 
 	var kontenBtn *widget.Button
