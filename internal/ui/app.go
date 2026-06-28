@@ -1,4 +1,4 @@
-﻿// Package ui provides the Fyne-based user interface for BuchISY.
+// Package ui provides the Fyne-based user interface for BuchISY.
 package ui
 
 import (
@@ -57,10 +57,10 @@ type App struct {
 	assetsPath         string
 
 	// Current state
-	currentYear    int
-	currentMonth   time.Month
-	viewWholeYear  bool
-	cashUncovered  map[string]bool // Dateiname → not covered; recomputed each loadInvoices
+	currentYear   int
+	currentMonth  time.Month
+	viewWholeYear bool
+	cashUncovered map[string]bool // Dateiname → not covered; recomputed each loadInvoices
 
 	// Main-view mode: "" / "belege" → invoice table (default), "konten"
 	// → bank-statement browser per Zahlungskonto.
@@ -85,8 +85,8 @@ type App struct {
 	profile      string
 
 	// Zoom feedback overlay (Task 1)
-	scalePopup  *widget.PopUp
-	scaleTimer  *time.Timer
+	scalePopup *widget.PopUp
+	scaleTimer *time.Timer
 
 	// Dismissed config-hint banners (Task 2): keyed by hint i18n key.
 	// Hints dismissed with ✕ stay hidden for the session.
@@ -657,15 +657,47 @@ func (a *App) saveWindowState() {
 	}
 }
 
-// buildUI constructs the main UI layout. Dispatches to the Konten view
-// when that mode is active; otherwise builds the invoice ("Belege") view.
+// buildUI constructs the main UI layout: ONE outer shell (sidebar + period
+// header + status bar) wrapped around the content for the active mode. The
+// Konten and Belege bodies are built by buildKontenContent / buildBelegeContent
+// — neither builds its own chrome, so there is never any double-rendering.
 func (a *App) buildUI() fyne.CanvasObject {
 	a.applyAccentForMode()
+
+	var content fyne.CanvasObject
 	if a.viewMode == "konten" {
-		a.mainContent = a.buildKontenUI()
-		return a.mainContent
+		content = a.buildKontenContent()
+	} else {
+		content = a.buildBelegeContent()
 	}
-	// Create table first (before top bar, so callbacks don't crash)
+
+	a.mainContent = container.NewBorder(
+		a.buildPeriodHeader(), // top
+		a.buildStatusBar(),    // bottom
+		a.buildSidebar(),      // left (fixed width)
+		nil,                   // right
+		content,               // center
+	)
+	return a.mainContent
+}
+
+// buildPeriodHeader returns the always-visible Buchungszeitraum strip
+// (year + month controls + lock indicator) plus a settings gear on the
+// right. Shared chrome for both view modes.
+func (a *App) buildPeriodHeader() fyne.CanvasObject {
+	yearWrap, monthControls := a.buildPeriodSelectors()
+	period := container.NewHBox(yearWrap, monthControls, a.lockIndicator())
+	settings := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { a.showSettingsView() })
+	settings.Importance = widget.LowImportance
+	return container.NewBorder(nil, nil, period, settings, nil)
+}
+
+// buildBelegeContent builds the invoice ("Belege") body: the table, the
+// drop handler, config-hint banners, the upload card and filter row, and
+// the empty-state. It does NOT build the period header or status bar —
+// those belong to the outer shell in buildUI.
+func (a *App) buildBelegeContent() fyne.CanvasObject {
+	// Create table first (before the upload card, so callbacks don't crash)
 	a.invoiceTable = NewInvoiceTable(a.bundle, a)
 	a.invoiceTable.SetColumnOrder(a.settings.ColumnOrder)
 	a.invoiceTable.SetDecimalSeparator(a.settings.DecimalSeparator)
@@ -676,10 +708,10 @@ func (a *App) buildUI() fyne.CanvasObject {
 	// conflicts with dialog Escape handlers.
 	a.invoiceTable.RegisterKeyHandler(a.window.Canvas())
 
-	// Top bar (this may trigger callbacks when setting initial values).
-	// It hosts the upload drop field on the left and all other controls
-	// on the right; the table fills the rest of the window.
-	topBar := a.buildTopBar()
+	// Upload card — a real drop-zone: subtle card background, upload icon,
+	// label and the two action buttons. Lives here (Belege capture), not in
+	// the global shell.
+	uploadBox := a.buildUploadCard()
 
 	// OS-level file drops anywhere on the window: in Belege mode they
 	// kick off invoice extraction; in Konten mode they're filed as a
@@ -752,7 +784,7 @@ func (a *App) buildUI() fyne.CanvasObject {
 		)
 		headerObjects = append(headerObjects, row, widget.NewSeparator())
 	}
-	headerObjects = append(headerObjects, topBar, filterRow)
+	headerObjects = append(headerObjects, uploadBox, filterRow)
 	header := container.NewVBox(headerObjects...)
 
 	// Empty-state shown when the selected month has zero invoices.
@@ -778,8 +810,10 @@ func (a *App) buildUI() fyne.CanvasObject {
 	a.centerWrapper = container.NewStack(a.invoiceTable.Container())
 	a.refreshCenterContent() // apply the correct table/empty-state for the initial render
 
-	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.centerWrapper)
-	return a.mainContent
+	// Belege content: hint banners + upload card + filter row on top, the
+	// table/empty-state below. The outer shell (buildUI) provides the period
+	// header and status bar.
+	return container.NewBorder(header, nil, nil, nil, a.centerWrapper)
 }
 
 // buildStatusBar renders a slim footer with profile + record count
@@ -949,56 +983,11 @@ func (a *App) showLegend() {
 	a.invoiceTable.ShowLegend()
 }
 
-// buildTopBar creates the top toolbar.
-func (a *App) buildTopBar() fyne.CanvasObject {
-	yearWrap, monthControls := a.buildPeriodSelectors()
-
-	// Settings button (always visible — top-right corner with gear icon)
-	settingsBtn := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() {
-		a.showSettingsView()
-	})
-	settingsBtn.Importance = widget.LowImportance
-
-	// Overflow menu — secondary actions tucked behind a three-dot button.
-	overflowBtn := widget.NewButtonWithIcon("", theme.MoreVerticalIcon(), nil)
-	overflowBtn.Importance = widget.LowImportance
-	overflowBtn.OnTapped = func() {
-		menu := fyne.NewMenu("",
-			fyne.NewMenuItem(a.bundle.T("menu.openTarget"), func() { a.openTargetFolder() }),
-			fyne.NewMenuItem("Mehrere Belege importieren…", func() {
-				a.showFilesPicker(func(paths []string) { a.enqueueSubmissions(paths) })
-			}),
-			fyne.NewMenuItem("Kassenbuch", func() { a.showCashBookView() }),
-			fyne.NewMenuItem("CSV-Export", func() { a.showCSVExportDialog() }),
-			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),
-			fyne.NewMenuItem(a.bundle.T("exportpkg.menu"), func() { a.showExportPackage() }),
-			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
-			fyne.NewMenuItem(a.bundle.T("autorules.title"), func() { a.showAutoRulesDialog() }),
-			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
-			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
-			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),
-				fyne.NewMenuItem("Offene Posten", func() { a.showOpenItems() }),
-			fyne.NewMenuItem(a.bundle.T("susa.title"), func() { a.showSuSa() }),
-			fyne.NewMenuItem(a.bundle.T("guv.title"), func() { a.showGuV() }),
-			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
-			fyne.NewMenuItem("Änderungsprotokoll", func() { a.showAuditLog() }),
-			fyne.NewMenuItem(a.bundle.T("period.lock"), func() { a.lockCurrentMonth() }),
-			fyne.NewMenuItem(a.bundle.T("period.unlock"), func() { a.unlockCurrentMonth() }),
-			fyne.NewMenuItem("Rechnungsausgangsbuch (PDF)", func() { a.showSalesJournalPDF() }),
-			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
-			fyne.NewMenuItem("Erlös-Abgleich", func() { a.showErloesAbgleich() }),
-			fyne.NewMenuItem(a.bundle.T("anlagen.title"), func() { a.showAnlagen() }),
-			fyne.NewMenuItem("Belegnummern neu vergeben", func() { a.renumberBelegnummern() }),
-			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),
-			fyne.NewMenuItem(a.bundle.T("verfahrensdoku.menu"), func() { a.showVerfahrensdokuPDF() }),
-		)
-		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)
-		pos.Y += overflowBtn.Size().Height
-		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), pos)
-	}
-
-	// Upload card — feels like a real drop-zone now: subtle card
-	// background, upload icon, label and the two action buttons.
+// buildUploadCard builds the Belege drop-zone card: a subtle card
+// background with an upload icon, label and the paste/open-file buttons.
+// It is Belege capture (not global chrome), so it lives inside
+// buildBelegeContent rather than a top bar.
+func (a *App) buildUploadCard() fyne.CanvasObject {
 	uploadIcon := widget.NewIcon(theme.UploadIcon())
 	uploadLabel := widget.NewLabel(a.bundle.T("dd.upload"))
 	uploadLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -1021,26 +1010,12 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	uploadBg.CornerRadius = 6
 	uploadBoxRaw := container.NewStack(uploadBg, container.NewPadded(uploadInner))
 
-	uploadBox := newContextMenuWrap(uploadBoxRaw, func(e *fyne.PointEvent) {
+	return newContextMenuWrap(uploadBoxRaw, func(e *fyne.PointEvent) {
 		menu := fyne.NewMenu("",
 			fyne.NewMenuItem("Einfügen", func() { a.pasteFromClipboard() }),
 		)
 		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), e.AbsolutePosition)
 	})
-
-	rightControls := container.NewHBox(
-		yearWrap,
-		widget.NewLabel("-"),
-		monthControls,
-		widget.NewSeparator(),
-		overflowBtn,
-		settingsBtn,
-	)
-
-	belegeBtn, kontenBtn := a.viewToggleButtons()
-	leftGroup := container.NewHBox(belegeBtn, widget.NewSeparator(), uploadBox, widget.NewSeparator(), kontenBtn)
-
-	return container.NewBorder(nil, nil, leftGroup, rightControls)
 }
 
 // pasteFromClipboard handles two clipboard contents:
@@ -1627,7 +1602,7 @@ func (a *App) showGlobalSearch(query string) {
 			a.invoiceTable.FilterEntry().SetText("")
 		}
 
-		// Update selectors using the same label formats as buildTopBar.
+		// Update selectors using the same label formats as buildPeriodSelectors.
 		// Guard with stepInProgress so the OnChanged callbacks don't fire
 		// a second onMonthChanged while SetSelected is running.
 		yearStr := fmt.Sprintf("%d", year)

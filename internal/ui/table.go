@@ -483,8 +483,8 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 
 	// Quick-filter chips: instant boolean filters on top of the
 	// free-text search. Click again to clear. Filter + chips live in
-	// the top bar (App.buildTopBar) — the table container itself only
-	// holds the table and the summary row.
+	// the Belege content header (App.buildBelegeContent) — the table
+	// container itself only holds the table and the summary row.
 	it.chipRow = container.NewHBox()
 	it.refreshChips()
 
