@@ -97,6 +97,14 @@ type App struct {
 	centerWrapper *fyne.Container
 	emptyState    fyne.CanvasObject
 
+	// periodHeaderWrap / statusBarWrap are single-slot Stack containers that
+	// wrap the period header and status bar in the main shell. They are
+	// stored so that onMonthChanged can swap their inner content without a
+	// full buildUI rebuild (which would cause an infinite loop via
+	// SetSelected → OnChanged → onMonthChanged → buildUI → SetSelected …).
+	periodHeaderWrap *fyne.Container
+	statusBarWrap    *fyne.Container
+
 	// stepInProgress guards stepMonth from being double-triggered by the
 	// yearSelect/monthSelect OnChanged callbacks firing during SetSelected.
 	stepInProgress bool
@@ -671,12 +679,14 @@ func (a *App) buildUI() fyne.CanvasObject {
 		content = a.buildBelegeContent()
 	}
 
+	a.periodHeaderWrap = container.NewStack(a.buildPeriodHeader())
+	a.statusBarWrap = container.NewStack(a.buildStatusBar())
 	a.mainContent = container.NewBorder(
-		a.buildPeriodHeader(), // top
-		a.buildStatusBar(),    // bottom
-		a.buildSidebar(),      // left (fixed width)
-		nil,                   // right
-		content,               // center
+		a.periodHeaderWrap, // top
+		a.statusBarWrap,    // bottom
+		a.buildSidebar(),   // left (fixed width)
+		nil,                // right
+		content,            // center
 	)
 	return a.mainContent
 }
@@ -1360,6 +1370,27 @@ func (a *App) onMonthChanged() {
 		a.logger.Info("Month changed to %d-%02d", a.currentYear, a.currentMonth)
 	}
 	a.loadInvoices()
+	// Refresh the period header (lock indicator) and status bar (Belege count
+	// + lock text) in-place. A full buildUI/showMainView rebuild is NOT used
+	// here because that would cause an infinite loop: buildPeriodSelectors
+	// calls SetSelected on the newly-created selects, which fires their
+	// OnChanged callback (Fyne's updateSelected always calls OnChanged), which
+	// calls onMonthChanged again → unbounded recursion.
+	//
+	// Instead we rebuild only the two thin strips and swap their content into
+	// the pre-existing wrapper containers. The stepInProgress guard prevents
+	// the SetSelected calls inside buildPeriodSelectors from re-triggering
+	// onMonthChanged during the rebuild.
+	if a.periodHeaderWrap != nil {
+		a.stepInProgress = true
+		a.periodHeaderWrap.Objects = []fyne.CanvasObject{a.buildPeriodHeader()}
+		a.stepInProgress = false
+		a.periodHeaderWrap.Refresh()
+	}
+	if a.statusBarWrap != nil {
+		a.statusBarWrap.Objects = []fyne.CanvasObject{a.buildStatusBar()}
+		a.statusBarWrap.Refresh()
+	}
 }
 
 // lockCurrentMonth shows a confirmation dialog and then locks the current month,
