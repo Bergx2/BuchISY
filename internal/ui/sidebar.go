@@ -75,7 +75,10 @@ func (a *App) buildSidebar() fyne.CanvasObject {
 		col.Add(widget.NewSeparator())
 	}
 
-	// Fixed ~200px width so the Border left region doesn't size to button
-	// min-width. fixedWidthLayout already exists in the repo (used in app.go).
-	return container.New(fixedWidthLayout{width: 200}, container.NewVScroll(col))
+	// Fixed-width sidebar. No scroll container: NewVScroll forces its own
+	// MinSize.Width to the widest child (Fyne ScrollVerticalOnly), which then
+	// overflows the fixed width and shows a horizontal scrollbar — unprofessional.
+	// The ~15 entries fit in the window height; fixedWidthLayout resizes the
+	// VBox to the column width so leading-aligned buttons fill it cleanly.
+	return container.New(fixedWidthLayout{width: 210}, col)
 }
