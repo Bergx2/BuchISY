@@ -1,10 +1,28 @@
 package ui
 
 import (
+	"strings"
+
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
+
+// sidebarGroupHeader renders a workflow-group title as a muted, small,
+// upper-case section header — visually distinct from the clickable entries
+// below it (which are full-width buttons). A thin spacer above sets the
+// group apart from the preceding group's entries.
+func sidebarGroupHeader(text string) fyne.CanvasObject {
+	t := canvas.NewText(strings.ToUpper(text), theme.Color(theme.ColorNamePlaceHolder))
+	t.TextStyle = fyne.TextStyle{Bold: true}
+	t.TextSize = theme.CaptionTextSize()
+	spacer := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+	spacer.SetMinSize(fyne.NewSize(0, theme.Padding()*2))
+	// Pad the header so its text lines up with the buttons' inset labels.
+	return container.NewVBox(spacer, container.NewPadded(t))
+}
 
 // navItem is one entry in the workflow sidebar: a translation key plus the
 // action to run when the entry is tapped.
@@ -63,8 +81,7 @@ func (a *App) buildSidebar() fyne.CanvasObject {
 
 	col := container.NewVBox()
 	for _, g := range groups {
-		col.Add(widget.NewLabelWithStyle(a.bundle.T(g.titleKey),
-			fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+		col.Add(sidebarGroupHeader(a.bundle.T(g.titleKey)))
 		for _, it := range g.items {
 			item := it // capture
 			btn := widget.NewButton(a.bundle.T(item.key), item.action)
@@ -72,7 +89,6 @@ func (a *App) buildSidebar() fyne.CanvasObject {
 			btn.Importance = widget.LowImportance
 			col.Add(btn)
 		}
-		col.Add(widget.NewSeparator())
 	}
 
 	// Fixed-width sidebar. No scroll container: NewVScroll forces its own
