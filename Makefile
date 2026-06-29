@@ -1,4 +1,4 @@
-.PHONY: all build build-macos build-windows run clean test
+.PHONY: all build dev build-macos build-windows run clean test
 
 # Application name
 APP_NAME=BuchISY
@@ -27,6 +27,18 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	MACOSX_DEPLOYMENT_TARGET=15.0 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
+# Fast inner-loop build (no test, no clean, no packaging) — relies on Go's
+# build cache, so an incremental rebuild after editing a few files is seconds.
+# Use this while developing instead of `make all`/`build-macos`/packaging.
+# Windows equivalent: `go build -o build/buchisy.exe ./cmd/buchisy`
+# If THIS is slow on Windows it's an environment problem (antivirus scanning
+# the Go cache, OneDrive-synced repo, etc.) — see BUILDING.md "Slow Windows builds".
+dev:
+	@echo "Fast dev build (incremental, cached)..."
+	@mkdir -p $(BUILD_DIR)
+	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@echo "Dev build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
 # Build for macOS (current architecture only, CGO required)
 build-macos:
@@ -129,6 +141,7 @@ help:
 	@echo "BuchISY - Makefile commands:"
 	@echo ""
 	@echo "  make build              - Build for current platform"
+	@echo "  make dev                - Fast incremental dev build (cached, no test/package)"
 	@echo "  make build-macos        - Build for macOS (Intel + ARM)"
 	@echo "  make build-windows      - Build for Windows (on Windows)"
 	@echo "  make build-windows-docker - Build using Windows Docker container"

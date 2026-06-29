@@ -132,6 +132,65 @@ This means the Windows .exe can run standalone without any additional files.
 
 ## Build Troubleshooting
 
+### Slow Windows builds (incremental rebuild takes minutes instead of seconds)
+
+**Symptom:** You change a few `.go` files and `go build` takes many minutes — sometimes 10–20.
+
+**This is almost never the code or the stack.** This project is small (~36k lines); a warm
+*incremental* rebuild is normally **a few seconds** (the only fixed cost is the linker pulling in
+go-fitz's prebuilt MuPDF static libraries). Some facts that rule out the usual scapegoats:
+
+- `modernc.org/sqlite` is **pure Go** — no C, no compile cost.
+- `go-fitz` (`v1.24.15`) ships **prebuilt MuPDF `.a` libraries** — it's a *link* cost, not a
+  per-build *compile* cost. It does not recompile MuPDF on every build.
+- Fyne's GLFW/OpenGL C bindings compile **once** and are cached — they do **not** recompile on an
+  incremental `.go` edit unless something is throwing the cache away.
+
+So a 20-minute *incremental* rebuild means the Windows machine is either **defeating Go's build
+cache** or **having every build artifact scanned/locked**. Diagnose, then fix:
+
+**1. Measure and check the cache (PowerShell, in the repo):**
+
+```powershell
+go env GOCACHE GOMODCACHE GOFLAGS CGO_ENABLED   # GOFLAGS must NOT contain -a; GOCACHE must not be "off"
+# edit one file (add a blank line), then time the rebuild:
+Measure-Command { go build -o NUL ./cmd/buchisy }
+# is it recompiling dependencies? (any Fyne/glfw/go-fitz/sqlite lines = cache miss):
+go build -x -o NUL ./cmd/buchisy 2>&1 | Select-Object -First 40
+```
+
+**2. Add antivirus exclusions (the #1 fix on Windows — run elevated PowerShell):**
+
+Windows Defender real-time scanning of the Go cache + linker temp files is the most common cause.
+The cgo/link step produces thousands of small files; scanning each one synchronously turns seconds
+into minutes.
+
+```powershell
+Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"   # GOCACHE
+Add-MpPreference -ExclusionPath "$env:USERPROFILE\go\pkg\mod"  # GOMODCACHE
+Add-MpPreference -ExclusionPath "$env:TEMP"                    # linker temp files
+Add-MpPreference -ExclusionPath "C:\path\to\BuchISY"           # the repo / build output
+Add-MpPreference -ExclusionProcess "go.exe"
+Add-MpPreference -ExclusionProcess "gcc.exe"                   # MinGW (cgo)
+```
+
+**3. Get the repo and cache off OneDrive / synced folders.** If the repo lives under a synced
+`Documents`/`Desktop` (OneDrive), every build output is uploaded/locked mid-build. Move the repo to
+a plain local path like `C:\dev\BuchISY`. Optionally pin a fast, non-synced cache:
+
+```powershell
+go env -w GOCACHE=C:\gocache GOMODCACHE=C:\gomod   # then add both to the AV exclusions above
+```
+
+**4. Use the fast inner-loop build.** `make dev` (or plain `go build -o build\buchisy.exe
+./cmd/buchisy`) — avoid `make all`/packaging while iterating, those add tests + bundling.
+
+**Expected result:** an incremental rebuild drops to **a few seconds** (well under 1 minute). If
+`go build -x` after step 1 shows it recompiling dependencies on a trivial edit, the cache is being
+discarded — steps 2 and 3 fix that. (Note: a slow build is an *environment* problem that follows
+the machine, not the language — switching stacks would not fix it; e.g. a Rust/Tauri cold build is
+itself multi-minute.)
+
 ### "windows.h file not found" on macOS
 This happens when trying to cross-compile with CGO enabled. Use one of the alternative methods above.
 

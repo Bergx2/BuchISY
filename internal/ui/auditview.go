@@ -80,22 +80,24 @@ func (a *App) showAuditLog() {
 	tbl := widget.NewTable(
 		func() (int, int) { return rowCount, 4 },
 		func() fyne.CanvasObject {
-			lbl := widget.NewLabel("")
-			lbl.Wrapping = fyne.TextTruncate
-			return lbl
+			// newHoverLabel already sets Truncation = fyne.TextTruncateEllipsis.
+			return newHoverLabel(nil, nil)
 		},
 		func(id widget.TableCellID, o fyne.CanvasObject) {
-			lbl := o.(*widget.Label)
+			hl := o.(*hoverLabel)
+			// CRITICAL: cells are recycled — reset tooltip on every update.
+			// The original callback set no TextStyle or Alignment, so no resets needed.
+			hl.tooltip = ""
 			e := safeGet(id.Row)
 			switch id.Col {
 			case 0:
-				lbl.SetText(e.TS)
+				hl.SetText(e.TS)
 			case 1:
-				lbl.SetText(actionLabel(e.Aktion))
+				hl.SetText(actionLabel(e.Aktion))
 			case 2:
-				lbl.SetText(e.Schluessel)
+				hl.SetText(e.Schluessel)
 			case 3:
-				lbl.SetText(e.Details)
+				hl.SetText(e.Details)
 			}
 		},
 	)

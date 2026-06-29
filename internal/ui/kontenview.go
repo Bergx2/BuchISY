@@ -233,61 +233,48 @@ func (a *App) autoFillNewStatements(folder string, names []string) {
 	}()
 }
 
-// viewToggleButtons returns the Belege / Konten toggle pair, with the
-// currently active mode rendered as HighImportance so it visually
-// stands out. The Konten button opens a popup of configured
-// Zahlungskonten — picking one switches into that account's statement
-// view.
-func (a *App) viewToggleButtons() (*widget.Button, *widget.Button) {
-	belegeBtn := widget.NewButtonWithIcon("Belege", theme.DocumentIcon(), func() {
-		a.viewMode = ""
-		a.window.SetContent(a.buildUI())
-	})
+// switchToBelege returns to the Belege (invoice) view. Triggered from the
+// workflow sidebar's "Belege" entry.
+func (a *App) switchToBelege() {
+	a.viewMode = ""
+	a.window.SetContent(a.buildUI())
+}
 
-	var kontenBtn *widget.Button
-	kontenBtn = widget.NewButtonWithIcon("Konten ▾", theme.AccountIcon(), func() {
-		accounts := a.bankAccountOptionList()
-		if len(accounts) == 0 {
-			dialog.ShowInformation("Konten",
-				"Noch kein Zahlungskonto konfiguriert.\n"+
-					"Bitte in den Einstellungen anlegen.",
-				a.window)
-			return
-		}
-		// Custom popup with full-width buttons — fyne's NewMenuItem
-		// popup truncated long account names like "KSMSE …0712 Sparkasse".
-		var pop *widget.PopUp
-		list := container.NewVBox()
-		for _, name := range accounts {
-			n := name
-			btn := widget.NewButton(n, func() {
-				if pop != nil {
-					pop.Hide()
-				}
-				a.kontenAccount = n
-				a.viewMode = "konten"
-				a.window.SetContent(a.buildUI())
-			})
-			btn.Alignment = widget.ButtonAlignLeading
-			btn.Importance = widget.LowImportance
-			list.Add(btn)
-		}
-		pop = widget.NewPopUp(list, a.window.Canvas())
-		pop.Show()
-		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(kontenBtn)
-		pos.Y += kontenBtn.Size().Height
-		pop.Move(pos)
-	})
-
-	// Active mode uses HighImportance — picks up the per-mode accent
-	// (Belege-blue / Konten-green) automatically via the theme.
-	switch a.viewMode {
-	case "konten":
-		kontenBtn.Importance = widget.HighImportance
-	default:
-		belegeBtn.Importance = widget.HighImportance
+// openKontenPicker shows a popup listing the configured Zahlungskonten;
+// picking one switches into that account's statement view. Triggered from
+// the workflow sidebar's "Konten" entry. The sidebar has no anchor button,
+// so the popup is shown as a modal centered on the window canvas.
+func (a *App) openKontenPicker() {
+	accounts := a.bankAccountOptionList()
+	if len(accounts) == 0 {
+		dialog.ShowInformation("Konten",
+			"Noch kein Zahlungskonto konfiguriert.\n"+
+				"Bitte in den Einstellungen anlegen.",
+			a.window)
+		return
 	}
-	return belegeBtn, kontenBtn
+	// Custom popup with full-width buttons — fyne's NewMenuItem popup
+	// truncated long account names like "KSMSE …0712 Sparkasse".
+	var pop *widget.PopUp
+	list := container.NewVBox()
+	for _, name := range accounts {
+		n := name
+		btn := widget.NewButton(n, func() {
+			if pop != nil {
+				pop.Hide()
+			}
+			a.kontenAccount = n
+			a.viewMode = "konten"
+			a.window.SetContent(a.buildUI())
+		})
+		btn.Alignment = widget.ButtonAlignLeading
+		btn.Importance = widget.LowImportance
+		list.Add(btn)
+	}
+	// Modal popup auto-centers on the canvas — the sidebar has no button to
+	// anchor against, so we don't position it manually.
+	pop = widget.NewModalPopUp(list, a.window.Canvas())
+	pop.Show()
 }
 
 // statementFolder returns the per-account root folder used to store
@@ -553,9 +540,6 @@ func (a *App) listStatements(accountName string) []string {
 	return out
 }
 
-// buildKontenUI builds the bank-statement browser view: top bar with
-// the toggle, an account selector and an upload button; main area is
-// an HSplit of the statement list + the document preview.
 // accountRichLabel renders a payment account for the Konten picker as
 // "<full name> · <SKR-Konto> <Kontoname>", so both the full account name and
 // the booking account number are visible. Falls back to the plain name when no
@@ -577,13 +561,16 @@ func (a *App) accountRichLabel(name string) string {
 	return name
 }
 
-func (a *App) buildKontenUI() fyne.CanvasObject {
+// buildKontenContent builds the bank-statement browser BODY only: the
+// account picker, the Konten-specific action buttons (upload / auto-fill /
+// missing receipts) and the statement list + preview split. It returns NO
+// chrome — the outer shell (buildUI) provides the period header, sidebar,
+// view switching and status bar — so nothing double-renders.
+func (a *App) buildKontenContent() fyne.CanvasObject {
 	accounts := a.bankAccountOptionList()
 	if a.kontenAccount == "" && len(accounts) > 0 {
 		a.kontenAccount = accounts[0]
 	}
-
-	belegeBtn, kontenBtn := a.viewToggleButtons()
 
 	// Account picker: chip row when ≤ 6 accounts (quick visual switch),
 	// dropdown fallback above that count to avoid wrapping.
@@ -634,10 +621,6 @@ func (a *App) buildKontenUI() fyne.CanvasObject {
 		wide := container.NewGridWrap(fyne.NewSize(460, accountSelect.MinSize().Height), accountSelect)
 		accountPicker = container.NewHBox(widget.NewLabel("Konto:"), wide)
 	}
-
-	settingsBtn := widget.NewButton(a.bundle.T("menu.settings"), func() {
-		a.showSettingsView()
-	})
 
 	// Body — fileList + preview HSplit. Built per render so reload
 	// after upload picks up the new file.
@@ -698,9 +681,12 @@ func (a *App) buildKontenUI() fyne.CanvasObject {
 		})
 	missingBtn.Importance = widget.LowImportance
 
-	topBar := container.NewBorder(nil, nil,
-		container.NewHBox(belegeBtn, kontenBtn, widget.NewSeparator(), accountPicker),
-		container.NewHBox(missingBtn, autoFillAllBtn, uploadBtn, widget.NewSeparator(), settingsBtn))
+	// Content-local header: account picker on the left, the three
+	// Konten-specific actions on the right. No view toggles, no global
+	// settings gear — those live in the outer shell.
+	contentHeader := container.NewBorder(nil, nil,
+		accountPicker,
+		container.NewHBox(missingBtn, autoFillAllBtn, uploadBtn))
 
 	switch {
 	case len(accounts) == 0:
@@ -717,13 +703,13 @@ func (a *App) buildKontenUI() fyne.CanvasObject {
 		body = emptyState(
 			theme.AccountIcon(),
 			"Bitte ein Konto wählen",
-			"Klick oben auf 'Konten ▾' um ein Zahlungskonto zu öffnen.",
+			"Wähle links in der Seitenleiste unter 'Buchen' ein Konto, oder öffne 'Konten (Bank)'.",
 			nil)
 	default:
 		body = a.buildKontenSplit()
 	}
 
-	return container.NewBorder(topBar, a.buildKontenStatusBar(), nil, nil, body)
+	return container.NewBorder(contentHeader, nil, nil, nil, body)
 }
 
 // buildStatementStats renders three small stat cards above the
@@ -788,26 +774,6 @@ func (a *App) buildStatementStats(metaMap core.StatementMetadataMap, all []strin
 		statCard("Zeitraum gesamt", period),
 		statCard("Letzter Endsaldo", closing),
 	)
-}
-
-// buildKontenStatusBar mirrors the Belege footer: profile + account +
-// statement count for constant orientation.
-func (a *App) buildKontenStatusBar() fyne.CanvasObject {
-	prof := a.profile
-	if prof == "" {
-		prof = "—"
-	}
-	acct := a.kontenAccount
-	if acct == "" {
-		acct = "—"
-	}
-	count := len(a.listStatements(a.kontenAccount))
-	text := fmt.Sprintf("  %s   •   %s   •   %d Kontoauszüge", prof, acct, count)
-	lbl := newCopyableLabel(a.bundle, text)
-
-	bg := canvas.NewRectangle(cardBackgroundColor())
-	bar := container.NewStack(bg, container.NewPadded(lbl))
-	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, bar)
 }
 
 // kontenColumn describes one column of the Konten statement table.

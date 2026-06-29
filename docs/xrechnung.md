@@ -1,8 +1,19 @@
 # XRechnung and ZUGFeRD Integration
 
+> **Status:** Historical design/background note. Do **not** use this file as the rebuild contract.
+> Current behavior is specified in `docs/FUNCTIONAL_SPEC.md`, section "Capture & Extraction".
+>
+> Current implementation limits:
+> - Detects XML attachments in PDFs via `pdfcpu`.
+> - Parses CII (`CrossIndustryInvoice`) only.
+> - Does not parse UBL XRechnung.
+> - Maps only the documented invoice header/tax totals; line items are not imported.
+> - Uses only the first `ApplicableTradeTax` entry for legacy VAT fields and does not build `TaxLines` from CII.
+> - Returns confidence `1.0` for successfully parsed structured XML.
+
 ## Overview
 
-This document describes the integration of **XRechnung** and **ZUGFeRD** structured electronic invoice formats into BuchISY. These formats embed machine-readable XML data directly into PDF files, allowing for perfect data extraction without OCR, text parsing, or AI inference.
+This document describes the integration of **XRechnung** and **ZUGFeRD** structured electronic invoice formats into BuchISY. These formats embed machine-readable XML data directly into PDF files, allowing structured extraction without OCR, text parsing, or AI inference when the supported CII fields are present.
 
 ## What are XRechnung and ZUGFeRD?
 
@@ -11,7 +22,7 @@ This document describes the integration of **XRechnung** and **ZUGFeRD** structu
 **XRechnung** is the German standard for electronic invoices (e-invoicing) in public procurement.
 
 - **Specification**: Based on EU standard EN 16931
-- **Format**: CII (Cross Industry Invoice) XML embedded in PDF
+- **Format in this implementation**: CII (Cross Industry Invoice) XML embedded in PDF. UBL XRechnung exists in the real world but is not parsed by BuchISY today.
 - **Mandatory**: Required for invoices to German government entities since November 2020
 - **Scope**: B2G (Business-to-Government) primarily, increasingly B2B
 - **Standard**: Semantic data model with strict validation rules
@@ -64,7 +75,7 @@ PDF File
 
 ### XML Structure
 
-Both formats use CII (Cross Industry Invoice) XML schema based on UN/CEFACT standards:
+The current BuchISY parser supports CII (Cross Industry Invoice) XML based on UN/CEFACT structures:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -268,10 +279,9 @@ internal/core/
                          # - CII XML struct definitions
                          # - mapToMeta() - XML to Meta mapping
 
-testdata/                # TODO: Add test files
-├── xrechnung_sample.pdf
-├── zugferd_basic.pdf
-└── zugferd_comfort.pdf
+sample-pdfs/
+├── XRECHNUNG_Einfach.pdf
+└── ZUGFeRD-Example.pdf
 ```
 
 ## Testing Strategy
@@ -301,15 +311,16 @@ testdata/                # TODO: Add test files
 
 ### Sample Files
 
-Obtain test files from:
-- https://www.xrechnung.de/downloads - Official XRechnung samples
-- https://www.ferd-net.de/standards/zugferd-2.2/ - ZUGFeRD samples
-- Generate own test invoices using free tools
+Current repository samples:
+- `sample-pdfs/XRECHNUNG_Einfach.pdf`
+- `sample-pdfs/ZUGFeRD-Example.pdf`
+
+Additional samples should include CII, UBL, Factur-X/ZUGFeRD profiles, malformed XML, multiple tax rates, credit notes, and foreign currency. UBL samples should currently be expected to fail or produce blank metadata unless UBL support is implemented.
 
 ## Benefits
 
 ### For Users
-- ✅ **Perfect Accuracy**: No OCR errors, no AI hallucinations
+- **Structured Data**: Avoids OCR errors and AI hallucinations for supported CII fields
 - ✅ **Instant Processing**: No API latency (< 50ms vs. 2-5s for Claude)
 - ✅ **Cost Savings**: No Claude API usage for e-invoices
 - ✅ **Future-Proof**: German B2G mandatory, B2B increasing adoption
@@ -320,12 +331,9 @@ Obtain test files from:
 - ✅ **Reduced Load**: Fewer Claude API calls
 - ✅ **Compliance**: Ready for mandatory e-invoicing requirements
 
-## Adoption Timeline in Germany
+## Legal Context
 
-- **2020**: XRechnung mandatory for B2G (government invoices)
-- **2025**: E-invoicing becomes mandatory for B2B transactions (planned)
-- **Current**: ZUGFeRD widely adopted voluntarily in B2B sector
-- **Trend**: Increasing adoption, especially among larger companies
+German e-invoicing rules change over time. Treat this file as technical background only; verify current legal obligations from official BMF / KoSIT / FeRD sources before making product or compliance claims.
 
 ## Future Enhancements
 
@@ -360,8 +368,8 @@ Obtain test files from:
 - [x] Add date format conversion (YYYYMMDD → DD.MM.YYYY)
 - [x] Integrate into `app.go` extraction pipeline
 - [x] Add logging for format detection
-- [ ] Write unit tests with sample files
-- [ ] Test fallback to text/vision extraction
+- [ ] Add automated tests using `sample-pdfs/`
+- [ ] Test fallback to text/vision extraction after e-invoice extraction failure
 - [ ] Update UI to show e-invoice indicator (optional)
 - [ ] Performance benchmark vs. existing methods
 - [ ] Documentation in user manual

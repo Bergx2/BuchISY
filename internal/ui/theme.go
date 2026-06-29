@@ -69,6 +69,18 @@ func (t *buchisyTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant
 	if name == theme.ColorNamePrimary && t.accent != nil {
 		return t.accent
 	}
+	switch name {
+	case theme.ColorNameBackground:
+		if variant == theme.VariantDark {
+			return color.NRGBA{R: 24, G: 26, B: 30, A: 255}
+		}
+		return color.NRGBA{R: 250, G: 250, B: 252, A: 255}
+	case theme.ColorNameSeparator:
+		if variant == theme.VariantDark {
+			return color.NRGBA{R: 255, G: 255, B: 255, A: 24}
+		}
+		return color.NRGBA{R: 0, G: 0, B: 0, A: 22}
+	}
 	return t.Theme.Color(name, variant)
 }
 
@@ -84,6 +96,18 @@ func (t *buchisyTheme) SetScale(s float32) {
 	t.scale = clampUIScale(s)
 }
 
+// Font returns Inter for all non-monospace styles; falls back to the
+// default theme for monospace (e.g. code blocks).
+func (t *buchisyTheme) Font(style fyne.TextStyle) fyne.Resource {
+	if style.Monospace {
+		return t.Theme.Font(style)
+	}
+	if style.Bold {
+		return resourceInterBoldTtf
+	}
+	return resourceInterRegularTtf
+}
+
 func (t *buchisyTheme) Size(name fyne.ThemeSizeName) float32 {
 	var base float32
 	switch name {
@@ -91,6 +115,12 @@ func (t *buchisyTheme) Size(name fyne.ThemeSizeName) float32 {
 		base = 20
 	case theme.SizeNameScrollBarSmall:
 		base = 10
+	case theme.SizeNamePadding:
+		base = 5
+	case theme.SizeNameInnerPadding:
+		base = 7
+	case theme.SizeNameSeparatorThickness:
+		base = 1
 	default:
 		base = t.Theme.Size(name)
 	}

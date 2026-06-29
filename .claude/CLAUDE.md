@@ -19,6 +19,7 @@ It is deliberately a **Vorsystem**: capture, book, lock, file VAT, and export a 
 - **Vision extraction:** Claude Vision API for scanned PDFs (platform-specific rendering)
 - **E-Invoice support:** XRechnung and ZUGFeRD (CII) structured data extraction
 - **Multiple ingest paths:** drag-and-drop, clipboard paste, batch picker, watched scan inbox
+- **PDFs and images:** receipts can be PDF or image (JPG/PNG/GIF/WebP); document preview pane with zoom/pan/highlights
 - **Smart organization:** Automatic file naming and month-based folder structure (YYYY-MM)
 
 **Bookkeeping & tax**
@@ -26,7 +27,8 @@ It is deliberately a **Vorsystem**: capture, book, lock, file VAT, and export a 
 - **VAT filings:** UStVA (official ELSTER Kennzahlen, PDF + XML), ZM (PDF + XML)
 - **Reports:** SuSa, GuV, OPOS (aging), Controlling, year overview
 - **Fixed assets (Anlagen):** linear AfA, Anlagenspiegel; **Kassenbuch:** per-Barkasse cash book
-- **Bank import:** CAMT.053 + MT940 with Belegabgleich/Erlös-Abgleich reconciliation
+- **Bank import:** CAMT.053 + MT940 + PDF/Qonto statements; Konten view + Belegabgleich/Erlös-Abgleich
+- **Reports/PDF:** Belegliste, Rechnungsausgangsbuch, Buchungsjournal, Kassenbericht, cash-year overview, Verfahrensdokumentation
 
 **GoBD & data**
 - **SQLite database:** Single source of truth (tables: `invoices`, `audit_log`, `period_locks`)
@@ -87,7 +89,7 @@ buchisy/
 │   │   ├── schema.go       # Database schema and indexes
 │   │   ├── migration.go    # Schema migrations
 │   │   ├── export.go       # CSV export from database
-│   │   ├── maintenance.go  # Vacuum, wipe, backup operations
+│   │   ├── maintenance.go  # Wipe/delete DB, re-book foreign→EUR (backup is in core/)
 │   │   └── paths.go        # Database path utilities
 │   ├── anthropic/          # Claude API integration
 │   │   ├── extractor.go    # Metadata extraction via Claude (text + vision)
@@ -255,9 +257,10 @@ buchisy/
   - Called automatically after every change
 
 - **Maintenance (`maintenance.go`)**: Database maintenance
-  - Vacuum (optimize database)
-  - Wipe (delete all data)
-  - Backup operations
+  - `WipeDatabase` (delete all rows)
+  - `DeleteDatabase` (remove the DB file)
+  - `RebookForeignToEUR` (idempotent re-booking of foreign-currency receipts to EUR)
+  - (Backup is NOT here — it lives in `core/backup.go` → `WriteBackupZip`, surfaced via `ui/backup.go`)
 
 - **Paths (`paths.go`)**: Database path utilities
   - Global database path: `~/Library/Application Support/BuchISY/invoices.db`
@@ -591,4 +594,6 @@ invoice organizer into a GoBD-compliant bookkeeping pre-system. Highlights:
 - **Releases:** [GitHub Releases](https://github.com/Bergx2/BuchISY/releases)
 - **Contributing:** See [CONTRIBUTING.md](../CONTRIBUTING.md)
 - **Code of Conduct:** See [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)
+- **Functional spec (for rebuild on any stack):** See [docs/FUNCTIONAL_SPEC.md](../docs/FUNCTIONAL_SPEC.md) — IST-exact data model, formulas, file formats, and algorithms
+- **Changelog:** See [CHANGELOG.md](../CHANGELOG.md)
 - **Company:** [Bergx2 GmbH](https://www.bergx2.de)

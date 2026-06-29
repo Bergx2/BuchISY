@@ -21,20 +21,24 @@ func (a *App) showControllingDialog() {
 	makeTable := func(sums []core.AccountSum) *widget.Table {
 		t := widget.NewTable(
 			func() (int, int) { return len(sums), 3 },
-			func() fyne.CanvasObject { return widget.NewLabel("") },
+			func() fyne.CanvasObject { return newHoverLabel(nil, nil) },
 			func(id widget.TableCellID, o fyne.CanvasObject) {
-				lbl := o.(*widget.Label)
+				hl := o.(*hoverLabel)
+				// CRITICAL: cells are recycled — reset tooltip on every update.
+				// The original callback set Alignment per column but not TextStyle,
+				// so we only reset Alignment (no bold rows in this table).
+				hl.tooltip = ""
 				s := sums[id.Row]
 				switch id.Col {
 				case 0:
-					lbl.Alignment = fyne.TextAlignLeading
-					lbl.SetText(fmt.Sprintf("%d", s.Konto))
+					hl.Alignment = fyne.TextAlignLeading
+					hl.SetText(fmt.Sprintf("%d", s.Konto))
 				case 1:
-					lbl.Alignment = fyne.TextAlignLeading
-					lbl.SetText(s.Name)
+					hl.Alignment = fyne.TextAlignLeading
+					hl.SetText(s.Name)
 				default:
-					lbl.Alignment = fyne.TextAlignTrailing
-					lbl.SetText(formatMoney(s.Summe, "EUR", a.settings.DecimalSeparator))
+					hl.Alignment = fyne.TextAlignTrailing
+					hl.SetText(formatMoney(s.Summe, "EUR", a.settings.DecimalSeparator))
 				}
 			},
 		)
@@ -50,9 +54,9 @@ func (a *App) showControllingDialog() {
 
 	// Section labels and totals — created once, refreshed via reload.
 	einnahmenLabel := widget.NewLabelWithStyle(a.bundle.T("controlling.einnahmen"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	einnahmenTotal := widget.NewLabel("")
+	einnahmenTotal := newCopyableLabel(a.bundle, "")
 	ausgabenLabel := widget.NewLabelWithStyle(a.bundle.T("controlling.ausgaben"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	ausgabenTotal := widget.NewLabel("")
+	ausgabenTotal := newCopyableLabel(a.bundle, "")
 	saldoLabel := widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	// The two section tables; replaced on each reload.

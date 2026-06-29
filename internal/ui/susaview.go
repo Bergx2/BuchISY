@@ -42,17 +42,19 @@ func (a *App) showSuSa() {
 
 	tbl := widget.NewTable(
 		func() (int, int) { return totalRows, 5 },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func() fyne.CanvasObject { return newHoverLabel(nil, nil) },
 		func(id widget.TableCellID, o fyne.CanvasObject) {
-			lbl := o.(*widget.Label)
-			lbl.TextStyle = fyne.TextStyle{}
-			lbl.Alignment = fyne.TextAlignLeading
+			hl := o.(*hoverLabel)
+			// CRITICAL: cells are recycled — reset every style field on every update.
+			hl.tooltip = ""
+			hl.TextStyle = fyne.TextStyle{}
+			hl.Alignment = fyne.TextAlignLeading
 
 			// Header row
 			if id.Row == 0 {
-				lbl.TextStyle = fyne.TextStyle{Bold: true}
+				hl.TextStyle = fyne.TextStyle{Bold: true}
 				if id.Col < len(headers) {
-					lbl.SetText(headers[id.Col])
+					hl.SetText(headers[id.Col])
 				}
 				return
 			}
@@ -61,21 +63,21 @@ func (a *App) showSuSa() {
 
 			// Totals row
 			if dataIdx == len(bals) {
-				lbl.TextStyle = fyne.TextStyle{Bold: true}
+				hl.TextStyle = fyne.TextStyle{Bold: true}
 				switch id.Col {
 				case 0:
-					lbl.SetText(a.bundle.T("susa.total"))
+					hl.SetText(a.bundle.T("susa.total"))
 				case 1:
-					lbl.SetText("")
+					hl.SetText("")
 				case 2:
-					lbl.Alignment = fyne.TextAlignTrailing
-					lbl.SetText(fmtAmt(totalSoll))
+					hl.Alignment = fyne.TextAlignTrailing
+					hl.SetText(fmtAmt(totalSoll))
 				case 3:
-					lbl.Alignment = fyne.TextAlignTrailing
-					lbl.SetText(fmtAmt(totalHaben))
+					hl.Alignment = fyne.TextAlignTrailing
+					hl.SetText(fmtAmt(totalHaben))
 				case 4:
-					lbl.Alignment = fyne.TextAlignTrailing
-					lbl.SetText(fmtAmt(totalSaldo))
+					hl.Alignment = fyne.TextAlignTrailing
+					hl.SetText(fmtAmt(totalSaldo))
 				}
 				return
 			}
@@ -83,18 +85,18 @@ func (a *App) showSuSa() {
 			b := bals[dataIdx]
 			switch id.Col {
 			case 0:
-				lbl.SetText(fmt.Sprintf("%d", b.Konto))
+				hl.SetText(fmt.Sprintf("%d", b.Konto))
 			case 1:
-				lbl.SetText(b.Name)
+				hl.SetText(b.Name)
 			case 2:
-				lbl.Alignment = fyne.TextAlignTrailing
-				lbl.SetText(fmtAmt(b.SollSumme))
+				hl.Alignment = fyne.TextAlignTrailing
+				hl.SetText(fmtAmt(b.SollSumme))
 			case 3:
-				lbl.Alignment = fyne.TextAlignTrailing
-				lbl.SetText(fmtAmt(b.HabenSumme))
+				hl.Alignment = fyne.TextAlignTrailing
+				hl.SetText(fmtAmt(b.HabenSumme))
 			case 4:
-				lbl.Alignment = fyne.TextAlignTrailing
-				lbl.SetText(fmtAmt(b.Saldo))
+				hl.Alignment = fyne.TextAlignTrailing
+				hl.SetText(fmtAmt(b.Saldo))
 			}
 		},
 	)

@@ -1,4 +1,4 @@
-﻿// Package ui provides the Fyne-based user interface for BuchISY.
+// Package ui provides the Fyne-based user interface for BuchISY.
 package ui
 
 import (
@@ -57,10 +57,10 @@ type App struct {
 	assetsPath         string
 
 	// Current state
-	currentYear    int
-	currentMonth   time.Month
-	viewWholeYear  bool
-	cashUncovered  map[string]bool // Dateiname → not covered; recomputed each loadInvoices
+	currentYear   int
+	currentMonth  time.Month
+	viewWholeYear bool
+	cashUncovered map[string]bool // Dateiname → not covered; recomputed each loadInvoices
 
 	// Main-view mode: "" / "belege" → invoice table (default), "konten"
 	// → bank-statement browser per Zahlungskonto.
@@ -85,8 +85,8 @@ type App struct {
 	profile      string
 
 	// Zoom feedback overlay (Task 1)
-	scalePopup  *widget.PopUp
-	scaleTimer  *time.Timer
+	scalePopup *widget.PopUp
+	scaleTimer *time.Timer
 
 	// Dismissed config-hint banners (Task 2): keyed by hint i18n key.
 	// Hints dismissed with ✕ stay hidden for the session.
@@ -96,6 +96,14 @@ type App struct {
 	// the empty-state; swapped after every loadInvoices() call.
 	centerWrapper *fyne.Container
 	emptyState    fyne.CanvasObject
+
+	// periodHeaderWrap / statusBarWrap are single-slot Stack containers that
+	// wrap the period header and status bar in the main shell. They are
+	// stored so that onMonthChanged can swap their inner content without a
+	// full buildUI rebuild (which would cause an infinite loop via
+	// SetSelected → OnChanged → onMonthChanged → buildUI → SetSelected …).
+	periodHeaderWrap *fyne.Container
+	statusBarWrap    *fyne.Container
 
 	// stepInProgress guards stepMonth from being double-triggered by the
 	// yearSelect/monthSelect OnChanged callbacks firing during SetSelected.
@@ -317,6 +325,7 @@ func (a *App) startProfile(profile string) {
 	a.window.CenterOnScreen()
 
 	a.window.SetContent(a.buildUI())
+	a.window.SetMainMenu(a.buildMainMenu())
 
 	// Start watching the scan-inbox folder for new PDFs.
 	newScanWatcher(a).start()
@@ -656,15 +665,49 @@ func (a *App) saveWindowState() {
 	}
 }
 
-// buildUI constructs the main UI layout. Dispatches to the Konten view
-// when that mode is active; otherwise builds the invoice ("Belege") view.
+// buildUI constructs the main UI layout: ONE outer shell (sidebar + period
+// header + status bar) wrapped around the content for the active mode. The
+// Konten and Belege bodies are built by buildKontenContent / buildBelegeContent
+// — neither builds its own chrome, so there is never any double-rendering.
 func (a *App) buildUI() fyne.CanvasObject {
 	a.applyAccentForMode()
+
+	var content fyne.CanvasObject
 	if a.viewMode == "konten" {
-		a.mainContent = a.buildKontenUI()
-		return a.mainContent
+		content = a.buildKontenContent()
+	} else {
+		content = a.buildBelegeContent()
 	}
-	// Create table first (before top bar, so callbacks don't crash)
+
+	a.periodHeaderWrap = container.NewStack(a.buildPeriodHeader())
+	a.statusBarWrap = container.NewStack(a.buildStatusBar())
+	a.mainContent = container.NewBorder(
+		a.periodHeaderWrap, // top
+		a.statusBarWrap,    // bottom
+		a.buildSidebar(),   // left (fixed width)
+		nil,                // right
+		content,            // center
+	)
+	return a.mainContent
+}
+
+// buildPeriodHeader returns the always-visible Buchungszeitraum strip
+// (year + month controls + lock indicator) plus a settings gear on the
+// right. Shared chrome for both view modes.
+func (a *App) buildPeriodHeader() fyne.CanvasObject {
+	yearWrap, monthControls := a.buildPeriodSelectors()
+	period := container.NewHBox(yearWrap, monthControls, a.lockIndicator())
+	settings := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { a.showSettingsView() })
+	settings.Importance = widget.LowImportance
+	return container.NewBorder(nil, nil, period, settings, nil)
+}
+
+// buildBelegeContent builds the invoice ("Belege") body: the table, the
+// drop handler, config-hint banners, the upload card and filter row, and
+// the empty-state. It does NOT build the period header or status bar —
+// those belong to the outer shell in buildUI.
+func (a *App) buildBelegeContent() fyne.CanvasObject {
+	// Create table first (before the upload card, so callbacks don't crash)
 	a.invoiceTable = NewInvoiceTable(a.bundle, a)
 	a.invoiceTable.SetColumnOrder(a.settings.ColumnOrder)
 	a.invoiceTable.SetDecimalSeparator(a.settings.DecimalSeparator)
@@ -675,10 +718,10 @@ func (a *App) buildUI() fyne.CanvasObject {
 	// conflicts with dialog Escape handlers.
 	a.invoiceTable.RegisterKeyHandler(a.window.Canvas())
 
-	// Top bar (this may trigger callbacks when setting initial values).
-	// It hosts the upload drop field on the left and all other controls
-	// on the right; the table fills the rest of the window.
-	topBar := a.buildTopBar()
+	// Upload card — a real drop-zone: subtle card background, upload icon,
+	// label and the two action buttons. Lives here (Belege capture), not in
+	// the global shell.
+	uploadBox := a.buildUploadCard()
 
 	// OS-level file drops anywhere on the window: in Belege mode they
 	// kick off invoice extraction; in Konten mode they're filed as a
@@ -751,7 +794,7 @@ func (a *App) buildUI() fyne.CanvasObject {
 		)
 		headerObjects = append(headerObjects, row, widget.NewSeparator())
 	}
-	headerObjects = append(headerObjects, topBar, filterRow)
+	headerObjects = append(headerObjects, uploadBox, filterRow)
 	header := container.NewVBox(headerObjects...)
 
 	// Empty-state shown when the selected month has zero invoices.
@@ -777,8 +820,10 @@ func (a *App) buildUI() fyne.CanvasObject {
 	a.centerWrapper = container.NewStack(a.invoiceTable.Container())
 	a.refreshCenterContent() // apply the correct table/empty-state for the initial render
 
-	a.mainContent = container.NewBorder(header, a.buildStatusBar(), nil, nil, a.centerWrapper)
-	return a.mainContent
+	// Belege content: hint banners + upload card + filter row on top, the
+	// table/empty-state below. The outer shell (buildUI) provides the period
+	// header and status bar.
+	return container.NewBorder(header, nil, nil, nil, a.centerWrapper)
 }
 
 // buildStatusBar renders a slim footer with profile + record count
@@ -802,8 +847,13 @@ func (a *App) buildStatusBar() fyne.CanvasObject {
 	}
 	lbl := newCopyableLabel(a.bundle, text)
 
+	hint := widget.NewLabelWithStyle(a.bundle.T("copy.hint"),
+		fyne.TextAlignTrailing, fyne.TextStyle{Italic: true})
+	hint.Importance = widget.LowImportance
+
 	bg := canvas.NewRectangle(cardBackgroundColor())
-	bar := container.NewStack(bg, container.NewPadded(lbl))
+	bar := container.NewStack(bg, container.NewBorder(nil, nil,
+		container.NewPadded(lbl), container.NewPadded(hint)))
 	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, bar)
 }
 
@@ -856,8 +906,11 @@ func (a *App) applyAccentForMode() {
 	a.app.Settings().SetTheme(a.theme)
 }
 
-// buildTopBar creates the top toolbar.
-func (a *App) buildTopBar() fyne.CanvasObject {
+// buildPeriodSelectors constructs the year + month controls (creating
+// a.yearSelect / a.monthSelect) and the prev/next month buttons. It
+// returns the year wrap and the [◀ month ▶] group so callers (the top
+// bar today, the period header later) can place them.
+func (a *App) buildPeriodSelectors() (fyne.CanvasObject, fyne.CanvasObject) {
 	// "Now" markers used to draw a thin border around today's year/month
 	// inside the dropdown popups, regardless of which period is selected.
 	now := time.Now()
@@ -878,6 +931,10 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 		a.onMonthChanged()
 	})
 	a.yearSelect.SetSelected(currentYearStr)
+
+	// Constrain the year select to a tighter width so the 4-digit value
+	// doesn't claim as much horizontal space as the long month names.
+	yearWrap := container.New(fixedWidthLayout{width: 90}, a.yearSelect)
 
 	// Month selector — prepend a "Ganzes Jahr" option that switches the
 	// table to show invoices from all 12 months of the selected year.
@@ -904,59 +961,48 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	})
 	a.monthSelect.SetSelected(currentMonthStr)
 
-	// Wrap month select in a container with minimum width
-	monthContainer := container.NewStack(a.monthSelect)
+	prev := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { a.stepMonth(-1) })
+	prev.Importance = widget.LowImportance
+	next := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { a.stepMonth(1) })
+	next.Importance = widget.LowImportance
+	monthControls := container.NewHBox(prev, container.NewStack(a.monthSelect), next)
+	return yearWrap, monthControls
+}
 
-	// Settings button (always visible — top-right corner with gear icon)
-	settingsBtn := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() {
-		a.showSettingsView()
-	})
-	settingsBtn.Importance = widget.LowImportance
-
-	// Overflow menu — secondary actions tucked behind a three-dot button.
-	overflowBtn := widget.NewButtonWithIcon("", theme.MoreVerticalIcon(), nil)
-	overflowBtn.Importance = widget.LowImportance
-	overflowBtn.OnTapped = func() {
-		menu := fyne.NewMenu("",
-			fyne.NewMenuItem(a.bundle.T("menu.openTarget"), func() { a.openTargetFolder() }),
-			fyne.NewMenuItem("Mehrere Belege importieren…", func() {
-				a.showFilesPicker(func(paths []string) { a.enqueueSubmissions(paths) })
-			}),
-			fyne.NewMenuItem("Kassenbuch", func() { a.showCashBookView() }),
-			fyne.NewMenuItem("CSV-Export", func() { a.showCSVExportDialog() }),
-			fyne.NewMenuItem("Buchungen exportieren", func() { a.showBookingExportDialog() }),
-			fyne.NewMenuItem(a.bundle.T("exportpkg.menu"), func() { a.showExportPackage() }),
-			fyne.NewMenuItem("Controlling", func() { a.showControllingDialog() }),
-			fyne.NewMenuItem(a.bundle.T("autorules.title"), func() { a.showAutoRulesDialog() }),
-			fyne.NewMenuItem("USt-Voranmeldung", func() { a.showUStVADialog() }),
-			fyne.NewMenuItem("Zusammenfassende Meldung", func() { a.showZMDialog() }),
-			fyne.NewMenuItem("Übersicht (Jahr)", func() { a.showYearOverviewDialog() }),
-				fyne.NewMenuItem("Offene Posten", func() { a.showOpenItems() }),
-			fyne.NewMenuItem(a.bundle.T("susa.title"), func() { a.showSuSa() }),
-			fyne.NewMenuItem(a.bundle.T("guv.title"), func() { a.showGuV() }),
-			fyne.NewMenuItem("Belegliste (PDF)", func() { a.showBelegListePDF() }),
-			fyne.NewMenuItem("Änderungsprotokoll", func() { a.showAuditLog() }),
-			fyne.NewMenuItem(a.bundle.T("period.lock"), func() { a.lockCurrentMonth() }),
-			fyne.NewMenuItem(a.bundle.T("period.unlock"), func() { a.unlockCurrentMonth() }),
-			fyne.NewMenuItem("Rechnungsausgangsbuch (PDF)", func() { a.showSalesJournalPDF() }),
-			fyne.NewMenuItem("Belegabgleich", func() { a.showBelegabgleich() }),
-			fyne.NewMenuItem("Erlös-Abgleich", func() { a.showErloesAbgleich() }),
-			fyne.NewMenuItem(a.bundle.T("anlagen.title"), func() { a.showAnlagen() }),
-			fyne.NewMenuItem("Belegnummern neu vergeben", func() { a.renumberBelegnummern() }),
-			fyne.NewMenuItem("Backup erstellen", func() { a.showBackup() }),
-			fyne.NewMenuItem(a.bundle.T("verfahrensdoku.menu"), func() { a.showVerfahrensdokuPDF() }),
-		)
-		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(overflowBtn)
-		pos.Y += overflowBtn.Size().Height
-		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), pos)
+// lockIndicator returns a small label showing the Festschreibung state
+// when the current month is locked, else an empty (invisible) object.
+func (a *App) lockIndicator() fyne.CanvasObject {
+	if !a.currentMonthLocked {
+		return container.NewWithoutLayout()
 	}
+	return widget.NewLabelWithStyle("🔒 "+a.bundle.T("period.locked.indicator"),
+		fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+}
 
-	// Constrain the year select to a tighter width so the 4-digit value
-	// doesn't claim as much horizontal space as the long month names.
-	yearWrap := container.New(fixedWidthLayout{width: 90}, a.yearSelect)
+// showAbout shows the About dialog.
+func (a *App) showAbout() {
+	dialog.ShowInformation(a.bundle.T("menu.about"), a.bundle.T("app.about"), a.window)
+}
 
-	// Upload card — feels like a real drop-zone now: subtle card
-	// background, upload icon, label and the two action buttons.
+// importMultiple opens the multi-file picker and enqueues the picks.
+func (a *App) importMultiple() {
+	a.showFilesPicker(func(paths []string) { a.enqueueSubmissions(paths) })
+}
+
+// showLegend opens the symbol legend via the invoice table. No-op when
+// the table isn't present (e.g. Konten mode).
+func (a *App) showLegend() {
+	if a.invoiceTable == nil {
+		return
+	}
+	a.invoiceTable.ShowLegend()
+}
+
+// buildUploadCard builds the Belege drop-zone card: a subtle card
+// background with an upload icon, label and the paste/open-file buttons.
+// It is Belege capture (not global chrome), so it lives inside
+// buildBelegeContent rather than a top bar.
+func (a *App) buildUploadCard() fyne.CanvasObject {
 	uploadIcon := widget.NewIcon(theme.UploadIcon())
 	uploadLabel := widget.NewLabel(a.bundle.T("dd.upload"))
 	uploadLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -979,37 +1025,12 @@ func (a *App) buildTopBar() fyne.CanvasObject {
 	uploadBg.CornerRadius = 6
 	uploadBoxRaw := container.NewStack(uploadBg, container.NewPadded(uploadInner))
 
-	uploadBox := newContextMenuWrap(uploadBoxRaw, func(e *fyne.PointEvent) {
+	return newContextMenuWrap(uploadBoxRaw, func(e *fyne.PointEvent) {
 		menu := fyne.NewMenu("",
 			fyne.NewMenuItem("Einfügen", func() { a.pasteFromClipboard() }),
 		)
 		widget.ShowPopUpMenuAtPosition(menu, a.window.Canvas(), e.AbsolutePosition)
 	})
-
-	prevMonthBtn := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() {
-		a.stepMonth(-1)
-	})
-	prevMonthBtn.Importance = widget.LowImportance
-	nextMonthBtn := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() {
-		a.stepMonth(1)
-	})
-	nextMonthBtn.Importance = widget.LowImportance
-
-	rightControls := container.NewHBox(
-		yearWrap,
-		widget.NewLabel("-"),
-		prevMonthBtn,
-		monthContainer,
-		nextMonthBtn,
-		widget.NewSeparator(),
-		overflowBtn,
-		settingsBtn,
-	)
-
-	belegeBtn, kontenBtn := a.viewToggleButtons()
-	leftGroup := container.NewHBox(belegeBtn, widget.NewSeparator(), uploadBox, widget.NewSeparator(), kontenBtn)
-
-	return container.NewBorder(nil, nil, leftGroup, rightControls)
 }
 
 // pasteFromClipboard handles two clipboard contents:
@@ -1349,6 +1370,28 @@ func (a *App) onMonthChanged() {
 		a.logger.Info("Month changed to %d-%02d", a.currentYear, a.currentMonth)
 	}
 	a.loadInvoices()
+	// Refresh the period header (lock indicator) and status bar (Belege count
+	// + lock text) in-place. A full buildUI/showMainView rebuild is NOT used
+	// here because that would cause an infinite loop: buildPeriodSelectors
+	// calls SetSelected on the newly-created selects, which fires their
+	// OnChanged callback (Fyne's updateSelected always calls OnChanged), which
+	// calls onMonthChanged again → unbounded recursion.
+	//
+	// Instead we rebuild only the two thin strips and swap their content into
+	// the pre-existing wrapper containers. The stepInProgress guard prevents
+	// the SetSelected calls inside buildPeriodSelectors from re-triggering
+	// onMonthChanged during the rebuild.
+	if a.periodHeaderWrap != nil {
+		prev := a.stepInProgress
+		a.stepInProgress = true
+		a.periodHeaderWrap.Objects = []fyne.CanvasObject{a.buildPeriodHeader()}
+		a.stepInProgress = prev
+		a.periodHeaderWrap.Refresh()
+	}
+	if a.statusBarWrap != nil {
+		a.statusBarWrap.Objects = []fyne.CanvasObject{a.buildStatusBar()}
+		a.statusBarWrap.Refresh()
+	}
 }
 
 // lockCurrentMonth shows a confirmation dialog and then locks the current month,
@@ -1596,7 +1639,7 @@ func (a *App) showGlobalSearch(query string) {
 			a.invoiceTable.FilterEntry().SetText("")
 		}
 
-		// Update selectors using the same label formats as buildTopBar.
+		// Update selectors using the same label formats as buildPeriodSelectors.
 		// Guard with stepInProgress so the OnChanged callbacks don't fire
 		// a second onMonthChanged while SetSelected is running.
 		yearStr := fmt.Sprintf("%d", year)

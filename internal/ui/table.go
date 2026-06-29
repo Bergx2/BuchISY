@@ -483,8 +483,8 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 
 	// Quick-filter chips: instant boolean filters on top of the
 	// free-text search. Click again to clear. Filter + chips live in
-	// the top bar (App.buildTopBar) — the table container itself only
-	// holds the table and the summary row.
+	// the Belege content header (App.buildBelegeContent) — the table
+	// container itself only holds the table and the summary row.
 	it.chipRow = container.NewHBox()
 	it.refreshChips()
 
@@ -510,44 +510,50 @@ func (it *InvoiceTable) ChipRow() *fyne.Container { return it.chipRow }
 // look up what ✓ / ⚠ / ○ mean.
 func (it *InvoiceTable) LegendButton() *widget.Button {
 	return widget.NewButton("?", func() {
-		if it.window == nil {
-			return
-		}
-		title := widget.NewLabelWithStyle(
-			it.bundle.T("legend.title"),
-			fyne.TextAlignLeading,
-			fyne.TextStyle{Bold: true},
-		)
-		// Each row: symbol label + meaning label side by side.
-		row := func(sym, key string) *fyne.Container {
-			symLbl := widget.NewLabelWithStyle(sym, fyne.TextAlignCenter, fyne.TextStyle{})
-			symLbl.Wrapping = fyne.TextWrapOff
-			meanLbl := widget.NewLabel(it.bundle.T(key))
-			meanLbl.Wrapping = fyne.TextWrapWord
-			return container.NewBorder(nil, nil, symLbl, nil, meanLbl)
-		}
-		rows := container.NewVBox(
-			title,
-			widget.NewSeparator(),
-			row("✓", "legend.linked"),
-			row("✓", "legend.cashConfirmed"),
-			row("✓", "legend.cashCovered"),
-			row("⚠", "legend.uncovered"),
-			row("○", "legend.open"),
-			row("✓", "legend.partial"),
-			row("✓", "legend.outgoing"),
-			row("✓", "legend.attachment"),
-		)
-		var popup *widget.PopUp
-		closeBtn := widget.NewButton(it.bundle.T("common.close"), func() {
-			if popup != nil {
-				popup.Hide()
-			}
-		})
-		content := container.NewVBox(rows, widget.NewSeparator(), container.NewCenter(closeBtn))
-		popup = widget.NewModalPopUp(container.NewPadded(content), it.window.Canvas())
-		popup.Show()
+		it.ShowLegend()
 	})
+}
+
+// ShowLegend opens the symbol-legend popup explaining what ✓ / ⚠ / ○
+// mean. Extracted from LegendButton so the global menu can reuse it.
+func (it *InvoiceTable) ShowLegend() {
+	if it.window == nil {
+		return
+	}
+	title := widget.NewLabelWithStyle(
+		it.bundle.T("legend.title"),
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Bold: true},
+	)
+	// Each row: symbol label + meaning label side by side.
+	row := func(sym, key string) *fyne.Container {
+		symLbl := widget.NewLabelWithStyle(sym, fyne.TextAlignCenter, fyne.TextStyle{})
+		symLbl.Wrapping = fyne.TextWrapOff
+		meanLbl := widget.NewLabel(it.bundle.T(key))
+		meanLbl.Wrapping = fyne.TextWrapWord
+		return container.NewBorder(nil, nil, symLbl, nil, meanLbl)
+	}
+	rows := container.NewVBox(
+		title,
+		widget.NewSeparator(),
+		row("✓", "legend.linked"),
+		row("✓", "legend.cashConfirmed"),
+		row("✓", "legend.cashCovered"),
+		row("⚠", "legend.uncovered"),
+		row("○", "legend.open"),
+		row("✓", "legend.partial"),
+		row("✓", "legend.outgoing"),
+		row("✓", "legend.attachment"),
+	)
+	var popup *widget.PopUp
+	closeBtn := widget.NewButton(it.bundle.T("common.close"), func() {
+		if popup != nil {
+			popup.Hide()
+		}
+	})
+	content := container.NewVBox(rows, widget.NewSeparator(), container.NewCenter(closeBtn))
+	popup = widget.NewModalPopUp(container.NewPadded(content), it.window.Canvas())
+	popup.Show()
 }
 
 // refreshChips rebuilds the chip row so the active chip is shown
@@ -1117,6 +1123,19 @@ func joinRowValues(values []string) string {
 	return strings.Join(values, "\t")
 }
 
+// CopySelectedRow returns the currently selected row's values joined by tab,
+// or "" if nothing is selected. Backs the Ctrl+C (ShortcutCopy) handler.
+func (it *InvoiceTable) CopySelectedRow() string {
+	if it.selectedRow < 0 || it.selectedRow >= len(it.filtered) {
+		return ""
+	}
+	vals := make([]string, 0, len(it.columnOrder))
+	for _, colID := range it.columnOrder {
+		vals = append(vals, it.getCellValue(it.selectedRow, colID))
+	}
+	return joinRowValues(vals)
+}
+
 // SelectByDateiname selects and scrolls to the row whose Dateiname
 // matches name. No-op if not found.
 func (it *InvoiceTable) SelectByDateiname(name string) {
@@ -1158,6 +1177,21 @@ func (it *InvoiceTable) RegisterKeyHandler(cv fyne.Canvas) {
 			it.openSelected()
 		case fyne.KeyDelete, fyne.KeyBackspace:
 			it.deleteSelected()
+		}
+	})
+
+	// Ctrl/Cmd+C copies the selected row. Fyne routes copy to the focused
+	// widget first (Entry gets Entry-copy); the table is not Shortcutable,
+	// so it falls through to this canvas handler.
+	// IMPORTANT: canvas.AddShortcut persists on the window canvas across
+	// SetContent, so it would also fire in Konten mode (no invoice table).
+	// Gate on Belege mode + a live table to avoid copying stale rows.
+	cv.AddShortcut(&fyne.ShortcutCopy{}, func(fyne.Shortcut) {
+		if it.app == nil || it.app.viewMode != "" || it.app.invoiceTable != it {
+			return
+		}
+		if s := it.CopySelectedRow(); s != "" {
+			fyne.CurrentApp().Clipboard().SetContent(s)
 		}
 	})
 }

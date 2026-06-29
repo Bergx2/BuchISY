@@ -563,7 +563,7 @@ func (a *App) showBelegabgleich() {
 			}
 			statusLine += "  " + completionText
 
-			statusLbl := widget.NewLabel(statusLine)
+			statusLbl := newCopyableLabel(a.bundle, statusLine)
 			statusLbl.Wrapping = fyne.TextWrapWord
 			vb.Add(statusLbl)
 
@@ -639,7 +639,7 @@ func (a *App) showBelegabgleich() {
 				bruttoStr,
 				coverageHint,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			confirmBtn := widget.NewButton(a.bundle.T("reconcile.cashConfirm"), nil)
@@ -692,7 +692,7 @@ func (a *App) showBelegabgleich() {
 			} else {
 				line += "  " + a.bundle.T("reconcile.cashOk")
 			}
-			cashBox.Add(widget.NewLabel(line))
+			cashBox.Add(newCopyableLabel(a.bundle, line))
 		}
 	}
 
@@ -746,7 +746,7 @@ func (a *App) showBelegabgleich() {
 				bruttoStr,
 				lineDisplay,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			unlinkBtn := widget.NewButton(a.bundle.T("reconcile.unlink"), nil)
@@ -909,7 +909,7 @@ func (a *App) showBelegabgleich() {
 				string(lineRunes),
 				baseName,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			confirmBtn := widget.NewButton(a.bundle.T("reconcile.confirm"), nil)
@@ -1014,7 +1014,7 @@ func (a *App) showBelegabgleich() {
 				string(lineRunes),
 				filePart,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			linkAllBtn := widget.NewButton(a.bundle.T("reconcile.linkAll"), nil)
@@ -1086,7 +1086,7 @@ func (a *App) showBelegabgleich() {
 				strings.Join(lineParts, "  +  "),
 				filePart,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			linkSplitBtn := widget.NewButton(a.bundle.T("reconcile.linkAll"), nil)
@@ -1143,7 +1143,7 @@ func (a *App) showBelegabgleich() {
 				string(lineRunes),
 				baseName,
 			)
-			lbl := widget.NewLabel(rowLabel)
+			lbl := newCopyableLabel(a.bundle, rowLabel)
 			lbl.Wrapping = fyne.TextWrapWord
 
 			confirmBtn := widget.NewButton(a.bundle.T("reconcile.confirm"), nil)
