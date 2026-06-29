@@ -1382,9 +1382,10 @@ func (a *App) onMonthChanged() {
 	// the SetSelected calls inside buildPeriodSelectors from re-triggering
 	// onMonthChanged during the rebuild.
 	if a.periodHeaderWrap != nil {
+		prev := a.stepInProgress
 		a.stepInProgress = true
 		a.periodHeaderWrap.Objects = []fyne.CanvasObject{a.buildPeriodHeader()}
-		a.stepInProgress = false
+		a.stepInProgress = prev
 		a.periodHeaderWrap.Refresh()
 	}
 	if a.statusBarWrap != nil {
