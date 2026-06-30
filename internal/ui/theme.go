@@ -86,6 +86,11 @@ func (t *buchisyTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant
 		if variant != theme.VariantDark {
 			return color.NRGBA{R: 0, G: 0, B: 0, A: 255}
 		}
+	case theme.ColorNameHover:
+		// Light-blue hover tint in light mode (instead of the default grey).
+		if variant != theme.VariantDark {
+			return color.NRGBA{R: 66, G: 133, B: 220, A: 48}
+		}
 	case theme.ColorNameSeparator:
 		if variant == theme.VariantDark {
 			return color.NRGBA{R: 255, G: 255, B: 255, A: 24}

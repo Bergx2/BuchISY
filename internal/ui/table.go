@@ -39,6 +39,31 @@ type hoverLabel struct {
 	lastTooltipPos fyne.Position
 	onTap          func()
 	alwaysTooltip  bool
+	// bg is the cell's background rectangle (data cells only). When set, the
+	// cell draws a light-blue fill + blue frame while hovered. Nil for headers.
+	bg *canvas.Rectangle
+}
+
+// cell hover styling: light-blue fill + blue frame around the hovered cell.
+var (
+	cellHoverFill   = color.NRGBA{R: 198, G: 222, B: 247, A: 255}
+	cellHoverStroke = color.NRGBA{R: 66, G: 120, B: 190, A: 255}
+)
+
+// setHover toggles the hovered look on the cell background (no-op for headers).
+func (hl *hoverLabel) setHover(on bool) {
+	if hl.bg == nil {
+		return
+	}
+	if on {
+		hl.bg.FillColor = cellHoverFill
+		hl.bg.StrokeColor = cellHoverStroke
+		hl.bg.StrokeWidth = 2
+	} else {
+		hl.bg.FillColor = color.Transparent
+		hl.bg.StrokeWidth = 0
+	}
+	hl.bg.Refresh()
 }
 
 func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLabel {
@@ -52,6 +77,7 @@ func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLab
 }
 
 func (hl *hoverLabel) MouseIn(_ *desktop.MouseEvent) {
+	hl.setHover(true) // light-blue fill + frame on the hovered data cell
 	if hl.tooltip == "" || hl.onHover == nil || hl.tooltipShown {
 		return
 	}
@@ -88,6 +114,7 @@ func (hl *hoverLabel) MouseMoved(ev *desktop.MouseEvent) {
 }
 
 func (hl *hoverLabel) MouseOut() {
+	hl.setHover(false) // clear the cell's hover fill + frame
 	hl.tooltipShown = false
 	if hl.onExit != nil {
 		hl.onExit()
@@ -254,9 +281,11 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			return len(it.filtered), len(it.columnOrder) + 2 // +2 for edit + filetype action columns
 		},
 		func() fyne.CanvasObject {
-			// Stack: row-background rectangle (zebra) + hoverLabel on top.
+			// Stack: per-cell background rectangle + hoverLabel on top. The
+			// hoverLabel recolours bg (light-blue fill + frame) while hovered.
 			bg := canvas.NewRectangle(color.Transparent)
 			hl := newHoverLabel(showTooltip, hideTooltip)
+			hl.bg = bg
 			return container.NewStack(bg, hl)
 		},
 		func(id widget.TableCellID, cell fyne.CanvasObject) {
@@ -265,12 +294,10 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			hoverLabel := stack.Objects[1].(*hoverLabel)
 			hoverLabel.TextStyle.Bold = false
 
-			// Zebra: subtle background on every second row.
-			if id.Row%2 == 0 {
-				bg.FillColor = stripeColor()
-			} else {
-				bg.FillColor = color.Transparent
-			}
+			// White (transparent) background — no zebra striping. Also clears any
+			// leftover hover fill/frame from when this recycled cell was hovered.
+			bg.FillColor = color.Transparent
+			bg.StrokeWidth = 0
 			bg.Refresh()
 
 			switch id.Col {

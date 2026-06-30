@@ -997,18 +997,16 @@ func (a *App) buildUploadCard() fyne.CanvasObject {
 	uploadLabel := widget.NewLabel(a.bundle.T("dd.upload"))
 	uploadLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	pasteBtn := widget.NewButtonWithIcon("", theme.ContentPasteIcon(), func() {
-		a.pasteFromClipboard()
-	})
-	pasteBtn.Importance = widget.LowImportance
+	cv := a.window.Canvas()
+	pasteBtn := newTooltipButton(theme.ContentPasteIcon(),
+		"Aus Zwischenablage einfügen (Datei oder Screenshot)", cv,
+		func() { a.pasteFromClipboard() })
+	moreBtn := newTooltipButton(theme.FolderOpenIcon(),
+		"Datei auswählen …", cv,
+		func() { a.selectPDFFiles() })
 
-	moreBtn := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() { a.selectPDFFiles() })
-	moreBtn.Importance = widget.LowImportance
-
-	uploadButtons := container.NewHBox(pasteBtn, moreBtn)
-	uploadInner := container.NewBorder(nil, nil,
-		container.NewHBox(uploadIcon, uploadLabel),
-		uploadButtons)
+	// Icons sit directly after the "Beleg hochladen" label (left-aligned).
+	uploadInner := container.NewHBox(uploadIcon, uploadLabel, pasteBtn, moreBtn)
 	uploadBg := canvas.NewRectangle(cardBackgroundColor())
 	uploadBg.StrokeColor = theme.Color(theme.ColorNameInputBorder)
 	uploadBg.StrokeWidth = 1
