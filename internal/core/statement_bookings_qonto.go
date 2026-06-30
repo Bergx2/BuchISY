@@ -25,26 +25,45 @@ var qontoUSDLineRe = regexp.MustCompile(`USD`)
 // qontoSkipLineRe matches header/footer lines that should be ignored entirely.
 var qontoSkipLineRe = regexp.MustCompile(`^(Kontostand|Eingänge|Ausgänge|Abrechnungstag|Kontoauszüge)`)
 
+// qLine is one source line for the Qonto parser, carrying its page and vertical
+// position (PDF points, top-origin) so bookings can record where they sit — used
+// to highlight the exact booking line on the rendered statement.
+type qLine struct {
+	text string
+	page int
+	top  float64
+}
+
 // parseQontoStatement parses the plain-text content of a Qonto PDF bank statement
 // and returns a slice of StatementBooking. Each transaction starts with a DD/MM date
 // line; the first standalone EUR amount line sets the Betrag. USD lines are ignored.
+// (Text-only entry point — no positions; used by tests. Production uses
+// parseQontoStatementPositioned.)
 func parseQontoStatement(text string) []StatementBooking {
-	// Extract the year from the period header.
 	year := ""
 	if m := qontoPeriodRe.FindStringSubmatch(text); m != nil {
 		year = m[1]
 	}
+	var lines []qLine
+	for _, raw := range strings.Split(text, "\n") {
+		lines = append(lines, qLine{text: strings.TrimRight(raw, "\r")})
+	}
+	return parseQontoCore(lines, year)
+}
 
-	lines := strings.Split(text, "\n")
-
+// parseQontoCore runs the Qonto transaction state machine over positioned source
+// lines. The booking's Page/TopPt come from its DD/MM date line.
+func parseQontoCore(lines []qLine, year string) []StatementBooking {
 	type pending struct {
-		day    string
-		month  string
-		text   string
-		betrag float64
-		credit bool
-		hasAmt bool
+		day     string
+		month   string
+		text    string
+		betrag  float64
+		credit  bool
+		hasAmt  bool
 		lineIdx int
+		page    int
+		top     float64
 	}
 
 	var result []StatementBooking
@@ -58,10 +77,11 @@ func parseQontoStatement(text string) []StatementBooking {
 				date = cur.day + "." + cur.month + "." + year
 			}
 			result = append(result, StatementBooking{
-				Page:          0,
+				Page:          cur.page,
 				LineIdx:       cur.lineIdx,
 				Date:          date,
 				Text:          cur.text,
+				TopPt:         cur.top,
 				Betrag:        cur.betrag,
 				IstGutschrift: cur.credit,
 			})
@@ -69,8 +89,8 @@ func parseQontoStatement(text string) []StatementBooking {
 		cur = nil
 	}
 
-	for _, rawLine := range lines {
-		line := strings.TrimRight(rawLine, "\r")
+	for _, src := range lines {
+		line := src.text
 
 		// Skip header/summary lines.
 		if qontoSkipLineRe.MatchString(strings.TrimSpace(line)) {
@@ -87,6 +107,8 @@ func parseQontoStatement(text string) []StatementBooking {
 				month:   m[2],
 				text:    desc,
 				lineIdx: lineIdx,
+				page:    src.page,
+				top:     src.top,
 			}
 			continue
 		}

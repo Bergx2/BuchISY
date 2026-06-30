@@ -644,11 +644,30 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 				cache[ref.StatementFilename] = parsed
 				lines = parsed
 			}
+			found := false
 			for _, l := range lines {
 				if l.Page == ref.Page && l.LineIdx == ref.LineIdx {
 					out = append(out, l)
+					found = true
 					break
 				}
+			}
+			if found {
+				continue
+			}
+			// Backward-compat: links made before the Qonto parser captured the
+			// real page stored Page=0. Re-find by LineIdx alone when it's unique
+			// in the file, so old links still highlight at the correct position.
+			var cand *core.StatementBooking
+			count := 0
+			for i := range lines {
+				if lines[i].LineIdx == ref.LineIdx {
+					cand = &lines[i]
+					count++
+				}
+			}
+			if count == 1 {
+				out = append(out, *cand)
 			}
 		}
 		return out
@@ -662,18 +681,31 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		isStatement := statementPreviewPath != "" && path == statementPreviewPath
 		if isStatement {
 			hl = hlGreenFrame
-			// Frame each linked booking's amount row (every line of a 1→N split,
-			// on any page). Falls back to the invoice gross when nothing is linked.
-			var vals []string
-			for _, l := range linkedStatementLines() {
-				dot := fmt.Sprintf("%.2f", l.Betrag)
-				vals = append(vals, dot, strings.ReplaceAll(dot, ".", ","))
+			lines := linkedStatementLines()
+			// Prefer exact position bands when the parser captured a position
+			// (e.g. Qonto: page + TopPt). Otherwise fall back to framing the
+			// matched amount row(s).
+			hasPos := false
+			for _, l := range lines {
+				if l.TopPt > 0 {
+					hasPos = true
+					break
+				}
 			}
-			if len(vals) == 0 {
-				dot := fmt.Sprintf("%.2f", core.InvoiceEURAmount(row))
-				vals = []string{dot, strings.ReplaceAll(dot, ".", ",")}
+			if hasPos {
+				hl.statementLines = lines
+			} else {
+				var vals []string
+				for _, l := range lines {
+					dot := fmt.Sprintf("%.2f", l.Betrag)
+					vals = append(vals, dot, strings.ReplaceAll(dot, ".", ","))
+				}
+				if len(vals) == 0 {
+					dot := fmt.Sprintf("%.2f", core.InvoiceEURAmount(row))
+					vals = []string{dot, strings.ReplaceAll(dot, ".", ",")}
+				}
+				hl.values = vals
 			}
-			hl.values = vals
 		}
 		content, strip := renderPreviewContent(path, meta, hl)
 		preview.Objects = []fyne.CanvasObject{content}

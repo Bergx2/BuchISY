@@ -133,6 +133,10 @@ type previewHighlight struct {
 	blockMode   bool     // frame the whole statement booking block (all its lines), not one row
 	rowMode     bool     // frame just the matched statement row(s) (statement coord handling, no block extension)
 	values      []string // when set, search ONLY these (instead of all meta values)
+	// statementLines: when set, frame each booking by its OWN page + Y position
+	// (StatementBooking.Page/TopPt) — exact, no amount search. Used for linked
+	// statement lines whose parser captured a position (e.g. Qonto).
+	statementLines []core.StatementBooking
 }
 
 var (
@@ -162,7 +166,12 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 			searchVals = hl.values // statement: only the booking amount, so a single line is framed
 		}
 		var rectsPerPage [][]core.Rect
+		usedPositions := false
 		switch {
+		case len(hl.statementLines) > 0:
+			// Exact position bands from each booking's page + TopPt (final rects).
+			rectsPerPage = statementPositionRects(images, hl.statementLines, previewDPI)
+			usedPositions = true
 		case hl.rowMode:
 			// Statement: frame just the matched amount row(s), with the same
 			// top-origin/scaled handling the block path uses.
@@ -177,7 +186,8 @@ func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) 
 		// Frame the whole booking (not just the matched value): widen each rect to
 		// the full page width and pad it vertically. A single matched row needs
 		// generous padding; a whole block is already tall, so pad it only lightly.
-		if hl.fullWidth {
+		// Position bands are already final (full-width), so skip this.
+		if hl.fullWidth && !usedPositions {
 			padFrac := float32(0.30)
 			if hl.blockMode || hl.rowMode {
 				// Band already spans the row (gap-centered) — pad only lightly.
@@ -249,6 +259,30 @@ func previewPlaceholder(mainPath, message string) fyne.CanvasObject {
 	name.Truncation = fyne.TextTruncateEllipsis
 	box := container.NewVBox(msg, widget.NewSeparator(), name)
 	return container.NewPadded(container.NewCenter(box))
+}
+
+// statementPositionRects builds a full-width green band on each booking's page
+// at its TopPt (PDF points, top-origin) — go-fitz renders the page at the same
+// origin/scale, so pixelY = TopPt * dpi/72. The band is ~2.5 lines tall to cover
+// the date + amount rows of a Qonto booking. Bookings without a position
+// (TopPt<=0) are skipped (caller falls back to an amount search).
+func statementPositionRects(images []image.Image, lines []core.StatementBooking, dpi float64) [][]core.Rect {
+	out := make([][]core.Rect, len(images))
+	scale := float32(dpi / 72.0)
+	for _, b := range lines {
+		if b.Page < 0 || b.Page >= len(images) || b.TopPt <= 0 {
+			continue
+		}
+		pw := float32(images[b.Page].Bounds().Dx())
+		margin := pw * 0.03
+		y := (float32(b.TopPt) - 4) * scale
+		if y < 0 {
+			y = 0
+		}
+		h := float32(26) * scale
+		out[b.Page] = append(out[b.Page], core.Rect{X: margin, Y: y, W: pw - 2*margin, H: h})
+	}
+	return out
 }
 
 // highlightValues collects the extracted values to look for in the document.

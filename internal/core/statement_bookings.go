@@ -114,10 +114,21 @@ func parseStatementPDF(path string) ([]StatementBooking, error) {
 	fullText := buildPlainTextFromHTML(pageHTMLs)
 
 	// Qonto detection: if the document carries Qonto's columnar layout markers,
-	// use the specialised parser instead of the generic heuristic.
+	// use the specialised parser instead of the generic heuristic. The positioned
+	// variant records each booking's page + Y position so the UI can frame the
+	// exact booking line on the rendered statement.
 	if strings.Contains(fullText, "Qonto") && strings.Contains(fullText, "Abrechnungstag") {
-		bookings := parseQontoStatement(fullText)
-		if len(bookings) >= 1 {
+		year := ""
+		if m := qontoPeriodRe.FindStringSubmatch(fullText); m != nil {
+			year = m[1]
+		}
+		var lines []qLine
+		for page, htmlStr := range pageHTMLs {
+			for _, ln := range extractHTMLLines(htmlStr) {
+				lines = append(lines, qLine{text: ln.text, page: page, top: ln.top})
+			}
+		}
+		if bookings := parseQontoCore(lines, year); len(bookings) >= 1 {
 			return bookings, nil
 		}
 	}
@@ -129,6 +140,48 @@ func parseStatementPDF(path string) ([]StatementBooking, error) {
 		out = append(out, pageBookings...)
 	}
 	return out, nil
+}
+
+// htmlLine is one positioned text run from a MuPDF HTML page.
+type htmlLine struct {
+	top, left float64
+	text      string
+}
+
+// extractHTMLLines pulls the positioned <p> runs out of one MuPDF HTML page,
+// sorted top→bottom then left→right (document order). Shared by the positioned
+// Qonto parser so bookings keep their page + Y position.
+func extractHTMLLines(pageHTML string) []htmlLine {
+	var lines []htmlLine
+	for _, chunk := range splitPTags(pageHTML) {
+		topMatch := pAttrTopRe.FindStringSubmatch(chunk)
+		leftMatch := pAttrLeftRe.FindStringSubmatch(chunk)
+		if topMatch == nil || leftMatch == nil {
+			continue
+		}
+		gt := strings.Index(chunk, ">")
+		end := strings.LastIndex(chunk, "</p>")
+		if gt < 0 || end < 0 || end <= gt {
+			continue
+		}
+		text := chunk[gt+1 : end]
+		text = tagStripRe.ReplaceAllString(text, "")
+		text = html.UnescapeString(text)
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+		top, _ := strconv.ParseFloat(topMatch[1], 64)
+		left, _ := strconv.ParseFloat(leftMatch[1], 64)
+		lines = append(lines, htmlLine{top: top, left: left, text: text})
+	}
+	sort.Slice(lines, func(i, j int) bool {
+		if lines[i].top != lines[j].top {
+			return lines[i].top < lines[j].top
+		}
+		return lines[i].left < lines[j].left
+	})
+	return lines
 }
 
 // buildPlainTextFromHTML converts a slice of MuPDF HTML pages into a single
