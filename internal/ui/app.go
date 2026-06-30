@@ -1824,9 +1824,10 @@ func (a *App) extractPDFData(ctx context.Context, path string, status func(strin
 		a.logger.Warn("E-invoice extraction failed: %v, falling back to text extraction", err)
 	}
 
-	// STEP 2: Extract text from PDF
+	// STEP 2: Extract text from PDF (guarded: the primary parser can hang on
+	// some PDFs, so fall back to go-fitz after a short timeout).
 	step("Text wird aus dem PDF gelesen …")
-	text, err := a.pdfExtractor.ExtractText(path)
+	text, err := a.pdfExtractor.ExtractTextGuarded(path, 12*time.Second)
 	if err != nil {
 		a.logger.Debug("PDF extraction error: %v", err)
 		return core.Meta{}, fmt.Errorf("failed to extract text: %w", err)
