@@ -1776,11 +1776,17 @@ func (a *App) openTargetFolder() {
 
 // extractPDFData extracts metadata from a PDF (safe to call from background thread).
 // Returns Meta and error. UI calls should happen in main thread.
-func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error) {
+func (a *App) extractPDFData(ctx context.Context, path string, status func(string)) (core.Meta, error) {
 	a.logger.Debug("=== PDF EXTRACTION START ===")
 	a.logger.Debug("File: %s", path)
+	step := func(s string) {
+		if status != nil {
+			status(s)
+		}
+	}
 
 	// STEP 1: Check for XRechnung/ZUGFeRD structured data (highest priority)
+	step("E-Rechnung (XRechnung/ZUGFeRD) wird geprüft …")
 	if format, ok := a.eInvoiceExtractor.DetectFormat(path); ok {
 		a.logger.Info("✓ Detected %s format - using structured data extraction", format)
 		meta, confidence, err := a.eInvoiceExtractor.Extract(path)
@@ -1819,6 +1825,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 	}
 
 	// STEP 2: Extract text from PDF
+	step("Text wird aus dem PDF gelesen …")
 	text, err := a.pdfExtractor.ExtractText(path)
 	if err != nil {
 		a.logger.Debug("PDF extraction error: %v", err)
@@ -1840,7 +1847,7 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 		// If using Claude mode, try vision extraction
 		if a.settings.ProcessingMode == "claude" {
 			a.logger.Info("Attempting vision extraction with Claude...")
-			return a.extractPDFWithVision(ctx, path)
+			return a.extractPDFWithVision(ctx, path, status)
 		}
 
 		// For local mode, we can't process images
@@ -1861,18 +1868,22 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 		// Multimodal: send the extracted text together with the rendered page
 		// images, so receipts whose tables are images (POS / SumUp / restaurant
 		// bills) are read too. Falls back to text-only if rendering fails.
+		step("Seiten werden gerendert …")
 		images, mediaType, imgErr := core.PDFAllPagesToBase64(path)
 		if imgErr != nil || len(images) == 0 {
 			a.logger.Warn("Page rendering for multimodal extraction failed (%v); using text only", imgErr)
+			step("An Claude senden — Belegdaten werden erkannt …")
 			meta, confidence, err = a.anthropicExtractor.Extract(ctx, apiKey, a.settings.AnthropicModel, text, a.ownVATIDList()...)
 		} else {
 			a.logger.Info("Multimodal extraction: text + %d page image(s)", len(images))
+			step(fmt.Sprintf("An Claude senden (Text + %d Seite(n)) — Belegdaten werden erkannt …", len(images)))
 			meta, confidence, err = a.anthropicExtractor.ExtractMultimodal(ctx, apiKey, a.settings.AnthropicModel, text, images, mediaType, a.ownVATIDList()...)
 		}
 		if err != nil {
 			return core.Meta{}, fmt.Errorf("claude extraction failed: %w", err)
 		}
 	} else {
+		step("Lokale Analyse (Mustererkennung) …")
 		meta, confidence, err = a.localExtractor.Extract(text)
 		if err != nil {
 			return core.Meta{}, fmt.Errorf("local extraction failed: %w", err)
@@ -1915,9 +1926,12 @@ func (a *App) extractPDFData(ctx context.Context, path string) (core.Meta, error
 }
 
 // extractPDFWithVision extracts metadata from a PDF using Claude's vision API.
-func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta, error) {
+func (a *App) extractPDFWithVision(ctx context.Context, path string, status func(string)) (core.Meta, error) {
 	a.logger.Info("=== PDF VISION EXTRACTION START ===")
 	a.logger.Info("File: %s", path)
+	if status != nil {
+		status("Gescanntes PDF — Seite wird in ein Bild gerendert …")
+	}
 
 	// Convert PDF first page to PNG image
 	imageBase64, mediaType, err := core.PDFToImageBase64(path)
@@ -1935,6 +1949,9 @@ func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta,
 	}
 
 	// Extract using vision API
+	if status != nil {
+		status("Vision-Analyse mit Claude — Belegdaten werden erkannt …")
+	}
 	meta, confidence, err := a.anthropicExtractor.ExtractFromImage(
 		ctx,
 		apiKey,
@@ -1979,10 +1996,13 @@ func (a *App) extractPDFWithVision(ctx context.Context, path string) (core.Meta,
 // extractImageData runs an image file (jpg, png, gif, webp) through the
 // Claude Vision API to pre-fill the invoice form, same JSON contract as
 // the PDF path. Safe to call from a background goroutine.
-func (a *App) extractImageData(ctx context.Context, path string) (core.Meta, error) {
+func (a *App) extractImageData(ctx context.Context, path string, status func(string)) (core.Meta, error) {
 	mediaType := core.ImageMediaType(path)
 	if mediaType == "" {
 		return core.Meta{}, fmt.Errorf("unsupported image type: %s", filepath.Ext(path))
+	}
+	if status != nil {
+		status("Vision-Analyse mit Claude — Belegdaten werden erkannt …")
 	}
 
 	a.logger.Info("=== IMAGE VISION EXTRACTION START === file=%s mediaType=%s",

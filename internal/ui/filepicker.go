@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -13,6 +15,49 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/bergx2/buchisy/internal/core"
 )
+
+// humanSize renders a byte count as "B / KB / MB".
+func humanSize(n int64) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.0f KB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
+}
+
+// newProcessingDialog builds the upload/extraction progress dialog: the file
+// name + size, a live status line (what's happening right now), an infinite
+// progress bar, and a Cancel button. Returns the dialog and a thread-safe
+// status setter to call from the extraction goroutine.
+func (a *App) newProcessingDialog(mainPath string) (*dialog.CustomDialog, func(string)) {
+	fileLbl := widget.NewLabelWithStyle(filepath.Base(mainPath), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	fileLbl.Wrapping = fyne.TextWrapWord
+	sizeStr := "—"
+	if fi, err := os.Stat(mainPath); err == nil {
+		sizeStr = humanSize(fi.Size())
+	}
+	sizeLbl := widget.NewLabel(sizeStr)
+	statusLbl := widget.NewLabel(a.bundle.T("processing.message"))
+	statusLbl.Wrapping = fyne.TextWrapWord
+	content := container.NewVBox(
+		fileLbl,
+		sizeLbl,
+		widget.NewSeparator(),
+		statusLbl,
+		widget.NewProgressBarInfinite(),
+	)
+	dlg := dialog.NewCustom(a.bundle.T("processing.title"), a.bundle.T("btn.cancel"), content, a.window)
+	dlg.Resize(fyne.NewSize(580, 250))
+	setStatus := func(s string) {
+		fyne.Do(func() {
+			statusLbl.SetText(s)
+		})
+	}
+	return dlg, setStatus
+}
 
 // selectPDFFiles shows a custom file picker with search functionality.
 func (a *App) selectPDFFiles() {
@@ -171,17 +216,7 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 		if core.ImageMediaType(mainPath) != "" && a.settings.ProcessingMode == "claude" {
 			ctx, cancel := context.WithCancel(context.Background())
 			var done, canceled atomic.Bool
-			progressBar := widget.NewProgressBarInfinite()
-			progressContent := container.NewVBox(
-				widget.NewLabel(a.bundle.T("processing.message")),
-				progressBar,
-			)
-			progress := dialog.NewCustom(
-				a.bundle.T("processing.title"),
-				a.bundle.T("btn.cancel"),
-				progressContent,
-				a.window,
-			)
+			progress, setStatus := a.newProcessingDialog(mainPath)
 			progress.SetOnClosed(func() {
 				if done.Load() {
 					return
@@ -195,7 +230,7 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 			})
 			progress.Show()
 			go func() {
-				meta, err := a.extractImageData(ctx, mainPath)
+				meta, err := a.extractImageData(ctx, mainPath, setStatus)
 				if canceled.Load() {
 					return
 				}
@@ -228,17 +263,7 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 	// dialog; the goroutine then discards any late result.
 	ctx, cancel := context.WithCancel(context.Background())
 	var done, canceled atomic.Bool
-	progressBar := widget.NewProgressBarInfinite()
-	progressContent := container.NewVBox(
-		widget.NewLabel(a.bundle.T("processing.message")),
-		progressBar,
-	)
-	progress := dialog.NewCustom(
-		a.bundle.T("processing.title"),
-		a.bundle.T("btn.cancel"),
-		progressContent,
-		a.window,
-	)
+	progress, setStatus := a.newProcessingDialog(mainPath)
 	progress.SetOnClosed(func() {
 		if done.Load() {
 			return // dialog closed by us after a normal finish
@@ -253,7 +278,7 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 	progress.Show()
 
 	go func() {
-		meta, err := a.extractPDFData(ctx, mainPath)
+		meta, err := a.extractPDFData(ctx, mainPath, setStatus)
 		if canceled.Load() {
 			return // user aborted; dialog + onComplete already handled
 		}
