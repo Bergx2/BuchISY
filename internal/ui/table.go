@@ -994,11 +994,9 @@ func (it *InvoiceTable) getCellValue(row int, colID string) string {
 
 // formatAmount formats a float with the configured decimal separator.
 func (it *InvoiceTable) formatAmount(amount float64) string {
-	formatted := fmt.Sprintf("%.2f", amount)
-	if it.decimalSeparator == "," {
-		formatted = strings.Replace(formatted, ".", ",", 1)
-	}
-	return formatted
+	// core.FormatAmount adds thousands separators (e.g. "6.300,00") and honours
+	// the decimal separator setting.
+	return core.FormatAmount(amount, it.decimalSeparator)
 }
 
 // formatMoneyCell renders an amount with the ISO currency code before it, e.g.
