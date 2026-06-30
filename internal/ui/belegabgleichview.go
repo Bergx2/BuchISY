@@ -841,6 +841,7 @@ func (a *App) showBelegabgleich() {
 								Page:              top.scored.Line.Page,
 								LineIdx:           top.scored.Line.LineIdx,
 							}.String()
+							fillBezahldatumIfEmpty(&sug.row, top.scored.Line.Date)
 							if err := a.dbRepo.Update(sug.row.Jahr, sug.row.Monat, sug.row.Dateiname, sug.row); err != nil {
 								a.logger.Warn("Belegabgleich bulkConfirm Update %s: %v", sug.row.Dateiname, err)
 							}
@@ -928,6 +929,7 @@ func (a *App) showBelegabgleich() {
 					Page:              chosen.scored.Line.Page,
 					LineIdx:           chosen.scored.Line.LineIdx,
 				}.String()
+				fillBezahldatumIfEmpty(&sug.row, chosen.scored.Line.Date)
 				if err := a.dbRepo.Update(sug.row.Jahr, sug.row.Monat, sug.row.Dateiname, sug.row); err != nil {
 					a.logger.Warn("Belegabgleich confirm Update %s: %v", sug.row.Dateiname, err)
 				}
@@ -1038,6 +1040,7 @@ func (a *App) showBelegabgleich() {
 							continue
 						}
 						r2.BuchungRef = lineRef
+						fillBezahldatumIfEmpty(&r2, grp.Line.Date)
 						if err := a.dbRepo.Update(r2.Jahr, r2.Monat, r2.Dateiname, r2); err != nil {
 							a.logger.Warn("Belegabgleich linkAll Update %s: %v", r2.Dateiname, err)
 						}
@@ -1100,6 +1103,9 @@ func (a *App) showBelegabgleich() {
 					}
 				}
 				invRow.BuchungRef = core.JoinBuchungRefs(refs)
+				if n := len(sm.Lines); n > 0 { // latest debit = settled date
+					fillBezahldatumIfEmpty(&invRow, sm.Lines[n-1].Date)
+				}
 				if err := a.dbRepo.Update(invRow.Jahr, invRow.Monat, invRow.Dateiname, invRow); err != nil {
 					a.logger.Warn("Belegabgleich split link Update %s: %v", invRow.Dateiname, err)
 				}

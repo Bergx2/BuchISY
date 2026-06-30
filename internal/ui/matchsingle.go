@@ -92,6 +92,7 @@ func (a *App) matchInvoiceWithStatement(row core.CSVRow, parent fyne.Window, onL
 				Page:              c.line.Page,
 				LineIdx:           c.line.LineIdx,
 			}.String()
+			fillBezahldatumIfEmpty(&row, c.line.Date)
 			if err := a.dbRepo.Update(row.Jahr, row.Monat, row.Dateiname, row); err != nil {
 				a.showError("Abgleich", err.Error())
 				return
@@ -134,6 +135,9 @@ func (a *App) matchInvoiceWithStatement(row core.CSVRow, parent fyne.Window, onL
 			len(s.lines), strings.Join(parts, " + "), filepath.Base(s.file))
 		linkAllBtn := widget.NewButton("Alle verknüpfen", func() {
 			row.BuchungRef = core.JoinBuchungRefs(refs)
+			if len(s.lines) > 0 { // latest debit = settled date
+				fillBezahldatumIfEmpty(&row, s.lines[len(s.lines)-1].Date)
+			}
 			if err := a.dbRepo.Update(row.Jahr, row.Monat, row.Dateiname, row); err != nil {
 				a.showError("Abgleich", err.Error())
 				return
@@ -161,4 +165,28 @@ func (a *App) matchInvoiceWithStatement(row core.CSVRow, parent fyne.Window, onL
 		container.NewVScroll(box), parent)
 	dlg.Resize(fyne.NewSize(560, 420))
 	dlg.Show()
+}
+
+// fillBezahldatumIfEmpty copies a matched statement line's date into the
+// invoice's Bezahldatum when the form left it blank, so reconciling also
+// records WHEN it was paid — no manual look-up on the statement. A missing
+// year (e.g. "03.03") is completed from the invoice's filing year.
+func fillBezahldatumIfEmpty(row *core.CSVRow, lineDate string) {
+	if strings.TrimSpace(row.Bezahldatum) != "" {
+		return
+	}
+	d := strings.TrimSpace(lineDate)
+	if d == "" {
+		return
+	}
+	parts := strings.Split(d, ".")
+	switch len(parts) {
+	case 2: // "DD.MM"
+		d = parts[0] + "." + parts[1] + "." + row.Jahr
+	case 3:
+		if strings.TrimSpace(parts[2]) == "" { // "DD.MM."
+			d = parts[0] + "." + parts[1] + "." + row.Jahr
+		}
+	}
+	row.Bezahldatum = d
 }
