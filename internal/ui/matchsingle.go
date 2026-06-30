@@ -167,26 +167,58 @@ func (a *App) matchInvoiceWithStatement(row core.CSVRow, parent fyne.Window, onL
 	dlg.Show()
 }
 
-// fillBezahldatumIfEmpty copies a matched statement line's date into the
-// invoice's Bezahldatum when the form left it blank, so reconciling also
-// records WHEN it was paid — no manual look-up on the statement. A missing
-// year (e.g. "03.03") is completed from the invoice's filing year.
-func fillBezahldatumIfEmpty(row *core.CSVRow, lineDate string) {
-	if strings.TrimSpace(row.Bezahldatum) != "" {
-		return
-	}
+// completeStatementDate returns a full DD.MM.YYYY date from a statement line's
+// date, completing a missing year (e.g. "03.03" / "03.03.") from jahr.
+func completeStatementDate(lineDate, jahr string) string {
 	d := strings.TrimSpace(lineDate)
 	if d == "" {
-		return
+		return ""
 	}
 	parts := strings.Split(d, ".")
 	switch len(parts) {
 	case 2: // "DD.MM"
-		d = parts[0] + "." + parts[1] + "." + row.Jahr
+		return parts[0] + "." + parts[1] + "." + jahr
 	case 3:
 		if strings.TrimSpace(parts[2]) == "" { // "DD.MM."
-			d = parts[0] + "." + parts[1] + "." + row.Jahr
+			return parts[0] + "." + parts[1] + "." + jahr
 		}
 	}
-	row.Bezahldatum = d
+	return d
+}
+
+// fillBezahldatumIfEmpty copies a matched statement line's date into the
+// invoice's Bezahldatum when the form left it blank, so reconciling also
+// records WHEN it was paid — no manual look-up on the statement.
+func fillBezahldatumIfEmpty(row *core.CSVRow, lineDate string) {
+	if strings.TrimSpace(row.Bezahldatum) != "" {
+		return
+	}
+	row.Bezahldatum = completeStatementDate(lineDate, row.Jahr)
+}
+
+// findStatementPaymentDate searches the account's statements for a confident
+// (unique amount within the date window) match of row and returns that line's
+// date, completed to DD.MM.YYYY. Used to pre-fill Bezahldatum in the review
+// dialog BEFORE saving. ok=false when there is no single clear match.
+func (a *App) findStatementPaymentDate(bankAccount string, row core.CSVRow) (string, bool) {
+	at := ""
+	for _, ba := range a.settings.BankAccounts {
+		if ba.Name == bankAccount {
+			at = ba.AccountType
+		}
+	}
+	if at != core.AccountTypeBank && at != core.AccountTypeCreditCard {
+		return "", false
+	}
+	cfg := a.matchConfig()
+	for _, name := range a.listStatements(bankAccount) {
+		lines, err := core.ParseStatementBookings(filepath.Join(a.statementFolder(bankAccount), name))
+		if err != nil {
+			continue
+		}
+		if kind, cands := core.MatchInvoiceToStatement(row, lines, cfg); kind == core.MatchAuto && len(cands) > 0 {
+			return completeStatementDate(cands[0].Line.Date, row.Jahr), true
+		}
+	}
+	return "", false
 }

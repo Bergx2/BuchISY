@@ -875,9 +875,16 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	// refreshWarnings and OnChanged chaining are installed after the currency
 	// OnChanged is fully wired below (near updateCurrencyConversionVisibility).
 
+	// Hint shown when the receipt was found on a bank statement and its date was
+	// pre-filled into Bezahldatum (Teil 2: reconcile already at upload time).
+	statementHint := widget.NewLabel("")
+	statementHint.Importance = widget.SuccessImportance
+	statementHint.Wrapping = fyne.TextWrapWord
+	statementHint.Hide()
+
 	// #8: group the source badge, duplicate banner and live warnings into ONE
 	// calm info block at the top (each still shows/hides independently).
-	infoLine := container.NewVBox(quelleLabel, dupBanner, warningsLabel)
+	infoLine := container.NewVBox(quelleLabel, dupBanner, statementHint, warningsLabel)
 	belegnrLabel := newCopyableLabel(a.bundle, belegnrText)
 	belegnrLabel.TextStyle = fyne.TextStyle{Bold: true}
 	formItems := []fyne.CanvasObject{
@@ -1016,6 +1023,48 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 
 	// Initial warnings evaluation.
 	refreshWarnings()
+
+	// Teil 2: try to reconcile against the bank statement ALREADY at upload time,
+	// so the Bezahldatum can be pre-filled before saving (no manual look-up after
+	// the fact). Runs on open and whenever the account or date changes.
+	prefillPaymentFromStatement := func() {
+		acct := bankAccountSelect.Selected
+		if acct == "" {
+			return
+		}
+		matchRow := core.CSVRow{
+			Bruttobetrag:   ed.Brutto(),
+			Gebuehr:        parseFloat(feeEntry.Text, a.settings.DecimalSeparator),
+			Rabatt:         parseFloat(rabattEntry.Text, a.settings.DecimalSeparator),
+			Waehrung:       core.CurrencyCodeFromOption(currencySelect.Selected),
+			Wechselkurs:    parseDecimal(kursEntry.Text),
+			Rechnungsdatum: dateEntry.Text,
+			Bezahldatum:    paymentDateEntry.Text,
+			Auftraggeber:   companyEntry.Text,
+			Jahr:           fmt.Sprintf("%04d", filingYear),
+		}
+		date, ok := a.findStatementPaymentDate(acct, matchRow)
+		if !ok {
+			statementHint.Hide()
+			return
+		}
+		if strings.TrimSpace(paymentDateEntry.Text) == "" {
+			paymentDateEntry.SetText(date) // also triggers recompute via OnChanged
+		}
+		statementHint.SetText("✓ Im Kontoauszug gefunden — Bezahldatum: " + date)
+		statementHint.Show()
+	}
+	prefillPaymentFromStatement()
+
+	// Re-check when the account changes (a Select, not per-keystroke — so it
+	// won't re-parse statements on every character like a date-field hook would).
+	prevBankChanged := bankAccountSelect.OnChanged
+	bankAccountSelect.OnChanged = func(s string) {
+		if prevBankChanged != nil {
+			prevBankChanged(s)
+		}
+		prefillPaymentFromStatement()
+	}
 
 	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
 		confirmWin.Close()
