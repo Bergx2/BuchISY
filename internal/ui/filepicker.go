@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +16,10 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/bergx2/buchisy/internal/core"
 )
+
+// processingTimeout aborts an upload/extraction that runs too long (slow API or
+// a stuck render), so the user always gets a clean exit with retry options.
+const processingTimeout = 180 * time.Second
 
 // humanSize renders a byte count as "B / KB / MB".
 func humanSize(n int64) string {
@@ -32,7 +37,7 @@ func humanSize(n int64) string {
 // name + size, a live status line (what's happening right now), an infinite
 // progress bar, and a Cancel button. Returns the dialog and a thread-safe
 // status setter to call from the extraction goroutine.
-func (a *App) newProcessingDialog(mainPath string) (*dialog.CustomDialog, func(string)) {
+func (a *App) newProcessingDialog(mainPath string) (dlg *dialog.CustomDialog, setStatus func(string), stop func()) {
 	fileLbl := widget.NewLabelWithStyle(filepath.Base(mainPath), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	fileLbl.Wrapping = fyne.TextWrapWord
 	sizeStr := "—"
@@ -42,21 +47,82 @@ func (a *App) newProcessingDialog(mainPath string) (*dialog.CustomDialog, func(s
 	sizeLbl := widget.NewLabel(sizeStr)
 	statusLbl := widget.NewLabel(a.bundle.T("processing.message"))
 	statusLbl.Wrapping = fyne.TextWrapWord
+	elapsedLbl := widget.NewLabel("läuft seit 0:00")
+	elapsedLbl.Importance = widget.LowImportance
+	hintLbl := widget.NewLabel("")
+	hintLbl.Wrapping = fyne.TextWrapWord
+	hintLbl.Importance = widget.WarningImportance
+	hintLbl.Hide()
 	content := container.NewVBox(
 		fileLbl,
 		sizeLbl,
 		widget.NewSeparator(),
 		statusLbl,
 		widget.NewProgressBarInfinite(),
+		elapsedLbl,
+		hintLbl,
 	)
-	dlg := dialog.NewCustom(a.bundle.T("processing.title"), a.bundle.T("btn.cancel"), content, a.window)
-	dlg.Resize(fyne.NewSize(580, 250))
-	setStatus := func(s string) {
-		fyne.Do(func() {
-			statusLbl.SetText(s)
-		})
+	dlg = dialog.NewCustom(a.bundle.T("processing.title"), a.bundle.T("btn.cancel"), content, a.window)
+	dlg.Resize(fyne.NewSize(600, 280))
+	setStatus = func(s string) {
+		fyne.Do(func() { statusLbl.SetText(s) })
 	}
-	return dlg, setStatus
+
+	// Live elapsed timer + a "taking longer than usual" hint after 30 s.
+	stopCh := make(chan struct{})
+	go func() {
+		start := time.Now()
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-stopCh:
+				return
+			case <-t.C:
+				el := time.Since(start)
+				fyne.Do(func() {
+					elapsedLbl.SetText(fmt.Sprintf("läuft seit %d:%02d", int(el.Minutes()), int(el.Seconds())%60))
+					if el > 30*time.Second {
+						hintLbl.SetText("Dauert länger als üblich – bei einem großen oder gescannten PDF kann das Rendern/Senden dauern. Du kannst jederzeit abbrechen.")
+						hintLbl.Show()
+					}
+				})
+			}
+		}
+	}()
+	var once sync.Once
+	stop = func() { once.Do(func() { close(stopCh) }) }
+	return dlg, setStatus, stop
+}
+
+// showProcessingError reports an extraction failure (or timeout) with actionable
+// choices: retry, enter manually (blank form), or close.
+func (a *App) showProcessingError(mainPath string, attachments []string, onComplete func(), msg string) {
+	var d *dialog.CustomDialog
+	retryBtn := widget.NewButton(a.bundle.T("btn.retry"), func() {
+		d.Hide()
+		a.processSubmission(mainPath, attachments, onComplete)
+	})
+	retryBtn.Importance = widget.HighImportance
+	manualBtn := widget.NewButton("Manuell erfassen", func() {
+		d.Hide()
+		a.showConfirmationModal(mainPath, attachments, core.Meta{
+			Waehrung:   a.settings.CurrencyDefault,
+			Gegenkonto: a.settings.DefaultAccount,
+		}, onComplete)
+	})
+	closeBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
+		d.Hide()
+		if onComplete != nil {
+			onComplete()
+		}
+	})
+	lbl := widget.NewLabel(msg)
+	lbl.Wrapping = fyne.TextWrapWord
+	content := container.NewVBox(lbl, container.NewHBox(retryBtn, manualBtn, closeBtn))
+	d = dialog.NewCustomWithoutButtons(a.bundle.T("error.processing.title"), content, a.window)
+	d.Resize(fyne.NewSize(540, 220))
+	d.Show()
 }
 
 // selectPDFFiles shows a custom file picker with search functionality.
@@ -214,10 +280,11 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 		// extractor exactly like a PDF — pre-fills the form from a
 		// screenshot. Fall back to a blank form on any failure.
 		if core.ImageMediaType(mainPath) != "" && a.settings.ProcessingMode == "claude" {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), processingTimeout)
 			var done, canceled atomic.Bool
-			progress, setStatus := a.newProcessingDialog(mainPath)
+			progress, setStatus, stopTimer := a.newProcessingDialog(mainPath)
 			progress.SetOnClosed(func() {
+				stopTimer()
 				if done.Load() {
 					return
 				}
@@ -235,6 +302,7 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 					return
 				}
 				done.Store(true)
+				stopTimer()
 				progress.Hide()
 				time.Sleep(150 * time.Millisecond)
 				if err != nil {
@@ -261,10 +329,11 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 	// API, scanned-PDF rendering), so the user must be able to abort. The cancel
 	// button cancels the context (aborts the Claude request) and dismisses the
 	// dialog; the goroutine then discards any late result.
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), processingTimeout)
 	var done, canceled atomic.Bool
-	progress, setStatus := a.newProcessingDialog(mainPath)
+	progress, setStatus, stopTimer := a.newProcessingDialog(mainPath)
 	progress.SetOnClosed(func() {
+		stopTimer()
 		if done.Load() {
 			return // dialog closed by us after a normal finish
 		}
@@ -283,21 +352,25 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 			return // user aborted; dialog + onComplete already handled
 		}
 		done.Store(true)
+		stopTimer()
 		progress.Hide()
 		time.Sleep(150 * time.Millisecond)
+
+		// Auto-timeout: the context's deadline fired before the user cancelled.
+		if ctx.Err() == context.DeadlineExceeded {
+			a.logger.Warn("PDF-Verarbeitung Zeitüberschreitung: %s", mainPath)
+			a.showProcessingError(mainPath, attachments, onComplete,
+				"Zeitüberschreitung bei der Verarbeitung (über 3 Minuten). Möglicherweise ist das PDF sehr groß/gescannt oder die Verbindung langsam.")
+			return
+		}
 
 		if err != nil {
 			a.logger.Error("Failed to process PDF: %v", err)
 			if err.Error() == "no text found in PDF" {
 				a.handleNoTextPDF(mainPath, attachments, onComplete)
 			} else {
-				a.showError(
-					a.bundle.T("error.processing.title"),
-					a.bundle.T("error.processing.message", err.Error()),
-				)
-				if onComplete != nil {
-					onComplete()
-				}
+				a.showProcessingError(mainPath, attachments, onComplete,
+					a.bundle.T("error.processing.message", err.Error()))
 			}
 			return
 		}

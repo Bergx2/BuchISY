@@ -1869,7 +1869,9 @@ func (a *App) extractPDFData(ctx context.Context, path string, status func(strin
 		// images, so receipts whose tables are images (POS / SumUp / restaurant
 		// bills) are read too. Falls back to text-only if rendering fails.
 		step("Seiten werden gerendert …")
-		images, mediaType, imgErr := core.PDFAllPagesToBase64(path)
+		images, mediaType, imgErr := core.PDFAllPagesToBase64Progress(path, func(doneN, total int) {
+			step(fmt.Sprintf("Seiten werden gerendert … (%d/%d)", doneN, total))
+		})
 		if imgErr != nil || len(images) == 0 {
 			a.logger.Warn("Page rendering for multimodal extraction failed (%v); using text only", imgErr)
 			step("An Claude senden — Belegdaten werden erkannt …")

@@ -72,6 +72,13 @@ func pdfToImageGoFitz(path string) (string, string, error) {
 // Used for statement extraction where the closing balance often lives
 // on the last page, not the first.
 func PDFAllPagesToBase64(path string) ([]string, string, error) {
+	return PDFAllPagesToBase64Progress(path, nil)
+}
+
+// PDFAllPagesToBase64Progress is like PDFAllPagesToBase64 but reports progress
+// after each page via onPage(done, total) (nil = no reporting), so the UI can
+// show "Seite x/y gerendert".
+func PDFAllPagesToBase64Progress(path string, onPage func(done, total int)) ([]string, string, error) {
 	doc, err := fitz.New(path)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to open PDF: %w", err)
@@ -93,6 +100,9 @@ func PDFAllPagesToBase64(path string) ([]string, string, error) {
 			return nil, "", fmt.Errorf("failed to encode page %d as PNG: %w", i+1, err)
 		}
 		out = append(out, base64.StdEncoding.EncodeToString(buf.Bytes()))
+		if onPage != nil {
+			onPage(i+1, n)
+		}
 	}
 	return out, "image/png", nil
 }
