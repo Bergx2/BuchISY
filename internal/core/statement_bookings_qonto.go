@@ -64,6 +64,7 @@ func parseQontoCore(lines []qLine, year string) []StatementBooking {
 		lineIdx int
 		page    int
 		top     float64
+		bottom  float64 // top of the next booking on the same page (bounds the block)
 	}
 
 	var result []StatementBooking
@@ -82,6 +83,7 @@ func parseQontoCore(lines []qLine, year string) []StatementBooking {
 				Date:          date,
 				Text:          cur.text,
 				TopPt:         cur.top,
+				BottomPt:      cur.bottom,
 				Betrag:        cur.betrag,
 				IstGutschrift: cur.credit,
 			})
@@ -99,6 +101,11 @@ func parseQontoCore(lines []qLine, year string) []StatementBooking {
 
 		// Check if this is a new transaction date line.
 		if m := qontoDateLineRe.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
+			// The current booking's block ends where the next one begins (same
+			// page) — record it so the highlight can include the detail line(s).
+			if cur != nil && cur.page == src.page && src.top > cur.top {
+				cur.bottom = src.top
+			}
 			finalize()
 			lineIdx++
 			desc := strings.TrimSpace(m[3])

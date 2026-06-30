@@ -146,7 +146,7 @@ var (
 	// statement coordinate handling (top-origin + gap-centering) — block
 	// extension on Qonto's columnar layout swallowed unrelated bookings, while
 	// the plain amount-box highlight mis-positioned the band by a line.
-	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 0, G: 210, B: 0, A: 55}, stroke: color.NRGBA{R: 0, G: 150, B: 0, A: 255}, strokeWidth: 3, fullWidth: true, rowMode: true}
+	hlGreenFrame = previewHighlight{fill: color.NRGBA{R: 150, G: 240, B: 150, A: 55}, stroke: color.NRGBA{R: 40, G: 160, B: 40, A: 255}, strokeWidth: 1.5, fullWidth: true, rowMode: true}
 )
 
 func renderPreviewContent(mainPath string, meta core.Meta, hl previewHighlight) (fyne.CanvasObject, *pdfPreviewStrip) {
@@ -275,12 +275,24 @@ func statementPositionRects(images []image.Image, lines []core.StatementBooking,
 		}
 		pw := float32(images[b.Page].Bounds().Dx())
 		margin := pw * 0.03
-		y := (float32(b.TopPt) - 4) * scale
-		if y < 0 {
-			y = 0
+		const pad = float32(4) // include the date line a bit above TopPt
+		top := float32(b.TopPt) - pad
+		if top < 0 {
+			top = 0
 		}
-		h := float32(26) * scale
-		out[b.Page] = append(out[b.Page], core.Rect{X: margin, Y: y, W: pw - 2*margin, H: h})
+		// Content height = date row + its detail line(s). Default ~3 lines, but
+		// shrink to stop just above the next booking when it sits closer, so the
+		// band never spills into the gap before a distant next booking.
+		blockH := float32(28)
+		if b.BottomPt > b.TopPt {
+			if span := float32(b.BottomPt-b.TopPt) - 2; span < blockH {
+				blockH = span
+			}
+		}
+		if blockH < 14 {
+			blockH = 14
+		}
+		out[b.Page] = append(out[b.Page], core.Rect{X: margin, Y: top * scale, W: pw - 2*margin, H: (blockH + pad) * scale})
 	}
 	return out
 }

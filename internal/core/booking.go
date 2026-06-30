@@ -27,15 +27,16 @@ func (r InvoiceRef) String() string {
 // statement page. The list is built by ParseStatementBookings and
 // cached inside the StatementMetadata.
 type StatementBooking struct {
-	Page       int         `json:"page"`                  // 0-based PDF page
-	LineIdx    int         `json:"line_idx"`              // 1-based, restarts per page
-	Date       string      `json:"date"`                  // "DD.MM.YYYY" or "DD.MM."
-	TopPt      float64     `json:"top_pt"`                // vertical position in PDF points
-	LeftPt     float64     `json:"left_pt"`               // leftmost x position
-	Text       string      `json:"text"`                  // full visible line text
-	Betrag     float64     `json:"betrag,omitempty"`      // parsed absolute amount of the line
-	IstGutschrift bool     `json:"gutschrift,omitempty"` // clearly an incoming credit (Haben)
-	InvoiceRef *InvoiceRef `json:"invoice_ref,omitempty"` // nil = unlinked
+	Page          int         `json:"page"`                  // 0-based PDF page
+	LineIdx       int         `json:"line_idx"`              // 1-based, restarts per page
+	Date          string      `json:"date"`                  // "DD.MM.YYYY" or "DD.MM."
+	TopPt         float64     `json:"top_pt"`                // vertical position in PDF points (top of the date line)
+	BottomPt      float64     `json:"bottom_pt,omitempty"`   // top of the NEXT booking on the same page (0 = unknown); bounds the block incl. detail lines
+	LeftPt        float64     `json:"left_pt"`               // leftmost x position
+	Text          string      `json:"text"`                  // full visible line text
+	Betrag        float64     `json:"betrag,omitempty"`      // parsed absolute amount of the line
+	IstGutschrift bool        `json:"gutschrift,omitempty"`  // clearly an incoming credit (Haben)
+	InvoiceRef    *InvoiceRef `json:"invoice_ref,omitempty"` // nil = unlinked
 }
 
 // Display returns a short human label like "S.1 Z.3 — 14.01.2026".
