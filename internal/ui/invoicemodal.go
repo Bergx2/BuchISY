@@ -1206,9 +1206,19 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	})
 
 	confirmWin.SetContent(split)
-	confirmWin.Resize(fyne.NewSize(1500, 850))
+	confirmWin.Resize(a.dialogSize(1500, 850))
 	confirmWin.CenterOnScreen()
 	confirmWin.Show()
+}
+
+// dialogSize returns the last-used dialog size if one was saved, else the given
+// default. Shared by the new-invoice and edit dialogs so they reopen at the
+// size the user left them at instead of a fixed (over-large) default.
+func (a *App) dialogSize(defW, defH float32) fyne.Size {
+	if a.settings.DialogWidth > 0 && a.settings.DialogHeight > 0 {
+		return fyne.NewSize(float32(a.settings.DialogWidth), float32(a.settings.DialogHeight))
+	}
+	return fyne.NewSize(defW, defH)
 }
 
 // saveDialogSize saves the current dialog window size to settings.

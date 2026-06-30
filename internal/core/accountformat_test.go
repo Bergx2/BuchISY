@@ -4,7 +4,7 @@ import "testing"
 
 func TestAccountFormat(t *testing.T) {
 	a := SKRAccount{Number: 4663, Name: "Reisekosten Arbeitnehmer, Fahrtkosten", Type: "expense"}
-	if got := AccountDisplay(a); got != "4663 — Reisekosten Arbeitnehmer, Fahrtkosten" {
+	if got := AccountDisplay(a); got != "4663: Reisekosten Arbeitnehmer, Fahrtkosten" {
 		t.Errorf("AccountDisplay = %q", got)
 	}
 	if got := AccountTooltip(a); got != "4663 — Reisekosten Arbeitnehmer, Fahrtkosten (Aufwand)" {

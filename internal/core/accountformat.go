@@ -11,9 +11,10 @@ var accountTypeWord = map[string]string{
 	"equity":    "Eigenkapital",
 }
 
-// AccountDisplay renders an account as "Nummer — Name" for compact cells.
+// AccountDisplay renders an account as "Nummer: Name" for compact cells
+// (e.g. the Gegenkonto table column).
 func AccountDisplay(a SKRAccount) string {
-	return fmt.Sprintf("%d — %s", a.Number, a.Name)
+	return fmt.Sprintf("%d: %s", a.Number, a.Name)
 }
 
 // AccountTooltip renders "Nummer — Name (Typ)" for hover, omitting the type

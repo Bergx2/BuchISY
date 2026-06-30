@@ -97,13 +97,11 @@ type App struct {
 	centerWrapper *fyne.Container
 	emptyState    fyne.CanvasObject
 
-	// periodHeaderWrap / statusBarWrap are single-slot Stack containers that
-	// wrap the period header and status bar in the main shell. They are
-	// stored so that onMonthChanged can swap their inner content without a
-	// full buildUI rebuild (which would cause an infinite loop via
-	// SetSelected → OnChanged → onMonthChanged → buildUI → SetSelected …).
+	// periodHeaderWrap is a single-slot Stack container that wraps the period
+	// header in the main shell, stored so onMonthChanged can swap its inner
+	// content without a full buildUI rebuild (which would cause an infinite
+	// loop via SetSelected → OnChanged → onMonthChanged → buildUI → SetSelected).
 	periodHeaderWrap *fyne.Container
-	statusBarWrap    *fyne.Container
 
 	// stepInProgress guards stepMonth from being double-triggered by the
 	// yearSelect/monthSelect OnChanged callbacks firing during SetSelected.
@@ -680,14 +678,14 @@ func (a *App) buildUI() fyne.CanvasObject {
 	}
 
 	a.periodHeaderWrap = container.NewStack(a.buildPeriodHeader())
-	a.statusBarWrap = container.NewStack(a.buildStatusBar())
 	a.mainContent = container.NewBorder(
 		a.periodHeaderWrap, // top
-		a.statusBarWrap,    // bottom
+		nil,                // bottom (status bar removed; its info lives in the window title)
 		a.buildSidebar(),   // left (fixed width)
 		nil,                // right
 		content,            // center
 	)
+	a.updateWindowTitle()
 	return a.mainContent
 }
 
@@ -826,35 +824,27 @@ func (a *App) buildBelegeContent() fyne.CanvasObject {
 	return container.NewBorder(header, nil, nil, nil, a.centerWrapper)
 }
 
-// buildStatusBar renders a slim footer with profile + record count
-// info, giving the user a constant orientation cue.
-func (a *App) buildStatusBar() fyne.CanvasObject {
+// updateWindowTitle puts the orientation info (profile + Beleg count) that used
+// to live in the footer status bar into the window title bar instead, e.g.
+// "BuchISY: Boomstraat GmbH · 15 Belege". Called after the UI builds and after
+// the invoice table reloads.
+func (a *App) updateWindowTitle() {
+	if a.window == nil {
+		return
+	}
 	prof := a.profile
 	if prof == "" {
 		prof = "—"
-	}
-	period := fmt.Sprintf("%04d / %02d", a.currentYear, int(a.currentMonth))
-	if a.viewWholeYear {
-		period = fmt.Sprintf("%04d (Ganzes Jahr)", a.currentYear)
 	}
 	count := 0
 	if a.invoiceTable != nil {
 		count = len(a.invoiceTable.filtered)
 	}
-	text := fmt.Sprintf("  %s   •   %s   •   %d Belege", prof, period, count)
+	title := fmt.Sprintf("BuchISY: %s · %d Belege", prof, count)
 	if a.currentMonthLocked {
-		text += "   •   " + a.bundle.T("period.locked.indicator")
+		title += " · " + a.bundle.T("period.locked.indicator")
 	}
-	lbl := newCopyableLabel(a.bundle, text)
-
-	hint := widget.NewLabelWithStyle(a.bundle.T("copy.hint"),
-		fyne.TextAlignTrailing, fyne.TextStyle{Italic: true})
-	hint.Importance = widget.LowImportance
-
-	bg := canvas.NewRectangle(cardBackgroundColor())
-	bar := container.NewStack(bg, container.NewBorder(nil, nil,
-		container.NewPadded(lbl), container.NewPadded(hint)))
-	return container.NewBorder(widget.NewSeparator(), nil, nil, nil, bar)
+	a.window.SetTitle(title)
 }
 
 // showMainView swaps the window content back to the main view, always
@@ -1437,10 +1427,7 @@ func (a *App) onMonthChanged() {
 		a.stepInProgress = prev
 		a.periodHeaderWrap.Refresh()
 	}
-	if a.statusBarWrap != nil {
-		a.statusBarWrap.Objects = []fyne.CanvasObject{a.buildStatusBar()}
-		a.statusBarWrap.Refresh()
-	}
+	a.updateWindowTitle()
 }
 
 // lockCurrentMonth shows a confirmation dialog and then locks the current month,

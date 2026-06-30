@@ -20,8 +20,12 @@ import (
 	"github.com/bergx2/buchisy/internal/i18n"
 )
 
-// headerBackgroundColor is the light blue used behind table header cells.
-var headerBackgroundColor = color.NRGBA{R: 214, G: 233, B: 248, A: 255}
+// headerBackgroundColor is the light blue used behind table header cells;
+// headerSortBackgroundColor is the darker blue behind the active sort column.
+var (
+	headerBackgroundColor     = color.NRGBA{R: 214, G: 233, B: 248, A: 255}
+	headerSortBackgroundColor = color.NRGBA{R: 95, G: 145, B: 205, A: 255}
+)
 
 // hoverLabel is a label that shows a tooltip on hover and optionally
 // fires onTap when clicked (used to make the filename column open the
@@ -412,12 +416,14 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 	}
 	it.table.UpdateHeader = func(id widget.TableCellID, cell fyne.CanvasObject) {
 		stack := cell.(*fyne.Container)
+		bg := stack.Objects[0].(*canvas.Rectangle)
 		h := stack.Objects[1].(*hoverLabel)
 
 		// Defaults reset on every update because cell widgets are recycled.
 		h.tooltip = ""
 		h.onTap = nil
 		h.TextStyle.Bold = true
+		sorted := false
 
 		switch id.Col {
 		case 0:
@@ -426,13 +432,16 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 		case 1:
 			h.Alignment = fyne.TextAlignCenter
 			h.SetText(it.headerLabelFor("Typ", typSortKey))
-			h.TextStyle.Bold = it.sortColumn == typSortKey
+			sorted = it.sortColumn == typSortKey
+			h.TextStyle.Bold = sorted
 			h.onTap = func() { it.toggleSort(typSortKey) }
 		default:
 			colIndex := id.Col - 2
 			if colIndex < 0 || colIndex >= len(it.columnOrder) {
 				h.Alignment = fyne.TextAlignLeading
 				h.SetText("")
+				bg.FillColor = headerBackgroundColor
+				bg.Refresh()
 				return
 			}
 			colID := it.columnOrder[colIndex]
@@ -442,9 +451,17 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				h.Alignment = fyne.TextAlignLeading
 			}
 			h.SetText(it.headerLabelFor(it.getColumnHeader(colID), colID))
-			h.TextStyle.Bold = it.sortColumn == colID
+			sorted = it.sortColumn == colID
+			h.TextStyle.Bold = sorted
 			h.onTap = func() { it.toggleSort(colID) }
 		}
+		// Dark-blue band behind the active sort column's header.
+		if sorted {
+			bg.FillColor = headerSortBackgroundColor
+		} else {
+			bg.FillColor = headerBackgroundColor
+		}
+		bg.Refresh()
 		h.Refresh()
 	}
 

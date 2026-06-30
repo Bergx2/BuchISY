@@ -1090,7 +1090,7 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 	})
 
 	editWin.SetContent(container.NewBorder(nil, buttonBar, nil, nil, split))
-	editWin.Resize(fyne.NewSize(1500, 850))
+	editWin.Resize(a.dialogSize(1500, 850))
 	editWin.CenterOnScreen()
 	editWin.Show()
 }

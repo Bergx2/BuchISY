@@ -25,7 +25,7 @@ var (
 func sidebarGroupHeader(text string) fyne.CanvasObject {
 	t := canvas.NewText(strings.ToUpper(text), sidebarHeaderText)
 	t.TextStyle = fyne.TextStyle{Bold: true}
-	t.TextSize = theme.CaptionTextSize()
+	t.TextSize = theme.TextSize() // same size as the entries below (not caption-small)
 	bg := canvas.NewRectangle(sidebarHeaderBG)
 	bg.CornerRadius = 4
 	// Pad the header text so it lines up with the buttons' inset labels.
@@ -33,6 +33,35 @@ func sidebarGroupHeader(text string) fyne.CanvasObject {
 	spacer := canvas.NewRectangle(color.Transparent)
 	spacer.SetMinSize(fyne.NewSize(0, theme.Padding()*2))
 	return container.NewVBox(spacer, header)
+}
+
+// vGapLayout stacks children top-to-bottom with a small fixed gap between them
+// (instead of theme.Padding() like VBox), so sidebar entries sit closer.
+type vGapLayout struct{ gap float32 }
+
+func (l *vGapLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	var w, h float32
+	for i, o := range objs {
+		m := o.MinSize()
+		if m.Width > w {
+			w = m.Width
+		}
+		if i > 0 {
+			h += l.gap
+		}
+		h += m.Height
+	}
+	return fyne.NewSize(w, h)
+}
+
+func (l *vGapLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	y := float32(0)
+	for _, o := range objs {
+		mh := o.MinSize().Height
+		o.Resize(fyne.NewSize(size.Width, mh))
+		o.Move(fyne.NewPos(0, y))
+		y += mh + l.gap
+	}
 }
 
 // navItem is one entry in the workflow sidebar: a translation key plus the
@@ -90,7 +119,9 @@ func (a *App) buildSidebar() fyne.CanvasObject {
 		}},
 	}
 
-	col := container.NewVBox()
+	// Tight vertical stack so the entries under a group sit close together;
+	// each group header carries its own top spacer for group separation.
+	col := container.New(&vGapLayout{gap: 1})
 	for _, g := range groups {
 		col.Add(sidebarGroupHeader(a.bundle.T(g.titleKey)))
 		for _, it := range g.items {
