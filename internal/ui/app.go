@@ -1287,6 +1287,55 @@ func (w *contextMenuWrap) TappedSecondary(e *fyne.PointEvent) {
 	}
 }
 
+// labelValueLayout arranges exactly two children — [0]=label, [1]=value — as a
+// label/value pair: side by side (label left, value right-aligned) when the
+// width allows, otherwise stacked (value below the label) for narrow / phone
+// widths. MinSize reserves the stacked height so neither arrangement clips.
+type labelValueLayout struct{}
+
+func (labelValueLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	if len(objs) != 2 {
+		return fyne.Size{}
+	}
+	lm, vm := objs[0].MinSize(), objs[1].MinSize()
+	w := lm.Width
+	if vm.Width > w {
+		w = vm.Width
+	}
+	return fyne.NewSize(w, lm.Height+vm.Height)
+}
+
+func (labelValueLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	if len(objs) != 2 {
+		return
+	}
+	label, value := objs[0], objs[1]
+	lm, vm := label.MinSize(), value.MinSize()
+	gap := theme.Padding() * 2
+	if lm.Width+gap+vm.Width <= size.Width {
+		// Side by side: label left, value flush right (its own width).
+		label.Resize(fyne.NewSize(lm.Width, size.Height))
+		label.Move(fyne.NewPos(0, 0))
+		value.Resize(fyne.NewSize(vm.Width, size.Height))
+		value.Move(fyne.NewPos(size.Width-vm.Width, 0))
+		return
+	}
+	// Stacked: label on top, value below.
+	label.Resize(fyne.NewSize(size.Width, lm.Height))
+	label.Move(fyne.NewPos(0, 0))
+	value.Resize(fyne.NewSize(size.Width, vm.Height))
+	value.Move(fyne.NewPos(0, lm.Height))
+}
+
+// labelValue builds a responsive label/value pair: the label is bold, the
+// value is regular. Side by side when wide (value right-aligned), stacked when
+// narrow. See labelValueLayout.
+func labelValue(label, value string) fyne.CanvasObject {
+	l := widget.NewLabelWithStyle(label, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	v := widget.NewLabelWithStyle(value, fyne.TextAlignLeading, fyne.TextStyle{})
+	return container.New(labelValueLayout{}, l, v)
+}
+
 // fixedWidthLayout pins its children to a specific width while letting
 // the height come from the child's MinSize. Used to make the year-select
 // noticeably narrower than the month-select without truncating the year.

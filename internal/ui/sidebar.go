@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -10,18 +11,28 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// sidebarGroupHeader renders a workflow-group title as a muted, small,
-// upper-case section header — visually distinct from the clickable entries
-// below it (which are full-width buttons). A thin spacer above sets the
-// group apart from the preceding group's entries.
+// sidebarHeaderBG is the light-blue band behind each workflow-group title;
+// sidebarHeaderText is the (black) title colour on top of it.
+var (
+	sidebarHeaderBG   = color.NRGBA{R: 210, G: 224, B: 245, A: 255}
+	sidebarHeaderText = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
+)
+
+// sidebarGroupHeader renders a workflow-group title as a bold, small,
+// upper-case section header on a light-blue band with black text — visually
+// distinct from the clickable entries below it. A thin transparent spacer
+// above sets the group apart from the preceding group's entries.
 func sidebarGroupHeader(text string) fyne.CanvasObject {
-	t := canvas.NewText(strings.ToUpper(text), theme.Color(theme.ColorNamePlaceHolder))
+	t := canvas.NewText(strings.ToUpper(text), sidebarHeaderText)
 	t.TextStyle = fyne.TextStyle{Bold: true}
 	t.TextSize = theme.CaptionTextSize()
-	spacer := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+	bg := canvas.NewRectangle(sidebarHeaderBG)
+	bg.CornerRadius = 4
+	// Pad the header text so it lines up with the buttons' inset labels.
+	header := container.NewStack(bg, container.NewPadded(t))
+	spacer := canvas.NewRectangle(color.Transparent)
 	spacer.SetMinSize(fyne.NewSize(0, theme.Padding()*2))
-	// Pad the header so its text lines up with the buttons' inset labels.
-	return container.NewVBox(spacer, container.NewPadded(t))
+	return container.NewVBox(spacer, header)
 }
 
 // navItem is one entry in the workflow sidebar: a translation key plus the
@@ -91,10 +102,11 @@ func (a *App) buildSidebar() fyne.CanvasObject {
 		}
 	}
 
-	// Fixed-width sidebar. No scroll container: NewVScroll forces its own
-	// MinSize.Width to the widest child (Fyne ScrollVerticalOnly), which then
-	// overflows the fixed width and shows a horizontal scrollbar — unprofessional.
-	// The ~15 entries fit in the window height; fixedWidthLayout resizes the
-	// VBox to the column width so leading-aligned buttons fill it cleanly.
-	return container.New(fixedWidthLayout{width: 210}, col)
+	// Fixed-width sidebar that scrolls vertically: wrapping the column in a
+	// vertical-only scroll drops the sidebar's min height (it no longer forces
+	// the whole window to stay tall enough for all ~15 entries), so the window
+	// can be made shorter and a scrollbar appears when the entries don't fit.
+	// fixedWidthLayout pins the scroll to 210px; vertical-only scrolling lays
+	// the content out at that width, so no horizontal scrollbar appears.
+	return container.New(fixedWidthLayout{width: 210}, container.NewVScroll(col))
 }

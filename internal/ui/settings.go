@@ -130,9 +130,9 @@ func (a *App) showSettingsView() {
 	updateAPIKeyVisibility := func() {
 		if modeSelect.Selected == a.bundle.T("settings.mode.claude") {
 			apiKeyContainer.Objects = []fyne.CanvasObject{
-				widget.NewForm(
-					widget.NewFormItem(a.bundle.T("settings.model"), modelEntry),
-					widget.NewFormItem(a.bundle.T("settings.apiKey"), apiKeyEntry),
+				selectableForm(a.bundle,
+					fi(a.bundle.T("settings.model"), modelEntry),
+					fi(a.bundle.T("settings.apiKey"), apiKeyEntry),
 				),
 			}
 		} else {
@@ -740,10 +740,10 @@ func (a *App) showSettingsView() {
 	// Tab 1: General settings
 	generalTab := container.NewVScroll(container.NewVBox(
 		widget.NewLabel(a.bundle.T("settings.storage")),
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("settings.targetFolder"),
+		selectableForm(a.bundle,
+			fi(a.bundle.T("settings.targetFolder"),
 				container.NewBorder(nil, nil, nil, browseFolderBtn, storageRootEntry)),
-			widget.NewFormItem("Scan-Eingang-Ordner",
+			fi("Scan-Eingang-Ordner",
 				container.NewBorder(nil, nil, nil, browseScanInboxBtn, scanInboxEntry)),
 		),
 		useMonthFoldersCheck,
@@ -752,9 +752,9 @@ func (a *App) showSettingsView() {
 		widget.NewLabel(a.bundle.T("settings.template")),
 		templateEntry,
 		templateHelp,
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("settings.decimal"), decimalSelect),
-			widget.NewFormItem(a.bundle.T("settings.currencyDefault"), currencyEntry),
+		selectableForm(a.bundle,
+			fi(a.bundle.T("settings.decimal"), decimalSelect),
+			fi(a.bundle.T("settings.currencyDefault"), currencyEntry),
 		),
 		widget.NewSeparator(),
 
@@ -768,9 +768,9 @@ func (a *App) showSettingsView() {
 		widget.NewSeparator(),
 
 		widget.NewLabel(a.bundle.T("settings.csv")),
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("settings.csvSeparator"), csvSeparatorSelect),
-			widget.NewFormItem(a.bundle.T("settings.csvEncoding"), csvEncodingSelect),
+		selectableForm(a.bundle,
+			fi(a.bundle.T("settings.csvSeparator"), csvSeparatorSelect),
+			fi(a.bundle.T("settings.csvEncoding"), csvEncodingSelect),
 		),
 		widget.NewSeparator(),
 
@@ -1017,18 +1017,18 @@ func (a *App) showSettingsView() {
 		widget.NewSeparator(),
 
 		widget.NewLabel("DATEV"),
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("settings.datev.berater"), datevBeraterEntry),
-			widget.NewFormItem(a.bundle.T("settings.datev.mandant"), datevMandantEntry),
-			widget.NewFormItem(a.bundle.T("settings.datev.wj"), datevWJBeginnEntry),
+		selectableForm(a.bundle,
+			fi(a.bundle.T("settings.datev.berater"), datevBeraterEntry),
+			fi(a.bundle.T("settings.datev.mandant"), datevMandantEntry),
+			fi(a.bundle.T("settings.datev.wj"), datevWJBeginnEntry),
 		),
 		datevHint,
 		widget.NewSeparator(),
 
 		widget.NewLabel(a.bundle.T("reconcile.title")),
-		widget.NewForm(
-			widget.NewFormItem(a.bundle.T("settings.matchWindow"), matchWindowEntry),
-			widget.NewFormItem(a.bundle.T("settings.matchTolerance"), matchToleranceEntry),
+		selectableForm(a.bundle,
+			fi(a.bundle.T("settings.matchWindow"), matchWindowEntry),
+			fi(a.bundle.T("settings.matchTolerance"), matchToleranceEntry),
 		),
 		widget.NewSeparator(),
 

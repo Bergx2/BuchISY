@@ -36,7 +36,9 @@ func selectableForm(bundle *i18n.Bundle, items ...formField) fyne.CanvasObject {
 		} else {
 			lbl := newCopyableLabel(bundle, it.Label)
 			lbl.Alignment = fyne.TextAlignTrailing
+			lbl.TextStyle = fyne.TextStyle{Bold: true} // labels bold, values plain
 			labelObj = lbl
+			lbl.Refresh()
 		}
 		objs = append(objs, labelObj, it.Content)
 	}

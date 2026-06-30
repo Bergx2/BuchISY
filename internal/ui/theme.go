@@ -74,7 +74,18 @@ func (t *buchisyTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant
 		if variant == theme.VariantDark {
 			return color.NRGBA{R: 24, G: 26, B: 30, A: 255}
 		}
-		return color.NRGBA{R: 250, G: 250, B: 252, A: 255}
+		return color.NRGBA{R: 255, G: 255, B: 255, A: 255} // pure white
+	case theme.ColorNameForeground:
+		// Pure black text in light mode (the default is a muted dark grey).
+		if variant != theme.VariantDark {
+			return color.NRGBA{R: 0, G: 0, B: 0, A: 255}
+		}
+	case theme.ColorNamePlaceHolder:
+		// Captions / hints / section labels use the placeholder colour; make
+		// them black in light mode too (the user wants no grey text anywhere).
+		if variant != theme.VariantDark {
+			return color.NRGBA{R: 0, G: 0, B: 0, A: 255}
+		}
 	case theme.ColorNameSeparator:
 		if variant == theme.VariantDark {
 			return color.NRGBA{R: 255, G: 255, B: 255, A: 24}

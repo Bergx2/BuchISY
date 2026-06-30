@@ -748,25 +748,23 @@ func (a *App) buildStatementStats(metaMap core.StatementMetadataMap, all []strin
 
 	period := "—"
 	if !earliest.IsZero() && !latest.IsZero() {
-		period = fmt.Sprintf("%s  –  %s",
+		period = fmt.Sprintf("%s bis %s",
 			earliest.Format("02.01.2006"), latest.Format("02.01.2006"))
 	}
 	closing := "—"
 	if !latestClosingDate.IsZero() {
-		closing = formatDecimal(latestClosing, sep)
+		closing = formatMoney(latestClosing, "EUR", sep)
 	}
 
+	// Bold label + regular value, side by side (value right) on wide windows,
+	// stacked when narrow.
 	statCard := func(title, value string) fyne.CanvasObject {
-		t := widget.NewLabelWithStyle(title,
-			fyne.TextAlignLeading, fyne.TextStyle{})
-		v := widget.NewLabelWithStyle(value,
-			fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 		bg := canvas.NewRectangle(cardBackgroundColor())
 		bg.StrokeColor = theme.Color(theme.ColorNameInputBorder)
 		bg.StrokeWidth = 1
 		bg.CornerRadius = 6
 		return container.NewStack(bg,
-			container.NewPadded(container.NewVBox(t, v)))
+			container.NewPadded(labelValue(title, value)))
 	}
 
 	return container.NewGridWithColumns(3,
