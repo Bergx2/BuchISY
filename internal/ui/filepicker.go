@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -168,15 +169,37 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 		// extractor exactly like a PDF — pre-fills the form from a
 		// screenshot. Fall back to a blank form on any failure.
 		if core.ImageMediaType(mainPath) != "" && a.settings.ProcessingMode == "claude" {
-			progress := dialog.NewProgressInfinite(
+			ctx, cancel := context.WithCancel(context.Background())
+			var done, canceled atomic.Bool
+			progressBar := widget.NewProgressBarInfinite()
+			progressContent := container.NewVBox(
+				widget.NewLabel(a.bundle.T("processing.message")),
+				progressBar,
+			)
+			progress := dialog.NewCustom(
 				a.bundle.T("processing.title"),
-				a.bundle.T("processing.message"),
+				a.bundle.T("btn.cancel"),
+				progressContent,
 				a.window,
 			)
+			progress.SetOnClosed(func() {
+				if done.Load() {
+					return
+				}
+				canceled.Store(true)
+				cancel()
+				a.logger.Info("Bild-Verarbeitung abgebrochen: %s", mainPath)
+				if onComplete != nil {
+					onComplete()
+				}
+			})
 			progress.Show()
 			go func() {
-				ctx := context.Background()
 				meta, err := a.extractImageData(ctx, mainPath)
+				if canceled.Load() {
+					return
+				}
+				done.Store(true)
 				progress.Hide()
 				time.Sleep(150 * time.Millisecond)
 				if err != nil {
@@ -199,22 +222,42 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 		return
 	}
 
-	// Show loading indicator
+	// Show loading indicator WITH a cancel button: extraction can stall (slow
+	// API, scanned-PDF rendering), so the user must be able to abort. The cancel
+	// button cancels the context (aborts the Claude request) and dismisses the
+	// dialog; the goroutine then discards any late result.
+	ctx, cancel := context.WithCancel(context.Background())
+	var done, canceled atomic.Bool
 	progressBar := widget.NewProgressBarInfinite()
 	progressContent := container.NewVBox(
 		widget.NewLabel(a.bundle.T("processing.message")),
 		progressBar,
 	)
-	progress := dialog.NewCustomWithoutButtons(
+	progress := dialog.NewCustom(
 		a.bundle.T("processing.title"),
+		a.bundle.T("btn.cancel"),
 		progressContent,
 		a.window,
 	)
+	progress.SetOnClosed(func() {
+		if done.Load() {
+			return // dialog closed by us after a normal finish
+		}
+		canceled.Store(true)
+		cancel()
+		a.logger.Info("PDF-Verarbeitung abgebrochen: %s", mainPath)
+		if onComplete != nil {
+			onComplete()
+		}
+	})
 	progress.Show()
 
 	go func() {
-		ctx := context.Background()
 		meta, err := a.extractPDFData(ctx, mainPath)
+		if canceled.Load() {
+			return // user aborted; dialog + onComplete already handled
+		}
+		done.Store(true)
 		progress.Hide()
 		time.Sleep(150 * time.Millisecond)
 
