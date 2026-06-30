@@ -261,6 +261,44 @@ func previewPlaceholder(mainPath, message string) fyne.CanvasObject {
 	return container.NewPadded(container.NewCenter(box))
 }
 
+// statementCropDPI renders the small per-booking screenshots a bit sharper than
+// the full preview, since they're shown scaled down.
+const statementCropDPI = 150.0
+
+// cropBookingFromPages returns a sub-image of the booking's block (full page
+// width, date row + its detail line[s]) from already-rendered statement pages —
+// a small screenshot of just that booking. nil when there's no usable position.
+func cropBookingFromPages(pages []image.Image, b core.StatementBooking) image.Image {
+	if b.Page < 0 || b.Page >= len(pages) || b.TopPt <= 0 {
+		return nil
+	}
+	page := pages[b.Page]
+	sub, ok := page.(interface {
+		SubImage(image.Rectangle) image.Image
+	})
+	if !ok {
+		return nil
+	}
+	scale := statementCropDPI / 72.0
+	pb := page.Bounds()
+	top := pb.Min.Y + int((b.TopPt-3)*scale)
+	botPt := b.TopPt + 28
+	if b.BottomPt > b.TopPt {
+		botPt = b.BottomPt - 1
+	}
+	bottom := pb.Min.Y + int(botPt*scale)
+	if top < pb.Min.Y {
+		top = pb.Min.Y
+	}
+	if bottom > pb.Max.Y {
+		bottom = pb.Max.Y
+	}
+	if bottom-top < 4 {
+		return nil
+	}
+	return sub.SubImage(image.Rect(pb.Min.X, top, pb.Max.X, bottom))
+}
+
 // statementPositionRects builds a full-width green band on each booking's page
 // at its TopPt (PDF points, top-origin) — go-fitz renders the page at the same
 // origin/scale, so pixelY = TopPt * dpi/72. The band is ~2.5 lines tall to cover

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
@@ -857,19 +859,35 @@ func (a *App) showEditDialog(row core.CSVRow, onClose func()) {
 		case row.BuchungRef == core.CashConfirmedRef:
 			abgleichStatus.Add(widget.NewLabel("✓ Bar bestätigt (Kasse)."))
 		case row.BuchungRef != "":
-			if ls := linkedStatementLines(); len(ls) > 1 {
-				// 1→N split: show each linked statement line on its own row.
-				abgleichStatus.Add(widget.NewLabel(fmt.Sprintf("✓ Abgeglichen — %d Auszugszeilen:", len(ls))))
-				for _, l := range ls {
-					sign := "−"
-					if l.IstGutschrift {
-						sign = "+"
-					}
-					abgleichStatus.Add(newCopyableLabel(a.bundle, fmt.Sprintf("   • %s  %s%s  (S.%d Z.%d)",
-						l.Date, sign, formatDecimal(l.Betrag, a.settings.DecimalSeparator), l.Page+1, l.LineIdx)))
-				}
-			} else {
+			ls := linkedStatementLines()
+			if len(ls) == 0 {
 				abgleichStatus.Add(newCopyableLabel(a.bundle, "✓ Abgeglichen: "+core.BuchungRefDisplay(row.BuchungRef)))
+				break
+			}
+			heading := fmt.Sprintf("✓ Abgeglichen — %d Auszugszeilen:", len(ls))
+			if len(ls) == 1 {
+				heading = "✓ Abgeglichen — 1 Auszugszeile:"
+			}
+			abgleichStatus.Add(widget.NewLabel(heading))
+			// Render the statement once; show each linked line + a cropped
+			// screenshot of just that booking (date row + detail line[s]).
+			var pages []image.Image
+			if f := core.FirstBuchungRef(row.BuchungRef).StatementFilename; f != "" {
+				pages, _ = core.RenderPDF(filepath.Join(a.statementFolder(row.Bankkonto), f), statementCropDPI)
+			}
+			for _, l := range ls {
+				sign := "−"
+				if l.IstGutschrift {
+					sign = "+"
+				}
+				abgleichStatus.Add(newCopyableLabel(a.bundle, fmt.Sprintf("   • %s  EUR %s%s  (S.%d Z.%d)",
+					l.Date, sign, formatDecimal(l.Betrag, a.settings.DecimalSeparator), l.Page+1, l.LineIdx)))
+				if crop := cropBookingFromPages(pages, l); crop != nil {
+					img := canvas.NewImageFromImage(crop)
+					img.FillMode = canvas.ImageFillContain
+					img.SetMinSize(fyne.NewSize(0, 40))
+					abgleichStatus.Add(img)
+				}
 			}
 		case at == core.AccountTypeBank || at == core.AccountTypeCreditCard:
 			matchBtn := widget.NewButton("Mit Kontoauszug abgleichen", func() {
