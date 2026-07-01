@@ -176,11 +176,11 @@ type InvoiceTable struct {
 	lastSelectedCol  int  // Track last selected data-column index (-1 = none)
 	window           fyne.Window
 	columnOrder      []string
-	tooltipPopup     *widget.PopUp  // Shared tooltip popup
-	tooltipLabel     *widget.Label  // Reused label inside tooltipPopup (avoids recreate-flicker)
-	hoveredRow       int            // Row currently highlighted on hover (-1 = none)
-	hoverGen         int            // Bumped on every cell-enter; guards deferred row-clear
-	decimalSeparator string         // Decimal separator for display
+	tooltipPopup     *widget.PopUp // Shared tooltip popup
+	tooltipLabel     *widget.Label // Reused label inside tooltipPopup (avoids recreate-flicker)
+	hoveredRow       int           // Row currently highlighted on hover (-1 = none)
+	hoverGen         int           // Bumped on every cell-enter; guards deferred row-clear
+	decimalSeparator string        // Decimal separator for display
 	summaryLabel     *widget.Label // Sum bar under the table (Netto/MwSt/Brutto for filtered rows)
 	activeChip       string        // active quick-filter chip ("", "anhang", "teilzahlung", "ausgang")
 	chipRow          *fyne.Container
@@ -322,12 +322,16 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			// MouseIn can tell the table which row to highlight.
 			hoverLabel.rowIndex = id.Row
 
-			// Whole-row hover: fill every cell of the hovered row light-blue.
-			// Otherwise a transparent background (no zebra striping) — this also
-			// clears leftover hover fill when a recycled cell moves to a new row.
-			if id.Row == it.hoveredRow {
+			// Row background priority: hovered row → light blue (whole-row hover);
+			// the row whose edit dialog is open → soft-amber band (matches the
+			// active sidebar entry); otherwise transparent (no zebra striping).
+			// This also clears leftover fill when a recycled cell moves rows.
+			switch {
+			case id.Row == it.hoveredRow:
 				bg.FillColor = cellHoverFill
-			} else {
+			case id.Row == it.selectedRow:
+				bg.FillColor = sidebarActiveBG
+			default:
 				bg.FillColor = color.Transparent
 			}
 			bg.StrokeWidth = 0
@@ -343,6 +347,8 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				dataRow := id.Row
 				hoverLabel.onTap = func() {
 					if dataRow >= 0 && dataRow < len(it.filtered) && it.app != nil {
+						it.selectedRow = dataRow // mark the edited row (amber band)
+						it.table.Refresh()
 						it.app.showEditDialog(it.filtered[dataRow], nil)
 					}
 				}
@@ -455,6 +461,8 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 				dataRow := id.Row
 				hoverLabel.onTap = func() {
 					if dataRow >= 0 && dataRow < len(it.filtered) && it.app != nil {
+						it.selectedRow = dataRow // mark the edited row (amber band)
+						it.table.Refresh()
 						it.app.showEditDialog(it.filtered[dataRow], nil)
 					}
 				}

@@ -958,6 +958,35 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 	var selectedRow int = -1
 	var table *widget.Table
 
+	// Whole-row hover highlight (light blue), like the Belege table: a cell's
+	// MouseIn/MouseOut report their row so the entire row is filled, not just the
+	// cell under the cursor. hoverGen guards the deferred clear against flicker
+	// when moving between cells of the same row.
+	hoveredRow, hoverGen := -1, 0
+	onCellEnter := func(row int) {
+		hoverGen++
+		if hoveredRow != row {
+			hoveredRow = row
+			if table != nil {
+				table.Refresh()
+			}
+		}
+	}
+	onCellLeave := func() {
+		gen := hoverGen
+		time.AfterFunc(45*time.Millisecond, func() {
+			fyne.Do(func() {
+				if hoverGen != gen || hoveredRow == -1 {
+					return
+				}
+				hoveredRow = -1
+				if table != nil {
+					table.Refresh()
+				}
+			})
+		})
+	}
+
 	updatePreview := func(rel string) {
 		statementPath := filepath.Join(folder, rel)
 		preview, _ := buildDocumentPreview(statementPath, core.Meta{})
@@ -1012,6 +1041,9 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 			bg := canvas.NewRectangle(color.Transparent)
 			hl := newHoverLabel(nil, nil)
 			hl.Truncation = fyne.TextTruncateEllipsis
+			hl.bg = bg
+			hl.onEnter = onCellEnter // highlight the whole row on hover
+			hl.onLeave = onCellLeave
 			return container.NewStack(bg, hl)
 		},
 		func(id widget.TableCellID, cell fyne.CanvasObject) {
@@ -1020,10 +1052,13 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 			hl := stack.Objects[1].(*hoverLabel)
 			hl.onTap = nil
 			hl.TextStyle.Bold = false
-			// The selected statement's whole row gets the same soft-amber band
-			// as the active sidebar entry, so the row shown in the preview on the
-			// right is easy to spot in the list.
+			hl.rowIndex = id.Row // so this cell's MouseIn knows which row to hover
+			// Row background priority: hovered row → light blue (whole-row hover,
+			// like Belege); selected statement → soft-amber band (matches the
+			// active sidebar entry); otherwise zebra striping.
 			switch {
+			case id.Row == hoveredRow:
+				bg.FillColor = cellHoverFill
 			case id.Row == selectedRow:
 				bg.FillColor = sidebarActiveBG
 			case id.Row%2 == 0:
