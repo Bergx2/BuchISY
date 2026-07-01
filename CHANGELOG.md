@@ -35,10 +35,13 @@ and this project uses [semantic-ish versioning](https://semver.org/) via git tag
 
 ### Added
 - **Kassenbuch polish:** a newly saved cash receipt now appears immediately (the
-  view auto-refreshes and the row blinks once); a linked Belegnummer column;
-  Bar-Ausgaben laid out as aligned columns with headers; monthly Einnahmen/Ausgaben
-  totals; EUR shown on all balances; Anfangsbestand editable only behind an
-  explicit "Ändern" click; "Kassenbericht PDF" now opens the generated report.
+  view auto-refreshes and the row blinks once); a linked Belegnummer column and a
+  Buchungskonto column (shows the account the receipt is booked to); a Belege-style
+  sortable header on the Bar-Ausgaben; per-section Einnahmen/Ausgaben totals and a
+  separate Endbestand line; EUR shown before every amount; Anfangsbestand editable
+  only behind an explicit "Ändern" click; "Kassenbericht PDF" now opens the report.
+- **Confirmation window:** Abbrechen / Speichern sit on the Beleg-Nr. row,
+  right-aligned, instead of a separate row at the top.
 - **Table UX:** whole-row hover highlight with a blue outline (Belege + Konten);
   the selected/edited row is marked; column widths are remembered across restarts.
 - **Datei → Profil wechseln:** switch company profiles from the menu (with a
