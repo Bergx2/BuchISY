@@ -133,6 +133,19 @@ func parseStatementPDF(path string) ([]StatementBooking, error) {
 		}
 	}
 
+	// Sparkasse "Umsätze - Druckansicht": a columnar online-banking export whose
+	// two-row-per-booking layout the generic date-prefix heuristic mis-reads
+	// (2×N+1 phantom rows). Parse it from positioned runs instead.
+	if isSparkasseDruckansicht(fullText) {
+		pageLines := make([][]htmlLine, len(pageHTMLs))
+		for page, htmlStr := range pageHTMLs {
+			pageLines[page] = extractHTMLLines(htmlStr)
+		}
+		if bookings := parseSparkasseDruckansicht(pageLines); len(bookings) >= 1 {
+			return bookings, nil
+		}
+	}
+
 	// Fall through to the existing page-by-page HTML heuristic.
 	var out []StatementBooking
 	for page, htmlStr := range pageHTMLs {
