@@ -64,6 +64,38 @@ const amountRunPageHTML = `<!DOCTYPE html><html><body>
 <p style="top:478.5pt;left:501.8pt"><span>1.520,25</span></p>
 </div></body></html>`
 
+// detailDatePageHTML mimics a Sparkasse statement where a booking's wrapped
+// description line in the Erläuterung column (left≈123) starts with a date
+// ("08.06.2026, 14.23 UHR") — it must NOT be counted as its own booking. Real
+// booking dates sit in the left Datum column (left≈70).
+const detailDatePageHTML = `<!DOCTYPE html><html><body>
+<div id="page0" style="width:595.3pt;height:841.9pt">
+<p style="top:323.3pt;left:70.9pt"><span>Datum</span></p>
+<p style="top:351.9pt;left:69.9pt"><span>08.06.2026 SEPA-Auftrag Online</span></p>
+<p style="top:351.9pt;left:504.2pt"><span>-309,39</span></p>
+<p style="top:372.0pt;left:123.3pt"><span>DATUM 08.06.2026, 13.06 UHR</span></p>
+<p style="top:385.6pt;left:69.9pt"><span>08.06.2026 SEPA-Auftrag Online</span></p>
+<p style="top:385.6pt;left:504.2pt"><span>-119,00</span></p>
+<p style="top:405.7pt;left:123.3pt"><span>08.06.2026, 14.23 UHR</span></p>
+<p style="top:419.3pt;left:69.9pt"><span>10.06.2026 Dauerauftrag &#xdc;berw.</span></p>
+<p style="top:419.3pt;left:504.2pt"><span>-434,35</span></p>
+<p style="top:452.9pt;left:69.9pt"><span>10.06.2026 LS-Einl&#xf6;sung SEPA</span></p>
+<p style="top:452.9pt;left:507.7pt"><span>-56,18</span></p>
+</div></body></html>`
+
+func TestBookingsFromPageHTML_SkipsDetailColumnDates(t *testing.T) {
+	got := bookingsFromPageHTML(detailDatePageHTML, 0)
+	if len(got) != 4 {
+		t.Fatalf("want 4 bookings (detail-column date excluded), got %d: %+v", len(got), got)
+	}
+	amts := []float64{309.39, 119.00, 434.35, 56.18}
+	for i, w := range amts {
+		if got[i].Betrag != w {
+			t.Errorf("booking %d betrag = %.2f, want %.2f (%q)", i, got[i].Betrag, w, got[i].Text)
+		}
+	}
+}
+
 func TestBookingsFromPageHTML_AmountOnSeparateRun(t *testing.T) {
 	got := bookingsFromPageHTML(amountRunPageHTML, 0)
 	if len(got) != 2 {

@@ -289,12 +289,28 @@ func bookingsFromPageHTML(pageHTML string, page int) []StatementBooking {
 		return lines[i].left < lines[j].left
 	})
 
+	// A booking's date sits in the leftmost date column. Detail/continuation
+	// lines that merely START with a date (e.g. "08.06.2026, 14.23 UHR" wrapped
+	// into the Erläuterung column) sit further right and must not be counted as
+	// their own booking. Find the date column (min left over date lines) and only
+	// accept date lines within a small tolerance of it.
+	minDateLeft := -1.0
+	for _, ln := range lines {
+		if dateLineRe.MatchString(ln.text) && (minDateLeft < 0 || ln.left < minDateLeft) {
+			minDateLeft = ln.left
+		}
+	}
+	const dateColTolerance = 12.0
+
 	var bookings []StatementBooking
 	idx := 0
 	for _, ln := range lines {
 		m := dateLineRe.FindStringSubmatch(ln.text)
 		if m == nil {
 			continue
+		}
+		if minDateLeft >= 0 && ln.left > minDateLeft+dateColTolerance {
+			continue // date in a non-date (description) column → detail line
 		}
 		idx++
 		date := m[0]
