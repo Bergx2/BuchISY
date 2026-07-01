@@ -887,8 +887,18 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 	infoLine := container.NewVBox(quelleLabel, dupBanner, statementHint, warningsLabel)
 	belegnrLabel := newCopyableLabel(a.bundle, belegnrText)
 	belegnrLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Abbrechen / Speichern sit on the Beleg-Nr. row, right-aligned, instead of a
+	// separate row at the very top. (saveBtn.OnTapped is wired below, once the
+	// window exists.)
+	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
+		confirmWin.Close()
+	})
+	saveBtn := widget.NewButton(a.bundle.T("btn.save"), nil)
+	saveBtn.Importance = widget.HighImportance
+
 	formItems := []fyne.CanvasObject{
-		belegnrLabel,
+		container.NewBorder(nil, nil, belegnrLabel, container.NewHBox(cancelBtn, saveBtn)),
 		infoLine,
 		newCopyableLabel(a.bundle, a.bundle.T("modal.originalFile")),
 		container.NewBorder(nil, nil, nil,
@@ -1066,19 +1076,7 @@ func (a *App) showConfirmationModal(originalPath string, attachments []string, m
 		prefillPaymentFromStatement()
 	}
 
-	cancelBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() {
-		confirmWin.Close()
-	})
-	saveBtn := widget.NewButton(a.bundle.T("btn.save"), nil)
-	saveBtn.Importance = widget.HighImportance
-
-	form := container.NewVBox(append(
-		[]fyne.CanvasObject{
-			container.NewBorder(nil, nil, nil, container.NewHBox(cancelBtn, saveBtn)),
-			widget.NewSeparator(),
-		},
-		formItems...,
-	)...)
+	form := container.NewVBox(formItems...)
 
 	// Scroll container for long forms
 	scrollForm := container.NewVScroll(form)
