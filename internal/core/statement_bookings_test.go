@@ -125,6 +125,24 @@ func TestParseBuchungRef_MalformedReturnsZero(t *testing.T) {
 	}
 }
 
+func TestStatementCacheStale(t *testing.T) {
+	fresh := &StatementMetadata{BookingsParsedMtime: 100, BookingsParserVersion: StatementParserVersion, Bookings: []StatementBooking{{}}}
+	if statementCacheStale(fresh, 100) {
+		t.Error("fresh cache (matching mtime + version + non-empty) should NOT be stale")
+	}
+	if !statementCacheStale(fresh, 101) {
+		t.Error("changed file mtime should be stale")
+	}
+	oldVer := &StatementMetadata{BookingsParsedMtime: 100, BookingsParserVersion: StatementParserVersion - 1, Bookings: []StatementBooking{{}}}
+	if !statementCacheStale(oldVer, 100) {
+		t.Error("cache from an older parser version should be stale (forces re-parse after a parser fix)")
+	}
+	empty := &StatementMetadata{BookingsParsedMtime: 100, BookingsParserVersion: StatementParserVersion}
+	if !statementCacheStale(empty, 100) {
+		t.Error("empty bookings should be stale")
+	}
+}
+
 func TestParseLineAmount(t *testing.T) {
 	cases := []struct {
 		text string

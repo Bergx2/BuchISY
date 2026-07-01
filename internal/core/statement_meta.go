@@ -25,6 +25,10 @@ type StatementMetadata struct {
 	// so the parser only re-runs when the file changes.
 	BookingsParsedMtime int64              `json:"bookings_parsed_mtime,omitempty"`
 	Bookings            []StatementBooking `json:"bookings,omitempty"`
+	// BookingsParserVersion is the StatementParserVersion that produced Bookings.
+	// A mismatch forces a re-parse, so improving the parser automatically
+	// refreshes already-cached statements without any manual cache clearing.
+	BookingsParserVersion int `json:"bookings_parser_version,omitempty"`
 }
 
 // StatementMetadataMap maps a statement's relative path (within its

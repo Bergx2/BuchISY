@@ -125,10 +125,24 @@ func BuchungRefDisplay(s string) string {
 	}
 }
 
-// EnsureBookingsParsed makes sure StatementMetadata.Bookings is current
-// for the given PDF. If the file's mtime hasn't changed since the last
-// parse, nothing happens; otherwise the parser runs and the result is
-// stored back into meta (the caller is responsible for persisting it).
+// StatementParserVersion identifies the current statement-parsing logic. BUMP
+// IT whenever the parser (ParseStatementBookings and friends) changes so that
+// already-cached statement bookings are re-parsed automatically — otherwise a
+// parser fix would not reach statements whose mtime is unchanged.
+const StatementParserVersion = 2
+
+// statementCacheStale reports whether meta.Bookings must be re-parsed: the file
+// changed, nothing is cached yet, or the cache was produced by an older parser.
+func statementCacheStale(meta *StatementMetadata, mtime int64) bool {
+	return meta.BookingsParsedMtime != mtime ||
+		len(meta.Bookings) == 0 ||
+		meta.BookingsParserVersion != StatementParserVersion
+}
+
+// EnsureBookingsParsed makes sure StatementMetadata.Bookings is current for the
+// given PDF. If the file's mtime and the parser version both match the cache,
+// nothing happens; otherwise the parser runs and the result is stored back into
+// meta (the caller is responsible for persisting it).
 //
 // Returns true when meta was modified.
 func EnsureBookingsParsed(path string, meta *StatementMetadata) (bool, error) {
@@ -137,7 +151,7 @@ func EnsureBookingsParsed(path string, meta *StatementMetadata) (bool, error) {
 		return false, fmt.Errorf("stat statement PDF: %w", err)
 	}
 	mtime := info.ModTime().Unix()
-	if meta.BookingsParsedMtime == mtime && len(meta.Bookings) > 0 {
+	if !statementCacheStale(meta, mtime) {
 		return false, nil
 	}
 	parsed, err := ParseStatementBookings(path)
@@ -160,5 +174,6 @@ func EnsureBookingsParsed(path string, meta *StatementMetadata) (bool, error) {
 	}
 	meta.Bookings = parsed
 	meta.BookingsParsedMtime = mtime
+	meta.BookingsParserVersion = StatementParserVersion
 	return true, nil
 }
