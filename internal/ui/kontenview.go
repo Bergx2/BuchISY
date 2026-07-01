@@ -963,13 +963,16 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 	// cell under the cursor. hoverGen guards the deferred clear against flicker
 	// when moving between cells of the same row.
 	hoveredRow, hoverGen := -1, 0
-	onCellEnter := func(row int) {
+	onCellEnter := func(hl *hoverLabel) {
 		hoverGen++
-		if hoveredRow != row {
-			hoveredRow = row
+		if hoveredRow != hl.rowIndex {
+			hoveredRow = hl.rowIndex
 			if table != nil {
 				table.Refresh()
 			}
+		}
+		if table != nil {
+			a.frameRow(hl, table) // blue outline around the whole row
 		}
 	}
 	onCellLeave := func() {
@@ -983,6 +986,7 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 				if table != nil {
 					table.Refresh()
 				}
+				a.clearRowFrame()
 			})
 		})
 	}

@@ -46,7 +46,7 @@ type hoverLabel struct {
 	// onLeave notify the table so it can highlight/clear the ENTIRE row. All
 	// three are set by UpdateCell; nil/0 for headers.
 	rowIndex int
-	onEnter  func(row int)
+	onEnter  func(hl *hoverLabel) // notified with the cell so the table can highlight + frame the row
 	onLeave  func()
 }
 
@@ -70,7 +70,7 @@ func (hl *hoverLabel) MouseIn(_ *desktop.MouseEvent) {
 	// row). Also cancels any pending row-clear scheduled by the cell we just
 	// left, so moving within a row never flickers the highlight.
 	if hl.onEnter != nil {
-		hl.onEnter(hl.rowIndex)
+		hl.onEnter(hl)
 	}
 	if hl.onHover == nil {
 		return
@@ -754,13 +754,17 @@ func (it *InvoiceTable) hideTooltip() {
 
 // onCellEnter highlights the given data row (called from a cell's MouseIn) and
 // bumps hoverGen so any row-clear scheduled by the cell we just left is voided.
-func (it *InvoiceTable) onCellEnter(row int) {
+func (it *InvoiceTable) onCellEnter(hl *hoverLabel) {
+	row := hl.rowIndex
 	it.hoverGen++
 	if it.hoveredRow != row {
 		it.hoveredRow = row
 		if it.table != nil {
 			it.table.Refresh()
 		}
+	}
+	if it.app != nil && it.table != nil {
+		it.app.frameRow(hl, it.table) // blue outline around the whole row
 	}
 }
 
@@ -780,6 +784,9 @@ func (it *InvoiceTable) onCellLeave() {
 				if it.table != nil {
 					it.table.Refresh()
 				}
+			}
+			if it.app != nil {
+				it.app.clearRowFrame()
 			}
 			it.hideTooltip()
 		})

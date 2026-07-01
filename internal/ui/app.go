@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -87,6 +88,7 @@ type App struct {
 	// beneath — a Fyne canvas overlay would swallow the pending tap.
 	tooltipLayer *fyne.Container
 	tooltip      fyne.CanvasObject
+	rowFrame     *canvas.Rectangle // blue outline around the hovered table row
 	theme        *buchisyTheme
 	assetsDir    string
 	profile      string
@@ -748,6 +750,46 @@ func (a *App) hideTooltip() {
 	a.tooltipLayer.Remove(a.tooltip)
 	a.tooltip = nil
 	a.tooltipLayer.Refresh()
+}
+
+// rowFrameStroke is the blue outline drawn around a hovered table row.
+var rowFrameStroke = color.NRGBA{R: 70, G: 130, B: 210, A: 255}
+
+// frameRow draws a blue outline around the whole hovered row: a single stroked
+// rectangle on the tooltipLayer sized to the cell's height and the table's full
+// width. Using one overlay rectangle (rather than per-cell strokes) gives a
+// clean outer frame with no internal grid lines. `cell` is the hovered cell (for
+// the row's Y + height); `table` supplies the row's X + width.
+func (a *App) frameRow(cell, table fyne.CanvasObject) {
+	if a.tooltipLayer == nil || cell == nil || table == nil {
+		return
+	}
+	drv := fyne.CurrentApp().Driver()
+	layer := drv.AbsolutePositionForObject(a.tooltipLayer)
+	cellPos := drv.AbsolutePositionForObject(cell)
+	tablePos := drv.AbsolutePositionForObject(table)
+
+	if a.rowFrame == nil {
+		r := canvas.NewRectangle(color.Transparent)
+		r.StrokeColor = rowFrameStroke
+		r.StrokeWidth = 1.5
+		r.CornerRadius = 3
+		a.rowFrame = r
+		a.tooltipLayer.Add(r)
+	}
+	a.rowFrame.Move(fyne.NewPos(tablePos.X-layer.X, cellPos.Y-layer.Y))
+	a.rowFrame.Resize(fyne.NewSize(table.Size().Width, cell.Size().Height))
+	a.rowFrame.Show()
+	a.rowFrame.Refresh()
+	a.tooltipLayer.Refresh()
+}
+
+// clearRowFrame hides the hovered-row outline, if shown.
+func (a *App) clearRowFrame() {
+	if a.rowFrame != nil {
+		a.rowFrame.Hide()
+		a.tooltipLayer.Refresh()
+	}
 }
 
 // buildPeriodHeader returns the always-visible Buchungszeitraum strip
