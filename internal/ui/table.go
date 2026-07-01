@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"image/color"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -113,7 +115,13 @@ func (hl *hoverLabel) isTruncated() bool {
 }
 
 func (hl *hoverLabel) MouseMoved(ev *desktop.MouseEvent) {
-	// Don't recreate tooltip on every mouse move - only on MouseIn
+	// Don't recreate the tooltip on every move, but do let the table re-frame the
+	// hovered row: if the content was scrolled by the wheel, the row under the
+	// cursor changed position, and re-framing (a no-op unless it moved — see
+	// frameRow) keeps the blue outline aligned.
+	if hl.onEnter != nil {
+		hl.onEnter(hl)
+	}
 }
 
 func (hl *hoverLabel) MouseOut() {
@@ -734,13 +742,64 @@ func (it *InvoiceTable) applyColumnWidths() {
 
 	it.table.SetColumnWidth(0, 50) // Edit column
 	it.table.SetColumnWidth(1, 60) // Filetype column (fits "JPEG")
+	var saved map[string]float32
+	if it.app != nil {
+		saved = it.app.settings.ColumnWidths
+	}
 	for idx, colID := range it.columnOrder {
 		width, ok := columnWidthMap[colID]
 		if !ok {
 			width = 140
 		}
+		if w, ok := saved[colID]; ok && w > 0 { // user-adjusted width wins
+			width = w
+		}
 		it.table.SetColumnWidth(idx+2, width) // +2 for edit + filetype columns
 	}
+}
+
+// captureColumnWidths reads the table's current (possibly user-dragged) column
+// widths and stores them into settings keyed by column ID, so they survive a
+// table rebuild and app restart. Fyne 2.6 exposes no getter for column widths,
+// so the private map is read via reflection (guarded: any failure is a no-op).
+func (it *InvoiceTable) captureColumnWidths() {
+	if it == nil || it.table == nil || it.app == nil {
+		return
+	}
+	widths := readTableColumnWidths(it.table)
+	if len(widths) == 0 {
+		return
+	}
+	if it.app.settings.ColumnWidths == nil {
+		it.app.settings.ColumnWidths = map[string]float32{}
+	}
+	for idx, colID := range it.columnOrder {
+		if w, ok := widths[idx+2]; ok && w > 0 { // +2 for the edit + filetype action columns
+			it.app.settings.ColumnWidths[colID] = w
+		}
+	}
+}
+
+// readTableColumnWidths returns a copy of a Fyne table's per-column width map
+// (keyed by column index). Fyne exposes no public getter, so it reads the
+// unexported field via reflection; it returns nil on any failure so a future
+// Fyne change can't crash the app.
+func readTableColumnWidths(t *widget.Table) (out map[int]float32) {
+	defer func() { _ = recover() }()
+	v := reflect.ValueOf(t).Elem().FieldByName("columnWidths")
+	if !v.IsValid() || v.Kind() != reflect.Map || v.IsNil() {
+		return nil
+	}
+	v = reflect.NewAt(v.Type(), unsafe.Pointer(v.UnsafeAddr())).Elem()
+	m, ok := v.Interface().(map[int]float32)
+	if !ok {
+		return nil
+	}
+	out = make(map[int]float32, len(m))
+	for k, val := range m {
+		out[k] = val
+	}
+	return out
 }
 
 // hideTooltip hides the current tooltip popup if visible

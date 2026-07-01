@@ -169,9 +169,19 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 		return &books[len(books)-1]
 	}
 
-	// Account selector
+	// Account selector — restore the previously selected Barkasse so an
+	// auto-refresh (e.g. after saving a cash receipt) doesn't jump back to the
+	// first account.
 	accountSelect := widget.NewSelect(accounts, nil)
-	accountSelect.SetSelected(accounts[0])
+	initialAccount := accounts[0]
+	for _, acc := range accounts {
+		if acc == a.cashAccount {
+			initialAccount = acc
+			break
+		}
+	}
+	a.cashAccount = initialAccount
+	accountSelect.SetSelected(initialAccount)
 
 	// Per-account editing area, rebuilt when the account changes.
 	editArea := container.NewVBox()
@@ -199,6 +209,9 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 								return
 							}
 							book.Anfangsbestand = parseFloat(entry.Text, a.settings.DecimalSeparator)
+							if err := core.SaveCashBooks(jsonPath, books); err != nil {
+								a.logger.Warn("Saving cash book after Anfangsbestand change failed: %v", err)
+							}
 							rebuild()
 						}, a.window)
 				})
@@ -329,7 +342,7 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 		))
 		editArea.Refresh()
 	}
-	accountSelect.OnChanged = func(string) { rebuild() }
+	accountSelect.OnChanged = func(sel string) { a.cashAccount = sel; rebuild() }
 	rebuild()
 
 	saveBtn := widget.NewButton(a.bundle.T("btn.save"), func() {
@@ -448,7 +461,7 @@ func (a *App) buildCashYearBody(accounts []string) fyne.CanvasObject {
 		tableArea.Refresh()
 	}
 
-	accountSelect.OnChanged = func(string) { rebuild() }
+	accountSelect.OnChanged = func(sel string) { a.cashAccount = sel; rebuild() }
 	rebuild()
 
 	exportBtn := widget.NewButton("PDF-Export", func() {

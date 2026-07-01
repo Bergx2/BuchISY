@@ -72,6 +72,7 @@ type App struct {
 	kontenSortAsc bool   // sort direction
 	cashWholeYear bool   // Kassenbuch view: true → year overview, false → single month
 	cashFlash     string // Dateiname of a just-saved cash receipt to blink once in the cash book
+	cashAccount   string // selected Barkasse in the cash book, preserved across rebuilds
 
 	// Batch entry queue (E17.3): sequential processing of multiple files.
 	pendingFiles    []string
@@ -671,6 +672,7 @@ func (a *App) saveWindowState() {
 
 	a.settings.WindowWidth = int(size.Width)
 	a.settings.WindowHeight = int(size.Height)
+	a.invoiceTable.captureColumnWidths() // persist any dragged column widths
 
 	if err := a.settingsMgr.Save(a.settings); err != nil {
 		a.logger.Warn("Failed to save window state: %v", err)
@@ -779,8 +781,16 @@ func (a *App) frameRow(cell, table fyne.CanvasObject) {
 		a.rowFrame = r
 		a.tooltipLayer.Add(r)
 	}
-	a.rowFrame.Move(fyne.NewPos(tablePos.X-layer.X, cellPos.Y-layer.Y))
-	a.rowFrame.Resize(fyne.NewSize(table.Size().Width, cell.Size().Height))
+	pos := fyne.NewPos(tablePos.X-layer.X, cellPos.Y-layer.Y)
+	size := fyne.NewSize(table.Size().Width, cell.Size().Height)
+	// Skip the refresh when nothing moved: MouseMoved re-frames on every pointer
+	// move so the outline follows a scrolled row, but repainting only when the
+	// row position actually changes keeps that cheap.
+	if a.rowFrame.Visible() && a.rowFrame.Position() == pos && a.rowFrame.Size() == size {
+		return
+	}
+	a.rowFrame.Move(pos)
+	a.rowFrame.Resize(size)
 	a.rowFrame.Show()
 	a.rowFrame.Refresh()
 	a.tooltipLayer.Refresh()
@@ -818,6 +828,9 @@ func (a *App) buildPeriodHeader() fyne.CanvasObject {
 // the empty-state. It does NOT build the period header or status bar —
 // those belong to the outer shell in buildUI.
 func (a *App) buildBelegeContent() fyne.CanvasObject {
+	// Preserve any column widths the user dragged on the previous table instance
+	// before it's replaced (the table is rebuilt on every view switch).
+	a.invoiceTable.captureColumnWidths()
 	// Create table first (before the upload card, so callbacks don't crash)
 	a.invoiceTable = NewInvoiceTable(a.bundle, a)
 	a.invoiceTable.SetColumnOrder(a.settings.ColumnOrder)

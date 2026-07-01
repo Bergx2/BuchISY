@@ -89,49 +89,50 @@ type BankAccount struct {
 	AccountType       string `json:"account_type"`       // bank | creditcard | cash
 	SettlementAccount string `json:"settlement_account"` // account that settles a credit card monthly
 	SKR04Konto        int    `json:"skr04_konto,omitempty"`
-	IsCreditCard      bool   `json:"is_credit_card"`               // legacy flag, kept only for migration
-	FolderName        string `json:"folder_name,omitempty"`        // folder currently holding this account's statements ("" = uninitialised)
+	IsCreditCard      bool   `json:"is_credit_card"`        // legacy flag, kept only for migration
+	FolderName        string `json:"folder_name,omitempty"` // folder currently holding this account's statements ("" = uninitialised)
 }
 
 // Settings represents the application settings.
 type Settings struct {
-	StorageRoot              string        `json:"storage_root"`
-	ScanInboxFolder          string        `json:"scan_inbox_folder"`
-	UseMonthSubfolders       bool          `json:"use_month_subfolders"`
-	NamingTemplate           string        `json:"naming_template"`
-	DecimalSeparator         string        `json:"decimal_separator"`
-	CurrencyDefault          string        `json:"currency_default"`
-	AnthropicModel           string        `json:"anthropic_model"`
-	AnthropicAPIKeyRef       string        `json:"anthropic_api_key_ref"`
-	Language                 string        `json:"language"`
-	ProcessingMode           string        `json:"processing_mode"` // "claude" or "local"
-	DefaultAccount           int           `json:"default_account"`
-	Accounts                 []Account     `json:"accounts"`
-	DefaultBankAccount       string        `json:"default_bank_account"`
-	DefaultBankAccountIBAN   string        `json:"default_bank_account_iban"`
-	BankAccounts             []BankAccount `json:"bank_accounts"`
-	RememberCompanyAccount   bool          `json:"remember_company_account"`
-	AutoSelectAccount        bool          `json:"auto_select_account"`
-	LastUsedFolder           string        `json:"last_used_folder"`                   // Last folder for Belege / attachments
-	LastStatementFolder      string        `json:"last_statement_folder"`              // Last folder for Kontoauszüge
-	OwnVATID                 string        `json:"own_vat_id"`                         // The user's own company VAT-ID — excluded during auto-extract
-	DatevBeraterNr           string        `json:"datev_berater_nr,omitempty"`         // optional DATEV consultant number
-	DatevMandantNr           string        `json:"datev_mandant_nr,omitempty"`         // optional DATEV client number
-	DatevWJBeginn            string        `json:"datev_wj_beginn,omitempty"`          // fiscal-year start YYYYMMDD (optional)
-	DebugMode                bool          `json:"debug_mode"`                         // Enable verbose debug logging
-	WindowWidth              int           `json:"window_width"`                       // Window width in pixels
-	WindowHeight             int           `json:"window_height"`                      // Window height in pixels
-	WindowX                  int           `json:"window_x"`                           // Window X position
-	WindowY                  int           `json:"window_y"`                           // Window Y position
-	DialogWidth              int           `json:"dialog_width"`                       // Invoice dialog width in pixels
-	DialogHeight             int           `json:"dialog_height"`                      // Invoice dialog height in pixels
-	CSVSeparator             string        `json:"csv_separator"`                      // CSV field separator: "," (comma), ";" (semicolon), "\t" (tab)
-	CSVEncoding              string        `json:"csv_encoding"`                       // CSV file encoding: "ISO-8859-1" or "UTF-8"
-	ColumnOrder              []string      `json:"column_order"`                       // Order of columns in table and CSV
-	UIScale                  float32       `json:"ui_scale"`                           // UI zoom factor (1.0 = 100%)
-	PreviewSplitOffset       float64       `json:"preview_split_offset"`               // Divider position in the confirmation window (0..1)
-	MatchDateWindowDays      int           `json:"matchDateWindowDays,omitempty"`      // Reconciliation date window in days (0 = use default)
-	MatchForeignTolerancePct float64       `json:"matchForeignTolerancePct,omitempty"` // Reconciliation foreign-currency tolerance % (0 = use default)
+	StorageRoot              string             `json:"storage_root"`
+	ScanInboxFolder          string             `json:"scan_inbox_folder"`
+	UseMonthSubfolders       bool               `json:"use_month_subfolders"`
+	NamingTemplate           string             `json:"naming_template"`
+	DecimalSeparator         string             `json:"decimal_separator"`
+	CurrencyDefault          string             `json:"currency_default"`
+	AnthropicModel           string             `json:"anthropic_model"`
+	AnthropicAPIKeyRef       string             `json:"anthropic_api_key_ref"`
+	Language                 string             `json:"language"`
+	ProcessingMode           string             `json:"processing_mode"` // "claude" or "local"
+	DefaultAccount           int                `json:"default_account"`
+	Accounts                 []Account          `json:"accounts"`
+	DefaultBankAccount       string             `json:"default_bank_account"`
+	DefaultBankAccountIBAN   string             `json:"default_bank_account_iban"`
+	BankAccounts             []BankAccount      `json:"bank_accounts"`
+	RememberCompanyAccount   bool               `json:"remember_company_account"`
+	AutoSelectAccount        bool               `json:"auto_select_account"`
+	LastUsedFolder           string             `json:"last_used_folder"`                   // Last folder for Belege / attachments
+	LastStatementFolder      string             `json:"last_statement_folder"`              // Last folder for Kontoauszüge
+	OwnVATID                 string             `json:"own_vat_id"`                         // The user's own company VAT-ID — excluded during auto-extract
+	DatevBeraterNr           string             `json:"datev_berater_nr,omitempty"`         // optional DATEV consultant number
+	DatevMandantNr           string             `json:"datev_mandant_nr,omitempty"`         // optional DATEV client number
+	DatevWJBeginn            string             `json:"datev_wj_beginn,omitempty"`          // fiscal-year start YYYYMMDD (optional)
+	DebugMode                bool               `json:"debug_mode"`                         // Enable verbose debug logging
+	WindowWidth              int                `json:"window_width"`                       // Window width in pixels
+	WindowHeight             int                `json:"window_height"`                      // Window height in pixels
+	WindowX                  int                `json:"window_x"`                           // Window X position
+	WindowY                  int                `json:"window_y"`                           // Window Y position
+	DialogWidth              int                `json:"dialog_width"`                       // Invoice dialog width in pixels
+	DialogHeight             int                `json:"dialog_height"`                      // Invoice dialog height in pixels
+	CSVSeparator             string             `json:"csv_separator"`                      // CSV field separator: "," (comma), ";" (semicolon), "\t" (tab)
+	CSVEncoding              string             `json:"csv_encoding"`                       // CSV file encoding: "ISO-8859-1" or "UTF-8"
+	ColumnOrder              []string           `json:"column_order"`                       // Order of columns in table and CSV
+	ColumnWidths             map[string]float32 `json:"column_widths,omitempty"`            // Persisted user-adjusted table column widths, keyed by column ID
+	UIScale                  float32            `json:"ui_scale"`                           // UI zoom factor (1.0 = 100%)
+	PreviewSplitOffset       float64            `json:"preview_split_offset"`               // Divider position in the confirmation window (0..1)
+	MatchDateWindowDays      int                `json:"matchDateWindowDays,omitempty"`      // Reconciliation date window in days (0 = use default)
+	MatchForeignTolerancePct float64            `json:"matchForeignTolerancePct,omitempty"` // Reconciliation foreign-currency tolerance % (0 = use default)
 }
 
 // DefaultSettings returns the default application settings.
