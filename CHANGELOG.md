@@ -33,6 +33,23 @@ and this project uses [semantic-ish versioning](https://semver.org/) via git tag
   algorithms) detailed enough to rebuild BuchISY on another stack with identical behavior.
 - Added this CHANGELOG.
 
+### Fixed
+- **PDF upload freeze:** some PDFs drove the `ledongthuc/pdf` text parser into an
+  unbounded-allocation loop that exhausted memory and froze the whole machine.
+  Text extraction now uses go-fitz (MuPDF) only; the highlight-rectangle parse
+  (which still needs ledongthuc's per-word boxes) runs in a killable child
+  process hard-capped at 1 GiB (Windows Job Object), so a hostile PDF can never
+  hang the app.
+- **Bank-statement parsing (Sparkasse):** a dedicated parser for the "Umsätze -
+  Druckansicht" online export (was reporting 2×N+1 phantom zero-amount rows), and
+  the classic statement format now captures amounts printed as a separate
+  right-column run (they were read as 0,00, breaking amount-based reconciliation
+  for PDF-imported accounts).
+- **Account rename no longer orphans statements:** a Zahlungskonto's on-disk
+  statement folder is realigned to its (possibly renamed) name via a per-account
+  folder pointer, reconciled on startup and on save — renaming in the settings UI
+  or by editing `settings.json` directly no longer strands the statements.
+
 ---
 
 ## The bookkeeping buildout — v2.5 to v2.16 (June 2026)
