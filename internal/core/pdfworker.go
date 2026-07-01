@@ -116,6 +116,7 @@ func isolatedRects(mode, path string, values []string, dpi float64) ([][]Rect, e
 	// The child hard-caps its own committed memory (see limitWorkerMemory) and is
 	// killed if it outlives the context — two independent bounds on a runaway PDF.
 	cmd.Env = append(os.Environ(), pdfRectsEnv+"=1")
+	hideChildConsole(cmd) // no console-window flash on Windows
 	cmd.Stdin = bytes.NewReader(reqBytes)
 	var out bytes.Buffer
 	cmd.Stdout = &out
