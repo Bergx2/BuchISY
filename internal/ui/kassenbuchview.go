@@ -521,6 +521,20 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			book := bookFor(acc)
 			invoices := a.cashInvoicesFor(acc)
 			entries, endbestand := core.ComputeCashReport(*book, invoices)
+			// Fill each row's booked-account display ("Nr: Name") for the PDF —
+			// the chart lives here in the UI, not in core.
+			for i := range entries {
+				if entries[i].Gegenkonto == 0 {
+					continue
+				}
+				if a.chart != nil {
+					if acc, ok := a.chart.Find(entries[i].Gegenkonto); ok {
+						entries[i].Buchungskonto = core.AccountDisplay(acc)
+						continue
+					}
+				}
+				entries[i].Buchungskonto = fmt.Sprintf("%d", entries[i].Gegenkonto)
+			}
 			outPath := filepath.Join(monthFolder,
 				"Kassenbericht_"+core.SanitizeFilename(acc)+"_"+monthLabel+".pdf")
 			if err := core.WriteCashReportPDF(outPath, a.profile, *book, entries, endbestand, monthLabel, a.settings.DecimalSeparator); err != nil {

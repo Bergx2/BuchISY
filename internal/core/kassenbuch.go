@@ -64,7 +64,8 @@ type CashEntry struct {
 	Verwendungszweck string // purpose/description of the payment
 	Beleg            string // invoice Dateiname (links the row to its receipt)
 	Belegnummer      string // sequential receipt number ("YYYY-NNNN"), empty for deposits
-	Gegenkonto       int    // booked account (Buchungskonto); 0 for deposits / unbooked
+	Gegenkonto       int    // booked account number; 0 for deposits / unbooked
+	Buchungskonto    string // "Nummer: Name" of Gegenkonto (filled by the UI, which has the chart); empty for deposits
 	Einnahme         float64
 	Ausgabe          float64
 	Saldo            float64
