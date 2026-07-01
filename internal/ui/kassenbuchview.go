@@ -281,6 +281,21 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 		if a.cashSortCol == "" {
 			a.cashSortCol, a.cashSortAsc = "datum", true
 		}
+		// kontoOf shows which account the receipt is booked to ("Nummer: Name"),
+		// so the user sees "als was" it was booked; empty when not yet booked.
+		kontoOf := func(e core.CashEntry) string {
+			row, ok := rowByName[e.Beleg]
+			if !ok || row.Gegenkonto == 0 {
+				return ""
+			}
+			if a.chart != nil {
+				if acc, found := a.chart.Find(row.Gegenkonto); found {
+					return core.AccountDisplay(acc)
+				}
+			}
+			return fmt.Sprintf("%d", row.Gegenkonto)
+		}
+
 		var outEntries []core.CashEntry
 		for _, e := range entries {
 			if e.Ausgabe != 0 {
@@ -293,6 +308,10 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 		case "beschreibung":
 			sort.SliceStable(outEntries, func(i, j int) bool {
 				return strings.ToLower(outEntries[i].Beschreibung) < strings.ToLower(outEntries[j].Beschreibung)
+			})
+		case "buchungskonto":
+			sort.SliceStable(outEntries, func(i, j int) bool {
+				return strings.ToLower(kontoOf(outEntries[i])) < strings.ToLower(kontoOf(outEntries[j]))
 			})
 		case "ausgabe":
 			sort.SliceStable(outEntries, func(i, j int) bool { return outEntries[i].Ausgabe < outEntries[j].Ausgabe })
@@ -331,10 +350,11 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			}
 			return container.NewStack(canvas.NewRectangle(headerBackgroundColor), hl)
 		}
-		outflowHeader := container.NewGridWithColumns(4,
+		outflowHeader := container.NewGridWithColumns(5,
 			sortHeader("Belegnummer", "belegnr", fyne.TextAlignLeading),
 			sortHeader("Datum", "datum", fyne.TextAlignLeading),
 			sortHeader("Beschreibung", "beschreibung", fyne.TextAlignLeading),
+			sortHeader("Buchungskonto", "buchungskonto", fyne.TextAlignLeading),
 			sortHeader("Ausgabe", "ausgabe", fyne.TextAlignTrailing),
 		)
 
@@ -355,10 +375,11 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			} else {
 				belegCell = widget.NewLabel(belegTxt)
 			}
-			var rowUI fyne.CanvasObject = container.NewGridWithColumns(4,
+			var rowUI fyne.CanvasObject = container.NewGridWithColumns(5,
 				belegCell,
 				widget.NewLabel(e.Datum),
 				widget.NewLabel(e.Beschreibung),
+				widget.NewLabel(kontoOf(e)),
 				widget.NewLabelWithStyle("EUR "+formatDecimal(e.Ausgabe, sep), fyne.TextAlignTrailing, fyne.TextStyle{}),
 			)
 			// A freshly saved cash receipt blinks once so it's easy to spot.
