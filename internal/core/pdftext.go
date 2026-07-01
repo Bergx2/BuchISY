@@ -51,34 +51,22 @@ func (e *PDFTextExtractor) ExtractText(path string) (string, error) {
 	return strings.ReplaceAll(sb.String(), "�", "-"), nil
 }
 
-// ExtractTextGuarded runs ExtractText but gives up after timeout and falls back
-// to go-fitz (MuPDF). The ledongthuc/pdf parser can hang indefinitely on some
-// PDFs (certain content-stream encodings) — that abandoned goroutine is left to
-// finish on its own while we return text extracted the robust way. go-fitz is
-// already a dependency (used for rendering) and handles those PDFs cleanly.
+// ExtractTextGuarded extracts a PDF's text using go-fitz (MuPDF), which is fast
+// and robust and does not hang.
+//
+// It deliberately does NOT use the pure-Go ledongthuc/pdf parser (ExtractText):
+// on certain PDFs — e.g. some digitally-produced invoices — that parser enters
+// an unbounded-allocation loop, allocating ~500 MB/s with no end. Because a Go
+// goroutine cannot be killed, guarding it with a timeout could only *abandon*
+// the goroutine, which then kept eating memory until the whole machine froze.
+// go-fitz is already used everywhere else in the app (rendering, bank-statement
+// parsing) and reads those same PDFs cleanly in milliseconds.
+//
+// The timeout parameter is retained for API compatibility; go-fitz returns
+// effectively instantly, so it is unused.
 func (e *PDFTextExtractor) ExtractTextGuarded(path string, timeout time.Duration) (string, error) {
-	type result struct {
-		txt string
-		err error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		txt, err := e.ExtractText(path)
-		ch <- result{txt, err}
-	}()
-	select {
-	case r := <-ch:
-		// Primary parser returned in time but yielded no usable text — try the
-		// MuPDF fallback before declaring the PDF text-less.
-		if r.err == nil && !HasText(r.txt) {
-			if alt, aerr := extractTextViaFitz(path); aerr == nil && HasText(alt) {
-				return alt, nil
-			}
-		}
-		return r.txt, r.err
-	case <-time.After(timeout):
-		return extractTextViaFitz(path)
-	}
+	_ = timeout
+	return extractTextViaFitz(path)
 }
 
 // extractTextViaFitz extracts plain text from a PDF using go-fitz (MuPDF) by

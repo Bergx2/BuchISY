@@ -160,12 +160,16 @@ func valueBoxInRow(frags []pdf.Text, value string) (box pdfBox, ok bool) {
 	return pdfBox{x: minX, y: minY, w: maxX - minX, h: maxY - minY}, true
 }
 
-// HighlightRects opens the PDF and returns, per page (index 0 = page 1),
+// highlightRectsImpl opens the PDF and returns, per page (index 0 = page 1),
 // the list of yellow highlight rectangles in image pixels for the render
 // resolution dpi. dpi must match the value passed to RenderPDF. Values not
 // found verbatim in a page's text produce no rectangle. A page whose text
 // cannot be read yields a nil slice (no highlights, no error).
-func HighlightRects(path string, values []string, dpi float64) ([][]Rect, error) {
+//
+// It uses the ledongthuc/pdf parser, which can hang / allocate without bound on
+// some PDFs, so it is never called in-process by the UI: the exported
+// HighlightRects wrapper (pdfworker.go) runs it in a killable child process.
+func highlightRectsImpl(path string, values []string, dpi float64) ([][]Rect, error) {
 	f, r, err := pdf.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open PDF for highlighting: %w", err)
@@ -222,21 +226,23 @@ func HighlightRects(path string, values []string, dpi float64) ([][]Rect, error)
 	return result, nil
 }
 
-// StatementBlockRects returns, per page, full-height rects covering the ENTIRE
-// transaction block (the dated row plus its following undated detail rows) for
-// each row where one of values matches. Bank statements render a booking as a
-// dated line followed by detail lines (currency conversion, card number); this
-// frames the whole block, not just the amount line. X/W are left at 0 (the
-// caller widens to full page width); only the vertical extent is meaningful.
-func StatementBlockRects(path string, values []string, dpi float64) ([][]Rect, error) {
+// statementBlockRectsImpl returns, per page, full-height rects covering the
+// ENTIRE transaction block (the dated row plus its following undated detail
+// rows) for each row where one of values matches. Bank statements render a
+// booking as a dated line followed by detail lines (currency conversion, card
+// number); this frames the whole block, not just the amount line. X/W are left
+// at 0 (the caller widens to full page width); only the vertical extent is
+// meaningful. Run out-of-process via StatementBlockRects (see pdfworker.go).
+func statementBlockRectsImpl(path string, values []string, dpi float64) ([][]Rect, error) {
 	return statementRects(path, values, dpi, true)
 }
 
-// StatementRowRects is like StatementBlockRects but frames ONLY the matched row
-// itself (not the whole booking block), using the same top-origin/scaled
-// coordinate handling and gap-centering. Used to mark each linked amount line
-// without ballooning onto neighbouring bookings.
-func StatementRowRects(path string, values []string, dpi float64) ([][]Rect, error) {
+// statementRowRectsImpl is like statementBlockRectsImpl but frames ONLY the
+// matched row itself (not the whole booking block), using the same
+// top-origin/scaled coordinate handling and gap-centering. Used to mark each
+// linked amount line without ballooning onto neighbouring bookings. Run
+// out-of-process via StatementRowRects (see pdfworker.go).
+func statementRowRectsImpl(path string, values []string, dpi float64) ([][]Rect, error) {
 	return statementRects(path, values, dpi, false)
 }
 
