@@ -51,6 +51,32 @@ func TestBookingsFromPageHTML_UnescapesEntities(t *testing.T) {
 	}
 }
 
+// amountRunPageHTML mimics a classic Sparkasse statement where each booking's
+// amount is a SEPARATE right-aligned run on the same row as the date line, and
+// the running balance sits on its own Kontostand row.
+const amountRunPageHTML = `<!DOCTYPE html><html><body>
+<div id="page0" style="width:595.3pt;height:841.9pt">
+<p style="top:338.2pt;left:498.3pt"><span>34.337,91</span></p>
+<p style="top:338.2pt;left:123.1pt"><span>Kontostand am 02.01.2025</span></p>
+<p style="top:351.9pt;left:69.9pt"><span>02.01.2025 LS-Einl&#xf6;sung SEPA</span></p>
+<p style="top:351.9pt;left:504.2pt"><span>-217,71</span></p>
+<p style="top:478.5pt;left:69.9pt"><span>02.01.2025 Zahlungseingang</span></p>
+<p style="top:478.5pt;left:501.8pt"><span>1.520,25</span></p>
+</div></body></html>`
+
+func TestBookingsFromPageHTML_AmountOnSeparateRun(t *testing.T) {
+	got := bookingsFromPageHTML(amountRunPageHTML, 0)
+	if len(got) != 2 {
+		t.Fatalf("want 2 bookings (Kontostand row excluded), got %d: %+v", len(got), got)
+	}
+	if got[0].Betrag != 217.71 || got[0].IstGutschrift {
+		t.Errorf("booking 0: betrag=%.2f credit=%v, want 217.71 debit", got[0].Betrag, got[0].IstGutschrift)
+	}
+	if got[1].Betrag != 1520.25 || !got[1].IstGutschrift {
+		t.Errorf("booking 1: betrag=%.2f credit=%v, want 1520.25 credit", got[1].Betrag, got[1].IstGutschrift)
+	}
+}
+
 func TestParseBuchungRef_RoundTrip(t *testing.T) {
 	ref := BuchungRef{StatementFilename: "Auszug_2026_0002.pdf", Page: 0, LineIdx: 3}
 	parsed := ParseBuchungRef(ref.String())

@@ -300,6 +300,39 @@ func bookingsFromPageHTML(pageHTML string, page int) []StatementBooking {
 		date := m[0]
 		// Trim trailing whitespace from the matched date prefix.
 		date = strings.TrimSpace(date)
+
+		betrag := ParseLineAmount(ln.text)
+		credit := ParseLineIsCredit(ln.text)
+		// Many statements (e.g. Sparkasse) print the amount as a separate
+		// right-aligned run on the SAME row as the date line, so the date line's
+		// own text carries no amount. When that's the case, adopt the rightmost
+		// money run sharing this row (running-balance rows sit on their own,
+		// Kontostand-labelled rows, so they don't collide). The amount's leading
+		// "-" marks a debit; a trailing H/+ (or a credit keyword) marks a credit.
+		if betrag == 0 {
+			bestLeft := -1.0
+			for _, ar := range lines {
+				if ar.top < ln.top-3 || ar.top > ln.top+3 {
+					continue // not on this row
+				}
+				if ar.left <= ln.left+100 {
+					continue // must sit well to the right of the date/description
+				}
+				if !lineAmountRe.MatchString(ar.text) || ar.left <= bestLeft {
+					continue
+				}
+				if v := ParseLineAmount(ar.text); v != 0 {
+					bestLeft = ar.left
+					betrag = v
+					if strings.HasPrefix(strings.TrimSpace(ar.text), "-") {
+						credit = false
+					} else if ParseLineIsCredit(ar.text) {
+						credit = true
+					}
+				}
+			}
+		}
+
 		// If year is missing (e.g. "05.01."), keep as-is; UI can
 		// resolve to full year using statement period.
 		bookings = append(bookings, StatementBooking{
@@ -309,8 +342,8 @@ func bookingsFromPageHTML(pageHTML string, page int) []StatementBooking {
 			TopPt:         ln.top,
 			LeftPt:        ln.left,
 			Text:          ln.text,
-			Betrag:        ParseLineAmount(ln.text),
-			IstGutschrift: ParseLineIsCredit(ln.text),
+			Betrag:        betrag,
+			IstGutschrift: credit,
 		})
 	}
 	return bookings
