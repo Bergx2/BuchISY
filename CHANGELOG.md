@@ -34,6 +34,18 @@ and this project uses [semantic-ish versioning](https://semver.org/) via git tag
 - Added this CHANGELOG.
 
 ### Added
+- **Kassenbuch table:** the Bar-Ausgaben are now a real table with drag-resizable,
+  remembered column widths and a Belege-style sortable header (the active sort
+  column gets the darker-blue band).
+- **Kassenbericht PDF rebuilt** to mirror the view: A4 portrait, company name in
+  the title line with the month ("Juni 2026") right-aligned, right-aligned bold
+  Anfangsbestand/Endbestand, thousands grouping, separate Einnahmen/Ausgaben
+  tables with EUR prefixes and no running balance, grey header bands, a Lieferant
+  and a Verwendungszweck column (wrapping to at most two lines) plus a Konto
+  column (number + name).
+- **Consistent terminology:** the counterparty is now called **Lieferant**
+  (Supplier) everywhere — the Belege column, the review dialog field, the delete
+  dialog and the mapping settings.
 - **Kassenbuch polish:** a newly saved cash receipt now appears immediately (the
   view auto-refreshes and the row blinks once); a linked Belegnummer column and a
   Buchungskonto column (shows the account the receipt is booked to); a Belege-style
