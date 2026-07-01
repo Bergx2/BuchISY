@@ -246,8 +246,9 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 				})
 				removeBtn.Importance = widget.LowImportance
 
+				amtCell := container.NewBorder(nil, nil, widget.NewLabel("EUR"), nil, amtE)
 				row := container.NewBorder(nil, nil, nil, removeBtn,
-					container.NewGridWithColumns(3, dateE, descE, amtE))
+					container.NewGridWithColumns(3, dateE, descE, amtCell))
 				depositList.Add(row)
 			}
 			depositList.Refresh()
@@ -275,21 +276,70 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			sumAus += e.Ausgabe
 		}
 
-		// Bar-Ausgaben as aligned columns: Beleg-Nr. (clickable → receipt) |
-		// Datum | Beschreibung | Ausgabe.
-		outflowList := container.NewVBox()
-		outflowList.Add(container.NewGridWithColumns(4,
-			widget.NewLabelWithStyle("Beleg-Nr.", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			widget.NewLabelWithStyle("Datum", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			widget.NewLabelWithStyle("Beschreibung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			widget.NewLabelWithStyle("Ausgabe", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true}),
-		))
-		nOut := 0
+		// Bar-Ausgaben rows (Ausgabe != 0), sortable by any column. The entries
+		// arrive in date order, so "datum" sorting reuses that (asc = as-is).
+		if a.cashSortCol == "" {
+			a.cashSortCol, a.cashSortAsc = "datum", true
+		}
+		var outEntries []core.CashEntry
 		for _, e := range entries {
-			if e.Ausgabe == 0 {
-				continue
+			if e.Ausgabe != 0 {
+				outEntries = append(outEntries, e)
 			}
-			nOut++
+		}
+		switch a.cashSortCol {
+		case "belegnr":
+			sort.SliceStable(outEntries, func(i, j int) bool { return outEntries[i].Belegnummer < outEntries[j].Belegnummer })
+		case "beschreibung":
+			sort.SliceStable(outEntries, func(i, j int) bool {
+				return strings.ToLower(outEntries[i].Beschreibung) < strings.ToLower(outEntries[j].Beschreibung)
+			})
+		case "ausgabe":
+			sort.SliceStable(outEntries, func(i, j int) bool { return outEntries[i].Ausgabe < outEntries[j].Ausgabe })
+		}
+		if !a.cashSortAsc {
+			for i, j := 0, len(outEntries)-1; i < j; i, j = i+1, j-1 {
+				outEntries[i], outEntries[j] = outEntries[j], outEntries[i]
+			}
+		}
+
+		// Belege-style sortable header: light-blue band, bold, ▲/▼ on the active
+		// column, ▴▾ on the others; clicking toggles the sort.
+		sortHeader := func(title, key string, align fyne.TextAlign) fyne.CanvasObject {
+			text := title
+			if a.cashSortCol == key {
+				if a.cashSortAsc {
+					text += " ▲"
+				} else {
+					text += " ▼"
+				}
+			} else {
+				text += " ▴▾"
+			}
+			hl := newHoverLabel(nil, nil)
+			hl.SetText(text)
+			hl.TextStyle = fyne.TextStyle{Bold: true}
+			hl.Alignment = align
+			k := key
+			hl.onTap = func() {
+				if a.cashSortCol == k {
+					a.cashSortAsc = !a.cashSortAsc
+				} else {
+					a.cashSortCol, a.cashSortAsc = k, true
+				}
+				rebuild()
+			}
+			return container.NewStack(canvas.NewRectangle(headerBackgroundColor), hl)
+		}
+		outflowHeader := container.NewGridWithColumns(4,
+			sortHeader("Belegnummer", "belegnr", fyne.TextAlignLeading),
+			sortHeader("Datum", "datum", fyne.TextAlignLeading),
+			sortHeader("Beschreibung", "beschreibung", fyne.TextAlignLeading),
+			sortHeader("Ausgabe", "ausgabe", fyne.TextAlignTrailing),
+		)
+
+		outflowRows := container.NewVBox()
+		for _, e := range outEntries {
 			row, ok := rowByName[e.Beleg]
 			belegTxt := e.Belegnummer
 			if belegTxt == "" {
@@ -298,10 +348,10 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			var belegCell fyne.CanvasObject
 			if ok {
 				captured := row
-				b := widget.NewButton(belegTxt, func() { a.showEditDialog(captured, rebuild) })
-				b.Importance = widget.LowImportance
-				b.Alignment = widget.ButtonAlignLeading
-				belegCell = b
+				hl := newHoverLabel(nil, nil) // normal-weight, clickable → receipt
+				hl.SetText(belegTxt)
+				hl.onTap = func() { a.showEditDialog(captured, rebuild) }
+				belegCell = hl
 			} else {
 				belegCell = widget.NewLabel(belegTxt)
 			}
@@ -309,7 +359,7 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 				belegCell,
 				widget.NewLabel(e.Datum),
 				widget.NewLabel(e.Beschreibung),
-				widget.NewLabelWithStyle(formatDecimal(e.Ausgabe, sep), fyne.TextAlignTrailing, fyne.TextStyle{}),
+				widget.NewLabelWithStyle("EUR "+formatDecimal(e.Ausgabe, sep), fyne.TextAlignTrailing, fyne.TextStyle{}),
 			)
 			// A freshly saved cash receipt blinks once so it's easy to spot.
 			if e.Beleg != "" && e.Beleg == a.cashFlash {
@@ -319,27 +369,30 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 					fyne.Do(func() { bgRect.FillColor = color.Transparent; bgRect.Refresh() })
 				})
 			}
-			outflowList.Add(rowUI)
+			outflowRows.Add(rowUI)
 		}
-		if nOut == 0 {
-			outflowList.Add(newCopyableLabel(a.bundle, "  (keine Bar-Ausgaben in diesem Monat)"))
+		if len(outEntries) == 0 {
+			outflowRows.Add(newCopyableLabel(a.bundle, "  (keine Bar-Ausgaben in diesem Monat)"))
 		}
 		a.cashFlash = "" // one-shot
 
+		// A full-width, right-aligned bold total line (cash book is always EUR).
+		totalLine := func(label string, v float64) fyne.CanvasObject {
+			return widget.NewLabelWithStyle(label+": EUR "+formatDecimal(v, sep), fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})
+		}
+
 		editArea.Add(startRow)
-		editArea.Add(widget.NewLabelWithStyle("Einlagen", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+		editArea.Add(widget.NewLabelWithStyle("Einnahmen (Einlagen)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 		editArea.Add(depositList)
 		editArea.Add(container.NewHBox(addDepositBtn)) // left-aligned, natural width
+		editArea.Add(totalLine("Summe Einnahmen", sumEin))
 		editArea.Add(widget.NewSeparator())
 		editArea.Add(widget.NewLabelWithStyle("Bar-Ausgaben (aus Rechnungen)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		editArea.Add(outflowList)
+		editArea.Add(outflowHeader)
+		editArea.Add(outflowRows)
+		editArea.Add(totalLine("Summe Ausgaben", sumAus))
 		editArea.Add(widget.NewSeparator())
-		// Month totals + closing balance (cash book is always EUR).
-		editArea.Add(container.NewGridWithColumns(3,
-			widget.NewLabelWithStyle("Summe Einnahmen: EUR "+formatDecimal(sumEin, sep), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			widget.NewLabelWithStyle("Summe Ausgaben: EUR "+formatDecimal(sumAus, sep), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabelWithStyle("Endbestand: EUR "+formatDecimal(endbestand, sep), fyne.TextAlignTrailing, fyne.TextStyle{Bold: true}),
-		))
+		editArea.Add(totalLine("Endbestand", endbestand))
 		editArea.Refresh()
 	}
 	accountSelect.OnChanged = func(sel string) { a.cashAccount = sel; rebuild() }

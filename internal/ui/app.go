@@ -73,6 +73,8 @@ type App struct {
 	cashWholeYear bool   // Kassenbuch view: true → year overview, false → single month
 	cashFlash     string // Dateiname of a just-saved cash receipt to blink once in the cash book
 	cashAccount   string // selected Barkasse in the cash book, preserved across rebuilds
+	cashSortCol   string // Kassenbuch Bar-Ausgaben sort column: belegnr|datum|beschreibung|ausgabe
+	cashSortAsc   bool   // Kassenbuch Bar-Ausgaben sort direction
 
 	// Batch entry queue (E17.3): sequential processing of multiple files.
 	pendingFiles    []string
