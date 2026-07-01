@@ -158,22 +158,45 @@ func EnsureBookingsParsed(path string, meta *StatementMetadata) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// Preserve any existing InvoiceRef linkage by matching on (page,lineIdx).
-	if len(meta.Bookings) > 0 {
-		oldByKey := make(map[[2]int]*InvoiceRef, len(meta.Bookings))
-		for _, old := range meta.Bookings {
-			if old.InvoiceRef != nil {
-				oldByKey[[2]int{old.Page, old.LineIdx}] = old.InvoiceRef
-			}
-		}
-		for i := range parsed {
-			if ref, ok := oldByKey[[2]int{parsed[i].Page, parsed[i].LineIdx}]; ok {
-				parsed[i].InvoiceRef = ref
-			}
-		}
-	}
+	reattachInvoiceRefs(meta.Bookings, parsed)
 	meta.Bookings = parsed
 	meta.BookingsParsedMtime = mtime
 	meta.BookingsParserVersion = StatementParserVersion
 	return true, nil
+}
+
+// reattachInvoiceRefs copies each old booking's InvoiceRef onto the re-parsed
+// booking with the SAME STABLE IDENTITY — page + amount (cents) + date — rather
+// than the same line index. A parser change that adds or drops a booking shifts
+// line indices, so index-matching would silently move a link to the wrong
+// booking; the amount+date identity is stable across such changes (and works for
+// every parser, including Qonto, which carries no Y position). Duplicates of one
+// identity are matched in order so two identical same-day debits keep their
+// respective links.
+func reattachInvoiceRefs(old, parsed []StatementBooking) {
+	if len(old) == 0 {
+		return
+	}
+	type ident struct {
+		page  int
+		cents int64
+		date  string
+	}
+	key := func(b StatementBooking) ident {
+		return ident{page: b.Page, cents: int64(b.Betrag*100 + 0.5), date: b.Date}
+	}
+	byID := make(map[ident][]*InvoiceRef)
+	for i := range old {
+		if old[i].InvoiceRef != nil {
+			k := key(old[i])
+			byID[k] = append(byID[k], old[i].InvoiceRef)
+		}
+	}
+	for i := range parsed {
+		k := key(parsed[i])
+		if q := byID[k]; len(q) > 0 {
+			parsed[i].InvoiceRef = q[0]
+			byID[k] = q[1:]
+		}
+	}
 }
