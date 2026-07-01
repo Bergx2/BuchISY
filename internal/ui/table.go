@@ -39,32 +39,21 @@ type hoverLabel struct {
 	lastTooltipPos fyne.Position
 	onTap          func()
 	alwaysTooltip  bool
-	// bg is the cell's background rectangle (data cells only). When set, the
-	// cell draws a light-blue fill + blue frame while hovered. Nil for headers.
+	// bg is the cell's background rectangle (data cells only). The whole row is
+	// filled by the table's UpdateCell based on the hovered row. Nil for headers.
 	bg *canvas.Rectangle
+	// rowIndex is the data row this (recycled) cell currently shows; onEnter /
+	// onLeave notify the table so it can highlight/clear the ENTIRE row. All
+	// three are set by UpdateCell; nil/0 for headers.
+	rowIndex int
+	onEnter  func(row int)
+	onLeave  func()
 }
 
-// cell hover styling: light-blue fill + blue frame around the hovered cell.
+// row hover styling: a light-blue fill spanning the whole hovered row.
 var (
-	cellHoverFill   = color.NRGBA{R: 198, G: 222, B: 247, A: 255}
-	cellHoverStroke = color.NRGBA{R: 66, G: 120, B: 190, A: 255}
+	cellHoverFill = color.NRGBA{R: 198, G: 222, B: 247, A: 255}
 )
-
-// setHover toggles the hovered look on the cell background (no-op for headers).
-func (hl *hoverLabel) setHover(on bool) {
-	if hl.bg == nil {
-		return
-	}
-	if on {
-		hl.bg.FillColor = cellHoverFill
-		hl.bg.StrokeColor = cellHoverStroke
-		hl.bg.StrokeWidth = 2
-	} else {
-		hl.bg.FillColor = color.Transparent
-		hl.bg.StrokeWidth = 0
-	}
-	hl.bg.Refresh()
-}
 
 func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLabel {
 	hl := &hoverLabel{
@@ -77,13 +66,27 @@ func newHoverLabel(onHover func(string, fyne.Position), onExit func()) *hoverLab
 }
 
 func (hl *hoverLabel) MouseIn(_ *desktop.MouseEvent) {
-	hl.setHover(true) // light-blue fill + frame on the hovered data cell
-	if hl.tooltip == "" || hl.onHover == nil || hl.tooltipShown {
+	// Highlight the whole row (the table refreshes every visible cell of this
+	// row). Also cancels any pending row-clear scheduled by the cell we just
+	// left, so moving within a row never flickers the highlight.
+	if hl.onEnter != nil {
+		hl.onEnter(hl.rowIndex)
+	}
+	if hl.onHover == nil {
 		return
 	}
-	// Show when the text is truncated, or when the cell has opted in to
+	// Show the tooltip when the text is truncated, or when the cell opted in to
 	// an always-on enriched tooltip (e.g. Gegenkonto shows account name+type).
-	if !hl.alwaysTooltip && !hl.isTruncated() {
+	if hl.tooltip == "" || (!hl.alwaysTooltip && !hl.isTruncated()) {
+		// This cell has nothing to show — clear any tooltip left over from the
+		// previous cell so a stale popup doesn't linger on the wrong row.
+		if hl.onExit != nil {
+			hl.onExit()
+		}
+		hl.tooltipShown = false
+		return
+	}
+	if hl.tooltipShown {
 		return
 	}
 	// Anchor the tooltip just below the label rather than at the cursor:
@@ -114,8 +117,15 @@ func (hl *hoverLabel) MouseMoved(ev *desktop.MouseEvent) {
 }
 
 func (hl *hoverLabel) MouseOut() {
-	hl.setHover(false) // clear the cell's hover fill + frame
 	hl.tooltipShown = false
+	// Data cells: defer clearing the row highlight + tooltip. If the mouse only
+	// moved to a sibling cell in the same row, that cell's MouseIn cancels the
+	// pending clear, so nothing flickers. The clear only fires when the mouse
+	// truly leaves the table. Headers have no onLeave and fall back to onExit.
+	if hl.onLeave != nil {
+		hl.onLeave()
+		return
+	}
 	if hl.onExit != nil {
 		hl.onExit()
 	}
@@ -166,8 +176,11 @@ type InvoiceTable struct {
 	lastSelectedCol  int  // Track last selected data-column index (-1 = none)
 	window           fyne.Window
 	columnOrder      []string
-	tooltipPopup     *widget.PopUp // Shared tooltip popup
-	decimalSeparator string        // Decimal separator for display
+	tooltipPopup     *widget.PopUp  // Shared tooltip popup
+	tooltipLabel     *widget.Label  // Reused label inside tooltipPopup (avoids recreate-flicker)
+	hoveredRow       int            // Row currently highlighted on hover (-1 = none)
+	hoverGen         int            // Bumped on every cell-enter; guards deferred row-clear
+	decimalSeparator string         // Decimal separator for display
 	summaryLabel     *widget.Label // Sum bar under the table (Netto/MwSt/Brutto for filtered rows)
 	activeChip       string        // active quick-filter chip ("", "anhang", "teilzahlung", "ausgang")
 	chipRow          *fyne.Container
@@ -227,6 +240,7 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 		lastSelectedRow:  -1,
 		lastSelectedCol:  -1,
 		selectedRow:      -1,
+		hoveredRow:       -1,
 		columnOrder:      sanitizeColumnOrder(nil),
 		decimalSeparator: ",", // Default
 	}
@@ -254,11 +268,20 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 		if it.window == nil {
 			return
 		}
-		it.hideTooltip()
+		// Reuse the existing popup when one is already visible: just update the
+		// text and reposition it. Recreating the popup on every cell caused the
+		// tooltip to flicker as the mouse moved across a row.
+		if it.tooltipPopup != nil && it.tooltipLabel != nil {
+			it.tooltipLabel.SetText(text)
+			// `pos` is already anchored below the label by MouseIn.
+			it.tooltipPopup.ShowAtPosition(pos)
+			return
+		}
 
 		// Create label with no wrapping
 		label := widget.NewLabel(text)
 		label.Wrapping = fyne.TextWrapOff
+		it.tooltipLabel = label
 
 		// Use a HBox container to keep text horizontal
 		tooltipBox := container.NewHBox(label)
@@ -286,6 +309,8 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			bg := canvas.NewRectangle(color.Transparent)
 			hl := newHoverLabel(showTooltip, hideTooltip)
 			hl.bg = bg
+			hl.onEnter = it.onCellEnter // highlight the whole row on hover
+			hl.onLeave = it.onCellLeave // deferred clear (no within-row flicker)
 			return container.NewStack(bg, hl)
 		},
 		func(id widget.TableCellID, cell fyne.CanvasObject) {
@@ -293,10 +318,18 @@ func NewInvoiceTable(bundle *i18n.Bundle, app *App) *InvoiceTable {
 			bg := stack.Objects[0].(*canvas.Rectangle)
 			hoverLabel := stack.Objects[1].(*hoverLabel)
 			hoverLabel.TextStyle.Bold = false
+			// Remember which data row this recycled cell now shows, so its
+			// MouseIn can tell the table which row to highlight.
+			hoverLabel.rowIndex = id.Row
 
-			// White (transparent) background — no zebra striping. Also clears any
-			// leftover hover fill/frame from when this recycled cell was hovered.
-			bg.FillColor = color.Transparent
+			// Whole-row hover: fill every cell of the hovered row light-blue.
+			// Otherwise a transparent background (no zebra striping) — this also
+			// clears leftover hover fill when a recycled cell moves to a new row.
+			if id.Row == it.hoveredRow {
+				bg.FillColor = cellHoverFill
+			} else {
+				bg.FillColor = color.Transparent
+			}
 			bg.StrokeWidth = 0
 			bg.Refresh()
 
@@ -707,7 +740,42 @@ func (it *InvoiceTable) hideTooltip() {
 	if it.tooltipPopup != nil {
 		it.tooltipPopup.Hide()
 		it.tooltipPopup = nil
+		it.tooltipLabel = nil
 	}
+}
+
+// onCellEnter highlights the given data row (called from a cell's MouseIn) and
+// bumps hoverGen so any row-clear scheduled by the cell we just left is voided.
+func (it *InvoiceTable) onCellEnter(row int) {
+	it.hoverGen++
+	if it.hoveredRow != row {
+		it.hoveredRow = row
+		if it.table != nil {
+			it.table.Refresh()
+		}
+	}
+}
+
+// onCellLeave schedules clearing the row highlight + tooltip. The short delay
+// lets a sibling cell's MouseIn (which bumps hoverGen) cancel it, so moving
+// within a row doesn't flicker; the clear only actually runs when the mouse
+// has left the table entirely.
+func (it *InvoiceTable) onCellLeave() {
+	gen := it.hoverGen
+	time.AfterFunc(45*time.Millisecond, func() {
+		fyne.Do(func() {
+			if it.hoverGen != gen {
+				return // re-entered another cell — keep the highlight
+			}
+			if it.hoveredRow != -1 {
+				it.hoveredRow = -1
+				if it.table != nil {
+					it.table.Refresh()
+				}
+			}
+			it.hideTooltip()
+		})
+	})
 }
 
 // rightClickTable wraps the table to add right-click menu support.

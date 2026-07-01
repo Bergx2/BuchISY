@@ -34,10 +34,12 @@ func humanSize(n int64) string {
 }
 
 // newProcessingDialog builds the upload/extraction progress dialog: the file
-// name + size, a live status line (what's happening right now), an infinite
-// progress bar, and a Cancel button. Returns the dialog and a thread-safe
-// status setter to call from the extraction goroutine.
-func (a *App) newProcessingDialog(mainPath string) (dlg *dialog.CustomDialog, setStatus func(string), stop func()) {
+// name + size/pages, a live status line (what's happening right now), an
+// infinite progress bar, and a Cancel button. Returns the dialog, a thread-safe
+// status setter, and a thread-safe header setter (setHeader(name, meta) updates
+// the bold file name and the size/pages line — used when one dialog walks a
+// batch of files). Both setters are safe to call from the extraction goroutine.
+func (a *App) newProcessingDialog(mainPath string) (dlg *dialog.CustomDialog, setStatus func(string), setHeader func(name, meta string), stop func()) {
 	fileLbl := widget.NewLabelWithStyle(filepath.Base(mainPath), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	fileLbl.Wrapping = fyne.TextWrapWord
 	sizeStr := "—"
@@ -67,6 +69,12 @@ func (a *App) newProcessingDialog(mainPath string) (dlg *dialog.CustomDialog, se
 	setStatus = func(s string) {
 		fyne.Do(func() { statusLbl.SetText(s) })
 	}
+	setHeader = func(name, meta string) {
+		fyne.Do(func() {
+			fileLbl.SetText(name)
+			sizeLbl.SetText(meta)
+		})
+	}
 
 	// Live elapsed timer + a "taking longer than usual" hint after 30 s.
 	stopCh := make(chan struct{})
@@ -92,7 +100,7 @@ func (a *App) newProcessingDialog(mainPath string) (dlg *dialog.CustomDialog, se
 	}()
 	var once sync.Once
 	stop = func() { once.Do(func() { close(stopCh) }) }
-	return dlg, setStatus, stop
+	return dlg, setStatus, setHeader, stop
 }
 
 // showProcessingError reports an extraction failure (or timeout) with actionable
@@ -282,7 +290,7 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 		if core.ImageMediaType(mainPath) != "" && a.settings.ProcessingMode == "claude" {
 			ctx, cancel := context.WithTimeout(context.Background(), processingTimeout)
 			var done, canceled atomic.Bool
-			progress, setStatus, stopTimer := a.newProcessingDialog(mainPath)
+			progress, setStatus, _, stopTimer := a.newProcessingDialog(mainPath)
 			progress.SetOnClosed(func() {
 				stopTimer()
 				if done.Load() {
@@ -303,8 +311,6 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 				}
 				done.Store(true)
 				stopTimer()
-				progress.Hide()
-				time.Sleep(150 * time.Millisecond)
 				if err != nil {
 					a.logger.Warn("Image vision extraction failed, opening blank form: %v", err)
 					meta = core.Meta{
@@ -312,7 +318,13 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 						Gegenkonto: a.settings.DefaultAccount,
 					}
 				}
-				a.showConfirmationModal(mainPath, attachments, meta, onComplete)
+				// UI mutations MUST run on the main thread (Fyne 2.6 drops
+				// off-thread widget calls — hiding the dialog and opening the
+				// modal silently no-op'd, leaving the progress dialog frozen).
+				fyne.Do(func() {
+					progress.Hide()
+					a.showConfirmationModal(mainPath, attachments, meta, onComplete)
+				})
 			}()
 			return
 		}
@@ -331,7 +343,7 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 	// dialog; the goroutine then discards any late result.
 	ctx, cancel := context.WithTimeout(context.Background(), processingTimeout)
 	var done, canceled atomic.Bool
-	progress, setStatus, stopTimer := a.newProcessingDialog(mainPath)
+	progress, setStatus, _, stopTimer := a.newProcessingDialog(mainPath)
 	progress.SetOnClosed(func() {
 		stopTimer()
 		if done.Load() {
@@ -353,30 +365,35 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 		}
 		done.Store(true)
 		stopTimer()
-		progress.Hide()
-		time.Sleep(150 * time.Millisecond)
 
 		// Auto-timeout: the context's deadline fired before the user cancelled.
 		if ctx.Err() == context.DeadlineExceeded {
 			a.logger.Warn("PDF-Verarbeitung Zeitüberschreitung: %s", mainPath)
-			a.showProcessingError(mainPath, attachments, onComplete,
-				"Zeitüberschreitung bei der Verarbeitung (über 3 Minuten). Möglicherweise ist das PDF sehr groß/gescannt oder die Verbindung langsam.")
+			fyne.Do(func() {
+				progress.Hide()
+				a.showProcessingError(mainPath, attachments, onComplete,
+					"Zeitüberschreitung bei der Verarbeitung (über 3 Minuten). Möglicherweise ist das PDF sehr groß/gescannt oder die Verbindung langsam.")
+			})
 			return
 		}
 
 		if err != nil {
 			a.logger.Error("Failed to process PDF: %v", err)
-			if err.Error() == "no text found in PDF" {
-				a.handleNoTextPDF(mainPath, attachments, onComplete)
-			} else {
-				a.showProcessingError(mainPath, attachments, onComplete,
-					a.bundle.T("error.processing.message", err.Error()))
-			}
+			fyne.Do(func() {
+				progress.Hide()
+				if err.Error() == "no text found in PDF" {
+					a.handleNoTextPDF(mainPath, attachments, onComplete)
+				} else {
+					a.showProcessingError(mainPath, attachments, onComplete,
+						a.bundle.T("error.processing.message", err.Error()))
+				}
+			})
 			return
 		}
 
 		// E20.5: attempt silent auto-booking when a matching rule is opt-in,
-		// the receipt is plausible, and no duplicate exists.
+		// the receipt is plausible, and no duplicate exists. The booking itself
+		// is DB/file work; only the table refresh touches the UI.
 		if tpl, ok := core.MatchAutobookRule(meta.Auftraggeber, a.bookingTemplates); ok && core.AutobookPlausible(meta) {
 			// Quick duplicate pre-check using available fields (same logic saveInvoice will redo).
 			dupRow := core.CSVRow{
@@ -391,17 +408,27 @@ func (a *App) processSubmission(mainPath string, attachments []string, onComplet
 					// Fall through to modal on error.
 				} else {
 					a.batchAutoBooked++
-					a.loadInvoices()
-					if onComplete != nil {
-						onComplete()
-					}
+					fyne.Do(func() {
+						progress.Hide()
+						a.loadInvoices()
+						if onComplete != nil {
+							onComplete()
+						}
+					})
 					return
 				}
 			}
 		}
 
 		a.logger.Info("Showing confirmation modal for: %s", filepath.Base(mainPath))
-		a.showConfirmationModal(mainPath, attachments, meta, onComplete)
+		// UI mutations MUST run on the main thread — see the image path above.
+		// Doing progress.Hide()/showConfirmationModal() straight from this
+		// goroutine is why the dialog froze on "an Claude geschickt" and no
+		// review modal ever opened.
+		fyne.Do(func() {
+			progress.Hide()
+			a.showConfirmationModal(mainPath, attachments, meta, onComplete)
+		})
 	}()
 }
 

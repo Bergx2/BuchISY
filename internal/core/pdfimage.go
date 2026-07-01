@@ -67,6 +67,17 @@ func pdfToImageGoFitz(path string) (string, string, error) {
 	return encoded, "image/png", nil
 }
 
+// PDFPageCount returns the number of pages in a PDF using go-fitz.
+// Used by the upload UI to show "N Seiten" before rendering starts.
+func PDFPageCount(path string) (int, error) {
+	doc, err := fitz.New(path)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open PDF: %w", err)
+	}
+	defer doc.Close()
+	return doc.NumPage(), nil
+}
+
 // PDFAllPagesToBase64 renders every page of the PDF as a PNG and
 // returns the pages as base64 strings (plus the shared media type).
 // Used for statement extraction where the closing balance often lives

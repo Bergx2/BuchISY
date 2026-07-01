@@ -16,6 +16,9 @@ import (
 var (
 	sidebarHeaderBG   = color.NRGBA{R: 210, G: 224, B: 245, A: 255}
 	sidebarHeaderText = color.NRGBA{R: 0, G: 0, B: 0, A: 255}
+	// sidebarActiveBG is the soft-amber band behind the sidebar entry for the
+	// screen the user is currently on ("you are here").
+	sidebarActiveBG = color.NRGBA{R: 255, G: 224, B: 130, A: 255}
 )
 
 // sidebarGroupHeader renders a workflow-group title as a bold, small,
@@ -81,6 +84,22 @@ func (a *App) lockToggleNavItem() navItem {
 	return navItem{"nav.lock", a.lockCurrentMonth}
 }
 
+// activeNavKey returns the translation key of the sidebar entry that
+// corresponds to the screen currently shown in the main content area, so
+// buildSidebar can highlight it ("you are here"). Only the two persistent,
+// buildUI-driven views are tracked (Belege and Konten); the other entries
+// open dialogs on top of whichever of those two is active.
+func (a *App) activeNavKey() string {
+	switch a.viewMode {
+	case "konten":
+		return "nav.konten"
+	case "kassenbuch":
+		return "nav.kassenbuch"
+	default:
+		return "nav.belege"
+	}
+}
+
 // buildSidebar returns the persistent workflow navigation column (fixed width).
 // It groups every screen by workflow phase (ERFASSEN, BUCHEN, AUSWERTEN,
 // FINANZAMT, ABSCHLUSS) and renders each group as a bold header followed by
@@ -122,6 +141,7 @@ func (a *App) buildSidebar() fyne.CanvasObject {
 	// Tight vertical stack so the entries under a group sit close together;
 	// each group header carries its own top spacer for group separation.
 	col := container.New(&vGapLayout{gap: 1})
+	active := a.activeNavKey()
 	for _, g := range groups {
 		col.Add(sidebarGroupHeader(a.bundle.T(g.titleKey)))
 		for _, it := range g.items {
@@ -129,7 +149,15 @@ func (a *App) buildSidebar() fyne.CanvasObject {
 			btn := widget.NewButton(a.bundle.T(item.key), item.action)
 			btn.Alignment = widget.ButtonAlignLeading
 			btn.Importance = widget.LowImportance
-			col.Add(btn)
+			if item.key == active {
+				// Highlight the current screen with an amber band behind the
+				// (transparent LowImportance) button so it shows through.
+				bg := canvas.NewRectangle(sidebarActiveBG)
+				bg.CornerRadius = 4
+				col.Add(container.NewStack(bg, btn))
+			} else {
+				col.Add(btn)
+			}
 		}
 	}
 

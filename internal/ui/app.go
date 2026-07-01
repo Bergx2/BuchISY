@@ -63,11 +63,12 @@ type App struct {
 	cashUncovered map[string]bool // Dateiname → not covered; recomputed each loadInvoices
 
 	// Main-view mode: "" / "belege" → invoice table (default), "konten"
-	// → bank-statement browser per Zahlungskonto.
+	// → bank-statement browser per Zahlungskonto, "kassenbuch" → cash book.
 	viewMode      string
 	kontenAccount string // currently selected Zahlungskonto in Konten view
 	kontenSortCol string // sort column key for the Konten table
 	kontenSortAsc bool   // sort direction
+	cashWholeYear bool   // Kassenbuch view: true → year overview, false → single month
 
 	// Batch entry queue (E17.3): sequential processing of multiple files.
 	pendingFiles    []string
@@ -80,6 +81,12 @@ type App struct {
 	monthSelect  *highlightedSelect
 	invoiceTable *InvoiceTable
 	mainContent  fyne.CanvasObject
+	// tooltipLayer is a transparent, non-tappable overlay that sits ON TOP of
+	// mainContent in the normal content tree (not the canvas overlay stack).
+	// Hover tooltips render here so they don't block clicks to the widget
+	// beneath — a Fyne canvas overlay would swallow the pending tap.
+	tooltipLayer *fyne.Container
+	tooltip      fyne.CanvasObject
 	theme        *buchisyTheme
 	assetsDir    string
 	profile      string
@@ -671,9 +678,12 @@ func (a *App) buildUI() fyne.CanvasObject {
 	a.applyAccentForMode()
 
 	var content fyne.CanvasObject
-	if a.viewMode == "konten" {
+	switch a.viewMode {
+	case "konten":
 		content = a.buildKontenContent()
-	} else {
+	case "kassenbuch":
+		content = a.buildCashBookContent()
+	default:
 		content = a.buildBelegeContent()
 	}
 
@@ -686,17 +696,70 @@ func (a *App) buildUI() fyne.CanvasObject {
 		content,            // center
 	)
 	a.updateWindowTitle()
-	return a.mainContent
+
+	// Hover-tooltip layer: a transparent, non-tappable container stacked over
+	// the main content. Tooltips are added/removed here (see showTooltip /
+	// hideTooltip) instead of via widget.PopUp, whose full-canvas overlay would
+	// intercept the click that follows a hover and leave icon buttons dead.
+	a.tooltipLayer = container.NewWithoutLayout()
+	return container.NewStack(a.mainContent, a.tooltipLayer)
+}
+
+// showTooltip renders a small help bubble for `tip` just below `over`, inside
+// the content-tree tooltipLayer. Used by tooltipButton on hover. Positioning is
+// done in layer-local coordinates (button absolute minus layer absolute) so it
+// stays correct regardless of window padding / menu height.
+func (a *App) showTooltip(tip string, over fyne.CanvasObject) {
+	if a.tooltipLayer == nil || tip == "" || over == nil {
+		return
+	}
+	a.hideTooltip()
+
+	lbl := widget.NewLabel(tip)
+	lbl.Wrapping = fyne.TextWrapOff
+	bg := canvas.NewRectangle(theme.Color(theme.ColorNameOverlayBackground))
+	bg.CornerRadius = 4
+	bg.StrokeColor = theme.Color(theme.ColorNameInputBorder)
+	bg.StrokeWidth = 1
+	box := container.NewStack(bg, container.NewPadded(lbl))
+	box.Resize(box.MinSize())
+
+	drv := fyne.CurrentApp().Driver()
+	pos := drv.AbsolutePositionForObject(over).Subtract(drv.AbsolutePositionForObject(a.tooltipLayer))
+	pos.Y += over.Size().Height + 4
+	box.Move(pos)
+
+	a.tooltip = box
+	a.tooltipLayer.Add(box)
+	a.tooltipLayer.Refresh()
+}
+
+// hideTooltip removes the currently shown hover bubble, if any.
+func (a *App) hideTooltip() {
+	if a.tooltipLayer == nil || a.tooltip == nil {
+		return
+	}
+	a.tooltipLayer.Remove(a.tooltip)
+	a.tooltip = nil
+	a.tooltipLayer.Refresh()
 }
 
 // buildPeriodHeader returns the always-visible Buchungszeitraum strip
 // (year + month controls + lock indicator) plus a settings gear on the
 // right. Shared chrome for both view modes.
 func (a *App) buildPeriodHeader() fyne.CanvasObject {
-	yearWrap, monthControls := a.buildPeriodSelectors()
-	period := container.NewHBox(yearWrap, monthControls, a.lockIndicator())
 	settings := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { a.showSettingsView() })
 	settings.Importance = widget.LowImportance
+
+	// Kassenbuch has its own period picker (Ganzes Jahr / month / other years)
+	// in place of the global year+month selectors.
+	if a.viewMode == "kassenbuch" {
+		return container.NewBorder(nil, nil,
+			container.NewHBox(a.buildCashPeriodButton()), settings, nil)
+	}
+
+	yearWrap, monthControls := a.buildPeriodSelectors()
+	period := container.NewHBox(yearWrap, monthControls, a.lockIndicator())
 	return container.NewBorder(nil, nil, period, settings, nil)
 }
 
@@ -997,12 +1060,13 @@ func (a *App) buildUploadCard() fyne.CanvasObject {
 	uploadLabel := widget.NewLabel(a.bundle.T("dd.upload"))
 	uploadLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	cv := a.window.Canvas()
 	pasteBtn := newTooltipButton(theme.ContentPasteIcon(),
-		"Aus Zwischenablage einfügen (Datei oder Screenshot)", cv,
+		"Aus Zwischenablage einfügen (Datei oder Screenshot)",
+		a.showTooltip, a.hideTooltip,
 		func() { a.pasteFromClipboard() })
 	moreBtn := newTooltipButton(theme.FolderOpenIcon(),
-		"Datei auswählen …", cv,
+		"Datei auswählen …",
+		a.showTooltip, a.hideTooltip,
 		func() { a.selectPDFFiles() })
 
 	// Icons sit directly after the "Beleg hochladen" label (left-aligned).

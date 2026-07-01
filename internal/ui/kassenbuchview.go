@@ -2,7 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -111,9 +113,33 @@ func (a *App) cashCarryIn(account string, year int, month time.Month) (float64, 
 	return balance, true
 }
 
-// showCashBookView replaces the window content with the cash-book view
-// for the currently selected month.
+// showCashBookView switches the main view to the cash book (single-month
+// mode), keeping the workflow sidebar. The period (Ganzes Jahr / a month /
+// another year) is chosen via the header's cash period dropdown; see
+// buildCashPeriodButton.
 func (a *App) showCashBookView() {
+	a.viewMode = "kassenbuch"
+	a.cashWholeYear = false
+	a.window.SetContent(a.buildUI())
+}
+
+// buildCashBookContent is the Kassenbuch body (no chrome — the shell supplies
+// the sidebar and the period header). It renders the whole-year overview or a
+// single month's cash book, per a.cashWholeYear.
+func (a *App) buildCashBookContent() fyne.CanvasObject {
+	accounts := a.cashAccounts()
+	if len(accounts) == 0 {
+		return container.NewPadded(newCopyableLabel(a.bundle,
+			"Kein Konto vom Typ \"Barkasse\" vorhanden. Lege in den Einstellungen unter Konten ein Zahlungskonto mit Typ \"Barkasse\" an."))
+	}
+	if a.cashWholeYear {
+		return a.buildCashYearBody(accounts)
+	}
+	return a.buildCashMonthBody(accounts)
+}
+
+// buildCashMonthBody renders one month's cash book for a selectable account.
+func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 	monthFolder := a.storageManager.GetMonthFolder(a.currentYear, a.currentMonth)
 	jsonPath := filepath.Join(monthFolder, "kassenbuch.json")
 	monthLabel := fmt.Sprintf("%04d-%02d", a.currentYear, a.currentMonth)
@@ -139,25 +165,6 @@ func (a *App) showCashBookView() {
 		}
 		books = append(books, nb)
 		return &books[len(books)-1]
-	}
-
-	accounts := a.cashAccounts()
-
-	titleLabel := widget.NewLabelWithStyle(
-		"Kassenbuch — "+monthLabel, fyne.TextAlignLeading, fyne.TextStyle{Bold: true},
-	)
-	backBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() { a.showMainView() })
-
-	body := container.NewVBox()
-
-	if len(accounts) == 0 {
-		body.Add(newCopyableLabel(a.bundle,
-			"Kein Konto vom Typ \"Barkasse\" vorhanden. Lege in den Einstellungen unter Konten ein Zahlungskonto mit Typ \"Barkasse\" an.",
-		))
-		header := container.NewBorder(nil, nil, container.NewPadded(titleLabel),
-			container.NewPadded(backBtn))
-		a.window.SetContent(container.NewBorder(header, nil, nil, nil, container.NewVScroll(body)))
-		return
 	}
 
 	// Account selector
@@ -298,56 +305,30 @@ func (a *App) showCashBookView() {
 			"Erstellt:\n"+strings.Join(made, "\n"), a.window)
 	})
 
-	yearViewBtn := widget.NewButton("Jahresübersicht", func() {
-		a.showCashYearView(accountSelect.Selected, a.currentYear)
-	})
-
-	header := container.NewBorder(nil, nil,
-		container.NewPadded(titleLabel),
-		container.NewPadded(container.NewHBox(backBtn, saveBtn, pdfBtn, yearViewBtn)),
-		container.NewPadded(accountSelect),
+	toolbar := container.NewBorder(nil, nil,
+		container.NewHBox(widget.NewLabel("Konto:"), accountSelect),
+		container.NewHBox(saveBtn, pdfBtn),
 	)
-
-	a.window.SetContent(container.NewBorder(
-		header, nil, nil, nil, container.NewVScroll(editArea)))
+	return container.NewBorder(
+		container.NewPadded(toolbar), nil, nil, nil,
+		container.NewVScroll(editArea))
 }
 
-// showCashYearView shows a read-only twelve-month overview for one cash
-// account: per month the opening balance, deposits, cash expenses and
-// closing balance. Clicking a month opens that month's cash book.
-func (a *App) showCashYearView(account string, year int) {
-	accounts := a.cashAccounts()
-	if len(accounts) == 0 {
-		a.showMainView()
-		return
-	}
-	// Fall back to the first account if the requested one no longer exists.
-	sel := accounts[0]
-	for _, n := range accounts {
-		if n == account {
-			sel = account
-			break
-		}
-	}
-
-	curYear := year
-
-	titleLabel := widget.NewLabelWithStyle(
-		fmt.Sprintf("Jahresübersicht — %d", curYear),
-		fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	backBtn := widget.NewButton(a.bundle.T("btn.cancel"), func() { a.showMainView() })
+// buildCashYearBody renders a read-only twelve-month overview ("Ganzes Jahr")
+// for one cash account: per month the opening balance, deposits, cash expenses
+// and closing balance. Clicking a month jumps to that month's cash book. The
+// year is a.currentYear (changed via the period dropdown, not here).
+func (a *App) buildCashYearBody(accounts []string) fyne.CanvasObject {
+	curYear := a.currentYear
 
 	accountSelect := widget.NewSelect(accounts, nil)
-	accountSelect.SetSelected(sel)
-	yearSelect := widget.NewSelect(generateYearOptions(), nil)
-	yearSelect.SetSelected(fmt.Sprintf("%d", curYear))
+	accountSelect.SetSelected(accounts[0])
 
 	tableArea := container.NewVBox()
 	var lastSummaries []core.MonthSummary // for the PDF export
 
 	rebuild := func() {
 		curAccount := accountSelect.Selected
-		titleLabel.SetText(fmt.Sprintf("Jahresübersicht — %d", curYear))
 
 		// Collect the twelve months' input data.
 		months := make([]core.MonthInput, 12)
@@ -380,12 +361,9 @@ func (a *App) showCashYearView(account string, year int) {
 		for _, s := range summaries {
 			m := s.Month
 			monthBtn := widget.NewButton(fmt.Sprintf("%s %d", a.bundle.T(fmt.Sprintf("month.%02d", int(m))), curYear), func() {
-				a.currentYear = curYear
 				a.currentMonth = m
-				a.yearSelect.SetSelected(fmt.Sprintf("%d", curYear))
-				a.monthSelect.SetSelected(
-					fmt.Sprintf("%02d - %-12s", int(m), a.bundle.T(fmt.Sprintf("month.%02d", int(m)))))
-				a.showCashBookView()
+				a.cashWholeYear = false
+				a.window.SetContent(a.buildUI())
 			})
 			monthBtn.Importance = widget.LowImportance
 			anfLbl := newCopyableLabel(a.bundle, formatDecimal(s.Anfangsbestand, a.settings.DecimalSeparator))
@@ -404,14 +382,6 @@ func (a *App) showCashYearView(account string, year int) {
 	}
 
 	accountSelect.OnChanged = func(string) { rebuild() }
-	yearSelect.OnChanged = func(s string) {
-		var y int
-		fmt.Sscanf(s, "%d", &y)
-		if y != 0 {
-			curYear = y
-		}
-		rebuild()
-	}
 	rebuild()
 
 	exportBtn := widget.NewButton("PDF-Export", func() {
@@ -425,11 +395,94 @@ func (a *App) showCashYearView(account string, year int) {
 	})
 	exportBtn.Importance = widget.LowImportance
 
-	header := container.NewBorder(nil, nil,
-		container.NewPadded(titleLabel),
-		container.NewPadded(container.NewHBox(exportBtn, backBtn)),
-		container.NewPadded(container.NewHBox(accountSelect, yearSelect)),
+	toolbar := container.NewBorder(nil, nil,
+		container.NewHBox(widget.NewLabel("Konto:"), accountSelect),
+		container.NewHBox(exportBtn),
 	)
-	a.window.SetContent(container.NewBorder(
-		header, nil, nil, nil, container.NewVScroll(tableArea)))
+	return container.NewBorder(
+		container.NewPadded(toolbar), nil, nil, nil,
+		container.NewVScroll(tableArea))
+}
+
+// cashPeriodLabel is the text shown on the Kassenbuch period dropdown button.
+func (a *App) cashPeriodLabel() string {
+	if a.cashWholeYear {
+		return fmt.Sprintf("Kassenbuch — Ganzes Jahr %d", a.currentYear)
+	}
+	return fmt.Sprintf("Kassenbuch — %s %d",
+		a.bundle.T(fmt.Sprintf("month.%02d", int(a.currentMonth))), a.currentYear)
+}
+
+// buildCashPeriodButton is the Kassenbuch period picker shown top-left in the
+// header: a button that opens a menu with "Ganzes Jahr", each month of the
+// current year, and a "Weitere Jahre" submenu listing other years that have
+// cash activity. Selecting an entry rebuilds the whole view.
+func (a *App) buildCashPeriodButton() fyne.CanvasObject {
+	var btn *widget.Button
+	btn = widget.NewButton(a.cashPeriodLabel()+"  ▾", func() {
+		items := []*fyne.MenuItem{
+			fyne.NewMenuItem(fmt.Sprintf("Ganzes Jahr %d", a.currentYear), func() {
+				a.cashWholeYear = true
+				a.window.SetContent(a.buildUI())
+			}),
+			fyne.NewMenuItemSeparator(),
+		}
+		for i := 1; i <= 12; i++ {
+			mm := time.Month(i)
+			items = append(items, fyne.NewMenuItem(
+				fmt.Sprintf("%s %d", a.bundle.T(fmt.Sprintf("month.%02d", i)), a.currentYear),
+				func() {
+					a.currentMonth = mm
+					a.cashWholeYear = false
+					a.window.SetContent(a.buildUI())
+				}))
+		}
+		// "Weitere Jahre": other years that ever had a cash book.
+		var yearItems []*fyne.MenuItem
+		for _, y := range a.cashDataYears() {
+			if y == a.currentYear {
+				continue
+			}
+			yy := y
+			yearItems = append(yearItems, fyne.NewMenuItem(fmt.Sprintf("%d", yy), func() {
+				a.currentYear = yy
+				a.window.SetContent(a.buildUI())
+			}))
+		}
+		if len(yearItems) > 0 {
+			sub := fyne.NewMenuItem("Weitere Jahre", nil)
+			sub.ChildMenu = fyne.NewMenu("", yearItems...)
+			items = append(items, fyne.NewMenuItemSeparator(), sub)
+		}
+		menu := fyne.NewMenu("", items...)
+		canvas := fyne.CurrentApp().Driver().CanvasForObject(btn)
+		pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(btn)
+		pos.Y += btn.Size().Height
+		widget.ShowPopUpMenuAtPosition(menu, canvas, pos)
+	})
+	btn.Alignment = widget.ButtonAlignLeading
+	return btn
+}
+
+// cashDataYears returns the sorted set of years that have any stored cash book
+// (kassenbuch.json), always including the current year, so the period dropdown
+// can offer "Weitere Jahre".
+func (a *App) cashDataYears() []int {
+	set := map[int]bool{a.currentYear: true}
+	now := time.Now().Year()
+	for y := now - 8; y <= now+1; y++ {
+		for m := time.January; m <= time.December; m++ {
+			p := filepath.Join(a.storageManager.GetMonthFolder(y, m), "kassenbuch.json")
+			if _, err := os.Stat(p); err == nil {
+				set[y] = true
+				break
+			}
+		}
+	}
+	years := make([]int, 0, len(set))
+	for y := range set {
+		years = append(years, y)
+	}
+	sort.Ints(years)
+	return years
 }

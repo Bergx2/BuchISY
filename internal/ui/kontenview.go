@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -35,8 +36,16 @@ func base64StdEncode(b []byte) string {
 // (preserving the user's Reviewed flag and Note).
 // For CAMT.053 XML and MT940 files the vision step is skipped because
 // all transaction data is already extracted structurally by ParseStatementBookings.
-func (a *App) extractStatementMetadata(folder, rel string) error {
+//
+// setStatus (may be nil) receives a short German description of the current
+// step so the upload dialog can show progress ("Seiten werden gerendert …").
+// ctx cancels the Claude request when the user aborts the upload.
+func (a *App) extractStatementMetadata(ctx context.Context, folder, rel string, setStatus func(string)) error {
+	if setStatus == nil {
+		setStatus = func(string) {}
+	}
 	fullPath := filepath.Join(folder, rel)
+	setStatus("Datei wird gelesen …")
 
 	// E20.6: structured bank-statement files (CAMT.053, MT940) do not need
 	// Claude Vision — their bookings are parsed directly from bytes.
@@ -45,6 +54,7 @@ func (a *App) extractStatementMetadata(folder, rel string) error {
 		data, readErr := os.ReadFile(fullPath)
 		if readErr == nil && core.DetectBankFormat(data) != "" {
 			format := core.DetectBankFormat(data)
+			setStatus(fmt.Sprintf("Strukturierter Kontoauszug erkannt (%s) – Buchungen werden gelesen …", bankFormatLabel(format)))
 			a.logger.Info("Structured bank statement detected (%s): %s — skipping Vision extraction", format, rel)
 			// Ensure the entry exists in metadata.json (with empty period/balance).
 			// We only add it when absent so we don't overwrite a previously edited entry.
@@ -69,11 +79,15 @@ func (a *App) extractStatementMetadata(folder, rel string) error {
 	case core.IsPDF(fullPath):
 		// Send every page — the closing balance is often on the last
 		// page, not the first.
-		images, mediaType, err = core.PDFAllPagesToBase64(fullPath)
+		setStatus("Seiten werden gerendert …")
+		images, mediaType, err = core.PDFAllPagesToBase64Progress(fullPath, func(done, total int) {
+			setStatus(fmt.Sprintf("Seiten werden gerendert … (%d/%d)", done, total))
+		})
 		if err != nil {
 			return fmt.Errorf("PDF konnte nicht in Bilder umgewandelt werden: %w", err)
 		}
 	case core.ImageMediaType(fullPath) != "":
+		setStatus("Bild wird vorbereitet …")
 		mediaType = core.ImageMediaType(fullPath)
 		data, ferr := os.ReadFile(fullPath)
 		if ferr != nil {
@@ -89,14 +103,16 @@ func (a *App) extractStatementMetadata(folder, rel string) error {
 		return fmt.Errorf("API-Key nicht verfügbar (in den Einstellungen hinterlegen): %w", err)
 	}
 
+	setStatus(fmt.Sprintf("An Claude senden (%d Seite(n)) – Metadaten werden erkannt …", len(images)))
 	extracted, err := a.anthropicExtractor.ExtractStatementFromImages(
-		context.Background(), apiKey, a.settings.AnthropicModel,
+		ctx, apiKey, a.settings.AnthropicModel,
 		images, mediaType,
 	)
 	if err != nil {
 		return err
 	}
 
+	setStatus("Metadaten werden gespeichert …")
 	metaMap, err := core.LoadStatementMeta(folder)
 	if err != nil {
 		return fmt.Errorf("Metadaten konnten nicht geladen werden: %w", err)
@@ -121,7 +137,7 @@ func (a *App) autoFillOneStatement(folder, rel string) {
 		fmt.Sprintf("Lese %s …", rel), a.window)
 	progress.Show()
 	go func() {
-		err := a.extractStatementMetadata(folder, rel)
+		err := a.extractStatementMetadata(context.Background(), folder, rel, nil)
 		fyne.DoAndWait(func() {
 			progress.Hide()
 			if err != nil {
@@ -148,7 +164,7 @@ func (a *App) autoFillAllStatements(account string) {
 	go func() {
 		var failures []string
 		for _, rel := range statements {
-			if err := a.extractStatementMetadata(folder, rel); err != nil {
+			if err := a.extractStatementMetadata(context.Background(), folder, rel, nil); err != nil {
 				failures = append(failures, fmt.Sprintf("%s: %v", rel, err))
 				a.logger.Warn("Auto-fill failed for %s: %v", rel, err)
 			}
@@ -194,28 +210,105 @@ func (a *App) fileStatement(srcPath string) {
 	a.autoFillNewStatements(folder, []string{finalName})
 }
 
+// bankFormatLabel maps DetectBankFormat's short code to a user-facing name.
+func bankFormatLabel(format string) string {
+	switch format {
+	case "camt":
+		return "CAMT.053"
+	case "mt940":
+		return "MT940"
+	}
+	return format
+}
+
+// statementFileMeta returns a compact "size · pages/format" line for the
+// upload dialog header, e.g. "1.2 MB · 3 Seiten", "820 KB · CAMT.053" or
+// "640 KB · 1 Seite". Missing pieces are simply omitted.
+func (a *App) statementFileMeta(path string) string {
+	var parts []string
+	if fi, err := os.Stat(path); err == nil {
+		parts = append(parts, humanSize(fi.Size()))
+	}
+	switch {
+	case core.IsPDF(path):
+		if n, err := core.PDFPageCount(path); err == nil {
+			parts = append(parts, seitenLabel(n))
+		}
+	case core.ImageMediaType(path) != "":
+		parts = append(parts, seitenLabel(1))
+	default:
+		if data, err := os.ReadFile(path); err == nil {
+			if f := core.DetectBankFormat(data); f != "" {
+				parts = append(parts, bankFormatLabel(f))
+			}
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+// seitenLabel renders a page count with German singular/plural.
+func seitenLabel(n int) string {
+	if n == 1 {
+		return "1 Seite"
+	}
+	return fmt.Sprintf("%d Seiten", n)
+}
+
 // autoFillNewStatements runs Claude vision extraction over a list of
 // freshly placed statement file names and refreshes the UI when done.
 // Used after both single-file (drag-drop) and multi-file uploads so the
 // user doesn't have to click "Alle auto-füllen" manually.
+//
+// It shows the rich upload dialog (file name, size, page count and a live
+// per-step status) and walks the batch with a single dialog, updating the
+// header for each file. Cancelling the dialog aborts the running Claude
+// request and stops the batch.
 func (a *App) autoFillNewStatements(folder string, names []string) {
 	if len(names) == 0 {
 		a.window.SetContent(a.buildUI())
 		return
 	}
-	progress := dialog.NewProgressInfinite("Metadaten extrahieren",
-		fmt.Sprintf("Verarbeite %d Datei(en) …", len(names)), a.window)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var canceled atomic.Bool
+	first := filepath.Join(folder, names[0])
+	progress, setStatus, setHeader, stopTimer := a.newProcessingDialog(first)
+	progress.SetOnClosed(func() {
+		stopTimer()
+		canceled.Store(true)
+		cancel()
+	})
 	progress.Show()
+
 	go func() {
 		var failures []string
-		for _, name := range names {
-			if err := a.extractStatementMetadata(folder, name); err != nil {
+		for i, name := range names {
+			if canceled.Load() {
+				break
+			}
+			full := filepath.Join(folder, name)
+			label := name
+			if len(names) > 1 {
+				label = fmt.Sprintf("Datei %d/%d: %s", i+1, len(names), name)
+			}
+			setHeader(label, a.statementFileMeta(full))
+			if err := a.extractStatementMetadata(ctx, folder, name, setStatus); err != nil {
+				if canceled.Load() {
+					break
+				}
 				failures = append(failures, fmt.Sprintf("%s: %v", name, err))
 				a.logger.Warn("Auto-extract after upload failed for %s: %v", name, err)
 			}
 		}
+		wasCanceled := canceled.Load()
 		fyne.DoAndWait(func() {
+			stopTimer()
 			progress.Hide()
+			if wasCanceled {
+				a.logger.Info("Kontoauszug-Upload abgebrochen (%d Datei(en))", len(names))
+				a.window.SetContent(a.buildUI())
+				return
+			}
 			if len(failures) > 0 {
 				dialog.ShowInformation("Metadaten extrahieren",
 					fmt.Sprintf("Hochgeladen: %d. Mit Fehlern: %d.\n\n%s",
@@ -572,29 +665,12 @@ func (a *App) buildKontenContent() fyne.CanvasObject {
 		a.kontenAccount = accounts[0]
 	}
 
-	// Account picker: chip row when ≤ 6 accounts (quick visual switch),
-	// dropdown fallback above that count to avoid wrapping.
+	// Account picker: always a dropdown. A horizontal chip row (one button per
+	// account, each showing the long "<name> · <Konto> <Name>" label) grew wide
+	// enough with several accounts that the window could no longer be shrunk
+	// horizontally, so the dropdown is the single, fixed-width solution.
 	var accountPicker fyne.CanvasObject
-	if len(accounts) > 0 && len(accounts) <= 6 {
-		chips := make([]fyne.CanvasObject, 0, len(accounts))
-		for _, name := range accounts {
-			n := name
-			b := widget.NewButton(a.accountRichLabel(n), func() { // show name + Kontonummer
-				if n == a.kontenAccount {
-					return
-				}
-				a.kontenAccount = n
-				a.window.SetContent(a.buildUI())
-			})
-			if n == a.kontenAccount {
-				b.Importance = widget.HighImportance
-			} else {
-				b.Importance = widget.LowImportance
-			}
-			chips = append(chips, b)
-		}
-		accountPicker = container.NewHBox(chips...)
-	} else {
+	{
 		// Rich options "<name> · <Konto> <Name>" with a map back to the plain
 		// account name (which is the stored key / statement-folder name).
 		richOptions := make([]string, 0, len(accounts))
@@ -617,7 +693,8 @@ func (a *App) buildKontenContent() fyne.CanvasObject {
 		if a.kontenAccount != "" {
 			accountSelect.SetSelected(nameToRich[a.kontenAccount])
 		}
-		// Give the dropdown more width so the full label fits.
+		// Give the dropdown a comfortable width so the full label fits, but
+		// keep it fixed so it never forces the window wider.
 		wide := container.NewGridWrap(fyne.NewSize(460, accountSelect.MinSize().Height), accountSelect)
 		accountPicker = container.NewHBox(widget.NewLabel("Konto:"), wide)
 	}
@@ -756,15 +833,20 @@ func (a *App) buildStatementStats(metaMap core.StatementMetadataMap, all []strin
 		closing = formatMoney(latestClosing, "EUR", sep)
 	}
 
-	// Bold label + regular value, side by side (value right) on wide windows,
-	// stacked when narrow.
+	// Compact single-row card: bold title on the left, value right-aligned.
+	// The value truncates with an ellipsis when the window is narrow, so the
+	// card stays exactly one line tall (previously labelValue reserved a second,
+	// always-empty line for a possible wrap).
 	statCard := func(title, value string) fyne.CanvasObject {
 		bg := canvas.NewRectangle(cardBackgroundColor())
 		bg.StrokeColor = theme.Color(theme.ColorNameInputBorder)
 		bg.StrokeWidth = 1
 		bg.CornerRadius = 6
-		return container.NewStack(bg,
-			container.NewPadded(labelValue(title, value)))
+		titleLbl := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		valueLbl := widget.NewLabelWithStyle(value, fyne.TextAlignTrailing, fyne.TextStyle{})
+		valueLbl.Truncation = fyne.TextTruncateEllipsis
+		row := container.NewBorder(nil, nil, titleLbl, nil, valueLbl)
+		return container.NewStack(bg, container.NewPadded(row))
 	}
 
 	return container.NewGridWithColumns(3,
