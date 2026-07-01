@@ -523,7 +523,7 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			entries, endbestand := core.ComputeCashReport(*book, invoices)
 			outPath := filepath.Join(monthFolder,
 				"Kassenbericht_"+core.SanitizeFilename(acc)+"_"+monthLabel+".pdf")
-			if err := core.WriteCashReportPDF(outPath, *book, entries, endbestand, monthLabel, a.settings.DecimalSeparator); err != nil {
+			if err := core.WriteCashReportPDF(outPath, a.profile, *book, entries, endbestand, monthLabel, a.settings.DecimalSeparator); err != nil {
 				dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), a.window)
 				return
 			}
