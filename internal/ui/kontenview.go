@@ -1020,9 +1020,15 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 			hl := stack.Objects[1].(*hoverLabel)
 			hl.onTap = nil
 			hl.TextStyle.Bold = false
-			if id.Row%2 == 0 {
+			// The selected statement's whole row gets the same soft-amber band
+			// as the active sidebar entry, so the row shown in the preview on the
+			// right is easy to spot in the list.
+			switch {
+			case id.Row == selectedRow:
+				bg.FillColor = sidebarActiveBG
+			case id.Row%2 == 0:
 				bg.FillColor = stripeColor()
-			} else {
+			default:
 				bg.FillColor = color.Transparent
 			}
 			bg.Refresh()
@@ -1055,6 +1061,7 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 				rowRel := rel
 				hl.onTap = func() {
 					selectedRow = id.Row
+					table.Refresh() // repaint so the selected row's amber band shows
 					updatePreview(rowRel)
 				}
 			}
@@ -1137,6 +1144,7 @@ func (a *App) buildKontenSplit() fyne.CanvasObject {
 			return
 		}
 		selectedRow = id.Row
+		table.Refresh() // repaint so the selected row's amber band shows
 		updatePreview(filtered[id.Row])
 	}
 
