@@ -61,7 +61,8 @@ func SaveCashBooks(path string, books []CashBook) error {
 type CashEntry struct {
 	Datum        string
 	Beschreibung string
-	Beleg        string
+	Beleg        string // invoice Dateiname (links the row to its receipt)
+	Belegnummer  string // sequential receipt number ("YYYY-NNNN"), empty for deposits
 	Einnahme     float64
 	Ausgabe      float64
 	Saldo        float64
@@ -94,7 +95,7 @@ func ComputeCashReport(book CashBook, invoices []CSVRow) ([]CashEntry, float64) 
 		}
 		t, ok := parseGermanDate(dateStr)
 		items = append(items, dated{
-			entry: CashEntry{Datum: dateStr, Beschreibung: inv.Auftraggeber, Beleg: inv.Dateiname, Ausgabe: inv.Bruttobetrag},
+			entry: CashEntry{Datum: dateStr, Beschreibung: inv.Auftraggeber, Beleg: inv.Dateiname, Belegnummer: inv.Belegnummer, Ausgabe: inv.Bruttobetrag},
 			t:     t, ok: ok,
 		})
 	}

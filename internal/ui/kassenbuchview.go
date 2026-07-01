@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
@@ -180,9 +182,29 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 		book := bookFor(account)
 		editArea.Objects = editArea.Objects[:0]
 
-		startEntry := widget.NewEntry()
-		startEntry.SetText(formatDecimal(book.Anfangsbestand, a.settings.DecimalSeparator))
-		startEntry.OnChanged = func(s string) { book.Anfangsbestand = parseFloat(s, a.settings.DecimalSeparator) }
+		// Anfangsbestand is shown read-only (it is normally carried over from the
+		// previous month) and only editable behind an explicit "Ändern" click, so
+		// it can't be changed by accident. The value is persisted on "Speichern".
+		startRow := container.NewHBox(
+			widget.NewLabelWithStyle("Anfangsbestand:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			widget.NewLabel("EUR "+formatDecimal(book.Anfangsbestand, a.settings.DecimalSeparator)),
+			func() *widget.Button {
+				b := widget.NewButton("Ändern", func() {
+					entry := widget.NewEntry()
+					entry.SetText(formatDecimal(book.Anfangsbestand, a.settings.DecimalSeparator))
+					dialog.ShowForm("Anfangsbestand ändern", "Übernehmen", "Abbrechen",
+						[]*widget.FormItem{widget.NewFormItem("Anfangsbestand (EUR)", entry)},
+						func(ok bool) {
+							if !ok {
+								return
+							}
+							book.Anfangsbestand = parseFloat(entry.Text, a.settings.DecimalSeparator)
+							rebuild()
+						}, a.window)
+				})
+				b.Importance = widget.LowImportance
+				return b
+			}())
 
 		depositList := container.NewVBox()
 		var refreshDeposits func()
@@ -233,42 +255,78 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			rowByName[inv.Dateiname] = inv
 		}
 
+		sep := a.settings.DecimalSeparator
+		var sumEin, sumAus float64
+		for _, e := range entries {
+			sumEin += e.Einnahme
+			sumAus += e.Ausgabe
+		}
+
+		// Bar-Ausgaben as aligned columns: Beleg-Nr. (clickable → receipt) |
+		// Datum | Beschreibung | Ausgabe.
 		outflowList := container.NewVBox()
+		outflowList.Add(container.NewGridWithColumns(4,
+			widget.NewLabelWithStyle("Beleg-Nr.", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle("Datum", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle("Beschreibung", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle("Ausgabe", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true}),
+		))
+		nOut := 0
 		for _, e := range entries {
 			if e.Ausgabe == 0 {
 				continue
 			}
+			nOut++
 			row, ok := rowByName[e.Beleg]
-			label := fmt.Sprintf("%s  —  %s  —  %s  —  %s",
-				e.Datum, e.Beschreibung,
-				formatDecimal(e.Ausgabe, a.settings.DecimalSeparator), e.Beleg)
-			if !ok {
-				outflowList.Add(newCopyableLabel(a.bundle, "  "+label))
-				continue
+			belegTxt := e.Belegnummer
+			if belegTxt == "" {
+				belegTxt = "—"
 			}
-			btn := widget.NewButton(label, func() {
-				a.showEditDialog(row, rebuild)
-			})
-			btn.Importance = widget.LowImportance
-			btn.Alignment = widget.ButtonAlignLeading
-			outflowList.Add(btn)
+			var belegCell fyne.CanvasObject
+			if ok {
+				captured := row
+				b := widget.NewButton(belegTxt, func() { a.showEditDialog(captured, rebuild) })
+				b.Importance = widget.LowImportance
+				b.Alignment = widget.ButtonAlignLeading
+				belegCell = b
+			} else {
+				belegCell = widget.NewLabel(belegTxt)
+			}
+			var rowUI fyne.CanvasObject = container.NewGridWithColumns(4,
+				belegCell,
+				widget.NewLabel(e.Datum),
+				widget.NewLabel(e.Beschreibung),
+				widget.NewLabelWithStyle(formatDecimal(e.Ausgabe, sep), fyne.TextAlignTrailing, fyne.TextStyle{}),
+			)
+			// A freshly saved cash receipt blinks once so it's easy to spot.
+			if e.Beleg != "" && e.Beleg == a.cashFlash {
+				bgRect := canvas.NewRectangle(color.NRGBA{R: 255, G: 224, B: 130, A: 200})
+				rowUI = container.NewStack(bgRect, rowUI)
+				time.AfterFunc(1100*time.Millisecond, func() {
+					fyne.Do(func() { bgRect.FillColor = color.Transparent; bgRect.Refresh() })
+				})
+			}
+			outflowList.Add(rowUI)
 		}
-		if len(outflowList.Objects) == 0 {
+		if nOut == 0 {
 			outflowList.Add(newCopyableLabel(a.bundle, "  (keine Bar-Ausgaben in diesem Monat)"))
 		}
+		a.cashFlash = "" // one-shot
 
-		editArea.Add(widget.NewForm(
-			widget.NewFormItem("Anfangsbestand", startEntry),
-		))
+		editArea.Add(startRow)
 		editArea.Add(widget.NewLabelWithStyle("Einlagen", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 		editArea.Add(depositList)
-		editArea.Add(addDepositBtn)
+		editArea.Add(container.NewHBox(addDepositBtn)) // left-aligned, natural width
 		editArea.Add(widget.NewSeparator())
 		editArea.Add(widget.NewLabelWithStyle("Bar-Ausgaben (aus Rechnungen)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 		editArea.Add(outflowList)
 		editArea.Add(widget.NewSeparator())
-		editArea.Add(widget.NewLabelWithStyle(
-			"Endbestand: "+formatDecimal(endbestand, a.settings.DecimalSeparator), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+		// Month totals + closing balance (cash book is always EUR).
+		editArea.Add(container.NewGridWithColumns(3,
+			widget.NewLabelWithStyle("Summe Einnahmen: EUR "+formatDecimal(sumEin, sep), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle("Summe Ausgaben: EUR "+formatDecimal(sumAus, sep), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle("Endbestand: EUR "+formatDecimal(endbestand, sep), fyne.TextAlignTrailing, fyne.TextStyle{Bold: true}),
+		))
 		editArea.Refresh()
 	}
 	accountSelect.OnChanged = func(string) { rebuild() }
@@ -288,7 +346,7 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 			dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), a.window)
 			return
 		}
-		var made []string
+		var madePaths []string
 		for _, acc := range accounts {
 			book := bookFor(acc)
 			invoices := a.cashInvoicesFor(acc)
@@ -299,10 +357,19 @@ func (a *App) buildCashMonthBody(accounts []string) fyne.CanvasObject {
 				dialog.ShowInformation(a.bundle.T("error.processing.title"), err.Error(), a.window)
 				return
 			}
-			made = append(made, filepath.Base(outPath))
+			madePaths = append(madePaths, outPath)
+		}
+		// Open the generated report(s) in the OS default PDF viewer so the click
+		// visibly produces something.
+		for _, p := range madePaths {
+			a.openFileInOS(p)
+		}
+		var names []string
+		for _, p := range madePaths {
+			names = append(names, filepath.Base(p))
 		}
 		dialog.ShowInformation("Kassenbericht",
-			"Erstellt:\n"+strings.Join(made, "\n"), a.window)
+			"Erstellt und geöffnet:\n"+strings.Join(names, "\n"), a.window)
 	})
 
 	toolbar := container.NewBorder(nil, nil,

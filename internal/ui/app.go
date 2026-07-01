@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -70,6 +71,7 @@ type App struct {
 	kontenSortCol string // sort column key for the Konten table
 	kontenSortAsc bool   // sort direction
 	cashWholeYear bool   // Kassenbuch view: true → year overview, false → single month
+	cashFlash     string // Dateiname of a just-saved cash receipt to blink once in the cash book
 
 	// Batch entry queue (E17.3): sequential processing of multiple files.
 	pendingFiles    []string
@@ -1082,7 +1084,52 @@ func (a *App) lockIndicator() fyne.CanvasObject {
 
 // showAbout shows the About dialog.
 func (a *App) showAbout() {
-	dialog.ShowInformation(a.bundle.T("menu.about"), a.bundle.T("app.about"), a.window)
+	var b strings.Builder
+	b.WriteString(a.bundle.T("app.about"))
+	b.WriteString("\n\n")
+
+	// Build provenance: the exact commit + time the binary was built from
+	// (stamped automatically by `go build` in a git repo), so the user can tell
+	// which version they run and when it was last changed.
+	if info, ok := debug.ReadBuildInfo(); ok {
+		var rev, when string
+		var modified bool
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				rev = s.Value
+			case "vcs.time":
+				when = s.Value
+			case "vcs.modified":
+				modified = s.Value == "true"
+			}
+		}
+		if rev != "" {
+			short := rev
+			if len(short) > 10 {
+				short = short[:10]
+			}
+			if modified {
+				short += " (lokal geändert)"
+			}
+			b.WriteString("Version (Commit): " + short + "\n")
+		}
+		if when != "" {
+			if t, err := time.Parse(time.RFC3339, when); err == nil {
+				when = t.Local().Format("02.01.2006 15:04")
+			}
+			b.WriteString("Stand: " + when + "\n")
+		}
+		b.WriteString("Go: " + info.GoVersion + "\n")
+	}
+	if a.profile != "" {
+		b.WriteString("Profil: " + a.profile + "\n")
+	}
+	if a.settings.StorageRoot != "" {
+		b.WriteString("Speicherort: " + a.settings.StorageRoot + "\n")
+	}
+
+	dialog.ShowInformation(a.bundle.T("menu.about"), b.String(), a.window)
 }
 
 // importMultiple opens the multi-file picker and enqueues the picks.
@@ -1698,6 +1745,15 @@ func (a *App) loadInvoices() {
 // Called after every loadInvoices() so month/year changes and add/delete
 // operations all get the correct view.
 func (a *App) refreshCenterContent() {
+	// The Kassenbuch renders its own center content (not the invoice table), so a
+	// data change — e.g. a newly saved cash receipt — needs a full rebuild to show
+	// up; the lightweight table swap below only covers the Belege view.
+	if a.viewMode == "kassenbuch" {
+		if a.window != nil {
+			a.window.SetContent(a.buildUI())
+		}
+		return
+	}
 	if a.centerWrapper == nil || a.emptyState == nil || a.invoiceTable == nil {
 		return
 	}

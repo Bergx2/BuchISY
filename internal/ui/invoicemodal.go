@@ -1462,6 +1462,13 @@ func (a *App) saveInvoice(
 		}
 
 		a.logger.Info("Saved invoice: %s (%d attachments)", finalFilename, seq)
+
+		// A cash-paid receipt should surface immediately in the Kassenbuch: mark
+		// it so refreshCenterContent (called right after via loadInvoices) rebuilds
+		// the cash view and its row blinks once.
+		if a.isCashAccount(newRow.Bankkonto) {
+			a.cashFlash = finalFilename
+		}
 		return nil
 	}
 
