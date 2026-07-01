@@ -4,30 +4,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/go-pdf/fpdf"
 )
 
-// formatCashAmount formats an amount with the configured decimal separator.
-func formatCashAmount(v float64, decimalSep string) string {
-	s := fmt.Sprintf("%.2f", v)
-	if decimalSep == "," {
-		s = strings.ReplaceAll(s, ".", ",")
+// germanMonthLabel turns "2026-06" into "Juni 2026".
+func germanMonthLabel(monthLabel string) string {
+	parts := strings.SplitN(monthLabel, "-", 2)
+	if len(parts) == 2 {
+		months := []string{"", "Januar", "Februar", "März", "April", "Mai", "Juni",
+			"Juli", "August", "September", "Oktober", "November", "Dezember"}
+		if m, err := strconv.Atoi(parts[1]); err == nil && m >= 1 && m <= 12 {
+			return months[m] + " " + parts[0]
+		}
 	}
-	return s
-}
-
-// truncateRunes shortens s to at most max runes, adding "..." if cut.
-func truncateRunes(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	if max < 4 {
-		return string(r[:max])
-	}
-	return string(r[:max-3]) + "..."
+	return monthLabel
 }
 
 // WriteCashReportPDF writes a monthly cash report (Kassenbericht) for one cash
@@ -40,21 +33,27 @@ func WriteCashReportPDF(path, company string, book CashBook, entries []CashEntry
 		return fmt.Errorf("failed to create report directory: %w", err)
 	}
 	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(10, 10, 10)
 	tr := pdf.UnicodeTranslatorFromDescriptor("") // UTF-8 -> cp1252 for core fonts
 	pdf.AddPage()
-	eur := func(v float64) string { return "EUR " + formatCashAmount(v, decimalSep) }
+	eur := func(v float64) string { return "EUR " + FormatAmount(v, decimalSep) }
+	const lineH = 5.0
 
-	// Header: company, report title, month, opening balance.
+	// Title + company on ONE line (left); month ("Juni 2026") right-aligned on the
+	// same line to save vertical space.
+	title := "Kassenbericht - " + book.Konto
 	if company != "" {
-		pdf.SetFont("Arial", "B", 12)
-		pdf.CellFormat(0, 7, tr(company), "", 1, "L", false, 0, "")
+		title += ": " + company
 	}
 	pdf.SetFont("Arial", "B", 14)
-	pdf.CellFormat(0, 9, tr("Kassenbericht - "+book.Konto), "", 1, "L", false, 0, "")
-	pdf.SetFont("Arial", "", 10)
-	pdf.CellFormat(0, 6, tr("Monat: "+monthLabel), "", 1, "L", false, 0, "")
-	pdf.CellFormat(0, 6, tr("Anfangsbestand: "+eur(book.Anfangsbestand)), "", 1, "L", false, 0, "")
-	pdf.Ln(4)
+	pdf.CellFormat(130, 9, tr(title), "", 0, "L", false, 0, "")
+	pdf.SetFont("Arial", "B", 11)
+	pdf.CellFormat(60, 9, tr(germanMonthLabel(monthLabel)), "", 1, "R", false, 0, "")
+
+	// Anfangsbestand — right-aligned, bold, same size as Endbestand so they match.
+	pdf.SetFont("Arial", "B", 12)
+	pdf.CellFormat(0, 8, tr("Anfangsbestand: "+eur(book.Anfangsbestand)), "", 1, "R", false, 0, "")
+	pdf.Ln(3)
 
 	var sumEin, sumAus float64
 	for _, e := range entries {
@@ -62,14 +61,15 @@ func WriteCashReportPDF(path, company string, book CashBook, entries []CashEntry
 		sumAus += e.Ausgabe
 	}
 
-	section := func(title string) {
+	section := func(t string) {
 		pdf.SetFont("Arial", "B", 12)
-		pdf.CellFormat(0, 7, tr(title), "", 1, "L", false, 0, "")
+		pdf.CellFormat(0, 7, tr(t), "", 1, "L", false, 0, "")
 	}
-	headerRow := func(widths []float64, titles []string, aligns []string) {
+	headerRow := func(widths []float64, titles, aligns []string) {
 		pdf.SetFont("Arial", "B", 9)
+		pdf.SetFillColor(225, 225, 225) // light-grey header band
 		for i, h := range titles {
-			pdf.CellFormat(widths[i], 7, tr(h), "1", 0, aligns[i], false, 0, "")
+			pdf.CellFormat(widths[i], 7, tr(h), "1", 0, aligns[i], true, 0, "")
 		}
 		pdf.Ln(-1)
 	}
@@ -77,35 +77,76 @@ func WriteCashReportPDF(path, company string, book CashBook, entries []CashEntry
 		pdf.SetFont("Arial", "B", 10)
 		pdf.CellFormat(0, 7, tr(label+": "+eur(v)), "", 1, "R", false, 0, "")
 	}
+	emptyRow := func(txt string) {
+		pdf.SetFont("Arial", "I", 9)
+		pdf.CellFormat(190, 6, tr(txt), "1", 1, "C", false, 0, "") // centered
+	}
+
+	type pcol struct {
+		text, align string
+		w           float64
+		wrap        bool
+	}
+	// dataRow draws one table row. Cells flagged wrap break onto a second line when
+	// the text is too long; all text is top-aligned within the (possibly taller) row.
+	dataRow := func(cells []pcol) {
+		pdf.SetFont("Arial", "", 9)
+		maxLines := 1
+		for _, c := range cells {
+			if c.wrap && c.text != "" {
+				if n := len(pdf.SplitLines([]byte(tr(c.text)), c.w-2)); n > maxLines {
+					maxLines = n
+				}
+			}
+		}
+		rowH := float64(maxLines) * lineH
+		x0, y0 := pdf.GetX(), pdf.GetY()
+		if y0+rowH > 285 {
+			pdf.AddPage()
+			x0, y0 = pdf.GetX(), pdf.GetY()
+		}
+		x := x0
+		for _, c := range cells {
+			pdf.Rect(x, y0, c.w, rowH, "D")
+			pdf.SetXY(x, y0)
+			if c.wrap {
+				pdf.MultiCell(c.w, lineH, tr(c.text), "", c.align, false)
+			} else {
+				pdf.CellFormat(c.w, lineH, tr(c.text), "", 0, c.align, false, 0, "")
+			}
+			x += c.w
+		}
+		pdf.SetXY(x0, y0+rowH)
+	}
 
 	// --- Einnahmen (top) ---
 	section("Einnahmen")
-	einW := []float64{28, 122, 40}
+	einW := []float64{22, 140, 28}
 	headerRow(einW, []string{"Datum", "Beschreibung", "Einnahme"}, []string{"L", "L", "R"})
-	pdf.SetFont("Arial", "", 9)
 	nEin := 0
 	for _, e := range entries {
 		if e.Einnahme == 0 {
 			continue
 		}
 		nEin++
-		pdf.CellFormat(einW[0], 6, tr(e.Datum), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(einW[1], 6, tr(truncateRunes(e.Beschreibung, 70)), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(einW[2], 6, tr(eur(e.Einnahme)), "1", 0, "R", false, 0, "")
-		pdf.Ln(-1)
+		dataRow([]pcol{
+			{e.Datum, "L", einW[0], false},
+			{e.Beschreibung, "L", einW[1], true},
+			{eur(e.Einnahme), "R", einW[2], false},
+		})
 	}
 	if nEin == 0 {
-		pdf.SetFont("Arial", "I", 9)
-		pdf.CellFormat(190, 6, tr("(keine Einnahmen)"), "1", 1, "L", false, 0, "")
+		emptyRow("(keine Einnahmen)")
 	}
 	totalRow("Summe Einnahmen", sumEin)
 	pdf.Ln(4)
 
-	// --- Ausgaben (below) ---
+	// --- Ausgaben (below): Belegnummer | Datum | Empfänger | Verwendungszweck | Konto | Ausgabe ---
 	section("Ausgaben")
-	ausW := []float64{28, 24, 98, 40}
-	headerRow(ausW, []string{"Belegnummer", "Datum", "Beschreibung", "Ausgabe"}, []string{"L", "L", "L", "R"})
-	pdf.SetFont("Arial", "", 9)
+	ausW := []float64{24, 20, 48, 48, 20, 30}
+	headerRow(ausW,
+		[]string{"Belegnummer", "Datum", "Empfänger", "Verwendungszweck", "Konto", "Ausgabe"},
+		[]string{"L", "L", "L", "L", "L", "R"})
 	nAus := 0
 	for _, e := range entries {
 		if e.Ausgabe == 0 {
@@ -116,15 +157,21 @@ func WriteCashReportPDF(path, company string, book CashBook, entries []CashEntry
 		if belegnr == "" {
 			belegnr = "-"
 		}
-		pdf.CellFormat(ausW[0], 6, tr(belegnr), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(ausW[1], 6, tr(e.Datum), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(ausW[2], 6, tr(truncateRunes(e.Beschreibung, 56)), "1", 0, "L", false, 0, "")
-		pdf.CellFormat(ausW[3], 6, tr(eur(e.Ausgabe)), "1", 0, "R", false, 0, "")
-		pdf.Ln(-1)
+		konto := ""
+		if e.Gegenkonto != 0 {
+			konto = strconv.Itoa(e.Gegenkonto)
+		}
+		dataRow([]pcol{
+			{belegnr, "L", ausW[0], false},
+			{e.Datum, "L", ausW[1], false},
+			{e.Beschreibung, "L", ausW[2], true},
+			{e.Verwendungszweck, "L", ausW[3], true},
+			{konto, "L", ausW[4], false},
+			{eur(e.Ausgabe), "R", ausW[5], false},
+		})
 	}
 	if nAus == 0 {
-		pdf.SetFont("Arial", "I", 9)
-		pdf.CellFormat(190, 6, tr("(keine Ausgaben)"), "1", 1, "L", false, 0, "")
+		emptyRow("(keine Ausgaben)")
 	}
 	totalRow("Summe Ausgaben", sumAus)
 	pdf.Ln(5)

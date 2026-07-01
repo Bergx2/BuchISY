@@ -59,13 +59,15 @@ func SaveCashBooks(path string, books []CashBook) error {
 
 // CashEntry is one line of a computed cash report.
 type CashEntry struct {
-	Datum        string
-	Beschreibung string
-	Beleg        string // invoice Dateiname (links the row to its receipt)
-	Belegnummer  string // sequential receipt number ("YYYY-NNNN"), empty for deposits
-	Einnahme     float64
-	Ausgabe      float64
-	Saldo        float64
+	Datum            string
+	Beschreibung     string // counterparty (Auftraggeber) — the payee for an expense
+	Verwendungszweck string // purpose/description of the payment
+	Beleg            string // invoice Dateiname (links the row to its receipt)
+	Belegnummer      string // sequential receipt number ("YYYY-NNNN"), empty for deposits
+	Gegenkonto       int    // booked account (Buchungskonto); 0 for deposits / unbooked
+	Einnahme         float64
+	Ausgabe          float64
+	Saldo            float64
 }
 
 // ComputeCashReport combines the cash book's opening balance and deposits
@@ -95,7 +97,7 @@ func ComputeCashReport(book CashBook, invoices []CSVRow) ([]CashEntry, float64) 
 		}
 		t, ok := parseGermanDate(dateStr)
 		items = append(items, dated{
-			entry: CashEntry{Datum: dateStr, Beschreibung: inv.Auftraggeber, Beleg: inv.Dateiname, Belegnummer: inv.Belegnummer, Ausgabe: inv.Bruttobetrag},
+			entry: CashEntry{Datum: dateStr, Beschreibung: inv.Auftraggeber, Verwendungszweck: inv.Verwendungszweck, Beleg: inv.Dateiname, Belegnummer: inv.Belegnummer, Gegenkonto: inv.Gegenkonto, Ausgabe: inv.Bruttobetrag},
 			t:     t, ok: ok,
 		})
 	}
