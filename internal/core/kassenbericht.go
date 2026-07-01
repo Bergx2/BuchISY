@@ -145,7 +145,7 @@ func WriteCashReportPDF(path, company string, book CashBook, entries []CashEntry
 	section("Ausgaben")
 	ausW := []float64{24, 20, 48, 48, 20, 30}
 	headerRow(ausW,
-		[]string{"Belegnummer", "Datum", "Empfänger", "Verwendungszweck", "Konto", "Ausgabe"},
+		[]string{"Belegnummer", "Datum", "Lieferant", "Verwendungszweck", "Konto", "Ausgabe"},
 		[]string{"L", "L", "L", "L", "L", "R"})
 	nAus := 0
 	for _, e := range entries {
