@@ -113,13 +113,18 @@ func WriteCashReportPDF(path, company string, book CashBook, entries []CashEntry
 					maxLines = 2
 				}
 			} else { // clip to one line (e.g. the narrow Konto column)
-				for c.w > 0 && pdf.GetStringWidth(t) > c.w-pad {
-					r := []rune(t)
+				// Clip on the RAW UTF-8 text (correct rune boundaries), then
+				// translate — clipping the already-cp1252 string would split the
+				// single byte of an umlaut and render it as garbage.
+				raw := c.text
+				for c.w > 0 && pdf.GetStringWidth(tr(raw)) > c.w-pad {
+					r := []rune(raw)
 					if len(r) <= 1 {
 						break
 					}
-					t = string(r[:len(r)-1])
+					raw = string(r[:len(r)-1])
 				}
+				t = tr(raw)
 			}
 			texts[i] = t
 		}
