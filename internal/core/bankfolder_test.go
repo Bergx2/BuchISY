@@ -9,9 +9,9 @@ import (
 func TestReconcileAccountFolders(t *testing.T) {
 	accts := []BankAccount{
 		{Name: "KSKMSE ...0712 Sparkasse", FolderName: "KSMSE ...0712 Sparkasse"}, // drifted → move
-		{Name: "Wise ...9503", FolderName: "Wise ...9503"},                         // aligned → ensure only
-		{Name: "Barkasse"},                                                         // empty pointer → backfill
-		{Name: ""},                                                                 // no name → skipped
+		{Name: "Wise ...9503", FolderName: "Wise ...9503"},                        // aligned → ensure only
+		{Name: "Barkasse"}, // empty pointer → backfill
+		{Name: ""},         // no name → skipped
 	}
 	got := ReconcileAccountFolders(accts)
 	if len(got) != 3 {
@@ -92,5 +92,37 @@ func TestMoveStatementFolder_MissingSourceNoop(t *testing.T) {
 	root := t.TempDir()
 	if err := MoveStatementFolder(filepath.Join(root, "nope"), filepath.Join(root, "to")); err != nil {
 		t.Errorf("missing source should be a no-op, got %v", err)
+	}
+}
+
+// TestReconcileAndMove_RenameScenario exercises the exact orchestration
+// ensureAccountFolders performs (minus App plumbing): a renamed account whose
+// data still sits in the old folder is realigned and its pointer updated.
+func TestReconcileAndMove_RenameScenario(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "Old Name", "s.pdf"), "data")
+	accts := []BankAccount{{Name: "New Name", FolderName: "Old Name"}}
+
+	for _, act := range ReconcileAccountFolders(accts) {
+		toDir := filepath.Join(root, act.To)
+		if act.Move {
+			if err := MoveStatementFolder(filepath.Join(root, act.From), toDir); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.MkdirAll(toDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		accts[act.Index].FolderName = act.To
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "New Name", "s.pdf")); err != nil {
+		t.Errorf("statement not under new folder: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Old Name")); !os.IsNotExist(err) {
+		t.Errorf("old folder should be gone")
+	}
+	if accts[0].FolderName != "New Name" {
+		t.Errorf("FolderName = %q, want New Name", accts[0].FolderName)
 	}
 }

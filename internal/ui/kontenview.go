@@ -381,31 +381,48 @@ func (a *App) statementFolder(accountName string) string {
 	return filepath.Join(root, core.SanitizeFilename(accountName))
 }
 
-// ensureAccountFolders creates the per-account root folder for every
-// configured Zahlungskonto and migrates any legacy year subfolders
-// (created by an earlier app version) by flattening their contents
-// back into the account root. Also runs a one-time rename migration
-// for the deprecated Standard-Zahlungskonto. Idempotent.
+// ensureAccountFolders realigns every Zahlungskonto's on-disk statement folder
+// with its (possibly renamed) name, then makes sure the folder exists and
+// flattens any legacy year subfolders. The per-account FolderName pointer
+// records where the data currently lives, so a rename — via the settings UI or
+// a direct settings.json edit — moves the folder instead of orphaning it.
+// Idempotent; runs on startup and after every account save.
 func (a *App) ensureAccountFolders() {
 	if a.settings.StorageRoot == "" {
 		return
 	}
 	a.migrateLegacyDefaultBankAccount()
-	for _, ba := range a.settings.BankAccounts {
-		if ba.Name == "" {
-			continue
+
+	root := a.settings.StorageRoot
+	changed := false
+	for _, act := range core.ReconcileAccountFolders(a.settings.BankAccounts) {
+		toDir := filepath.Join(root, act.To)
+		if act.Move {
+			fromDir := filepath.Join(root, act.From)
+			if err := core.MoveStatementFolder(fromDir, toDir); err != nil {
+				if a.logger != nil {
+					a.logger.Warn("Realign account folder %s → %s failed: %v", act.From, act.To, err)
+				}
+			} else if a.logger != nil {
+				a.logger.Info("Realigned account folder: %s → %s", act.From, act.To)
+			}
 		}
-		folder := a.statementFolder(ba.Name)
-		if folder == "" {
-			continue
-		}
-		if err := os.MkdirAll(folder, 0755); err != nil {
+		if err := os.MkdirAll(toDir, 0755); err != nil {
 			if a.logger != nil {
-				a.logger.Warn("Failed to create account folder %s: %v", folder, err)
+				a.logger.Warn("Failed to create account folder %s: %v", toDir, err)
 			}
 			continue
 		}
-		a.flattenYearSubfolders(folder)
+		a.flattenYearSubfolders(toDir)
+		if a.settings.BankAccounts[act.Index].FolderName != act.To {
+			a.settings.BankAccounts[act.Index].FolderName = act.To
+			changed = true
+		}
+	}
+	if changed && a.settingsMgr != nil {
+		if err := a.settingsMgr.Save(a.settings); err != nil && a.logger != nil {
+			a.logger.Warn("Persisting account folder pointers failed: %v", err)
+		}
 	}
 }
 
@@ -441,75 +458,17 @@ func (a *App) migrateLegacyDefaultBankAccount() {
 	}
 }
 
-// renameAccountFolder moves <Storage>/<oldName>/ to <Storage>/<newName>/.
-// If the destination already exists with the same name, the source is
-// folded in (only when files don't collide). No-op if source missing.
+// renameAccountFolder moves <Storage>/<oldName>/ to <Storage>/<newName>/,
+// delegating the move/merge to core.MoveStatementFolder (simple rename, or
+// fold-in merge if the destination already exists; no-op if source missing).
 func (a *App) renameAccountFolder(oldName, newName string) {
 	oldFolder := a.statementFolder(oldName)
 	newFolder := a.statementFolder(newName)
 	if oldFolder == "" || newFolder == "" || oldFolder == newFolder {
 		return
 	}
-	srcInfo, err := os.Stat(oldFolder)
-	if err != nil || !srcInfo.IsDir() {
-		return
-	}
-
-	if _, err := os.Stat(newFolder); err != nil {
-		// Destination does not exist — simple rename.
-		if err := os.Rename(oldFolder, newFolder); err != nil && a.logger != nil {
-			a.logger.Warn("Renaming %s → %s failed: %v", oldFolder, newFolder, err)
-		} else if a.logger != nil {
-			a.logger.Info("Migrated legacy account folder: %s → %s", oldFolder, newFolder)
-		}
-		return
-	}
-
-	// Both exist — move files individually, skipping collisions.
-	if a.logger != nil {
-		a.logger.Info("Folding %s into existing %s", oldFolder, newFolder)
-	}
-	entries, _ := os.ReadDir(oldFolder)
-	for _, e := range entries {
-		src := filepath.Join(oldFolder, e.Name())
-		dst := filepath.Join(newFolder, e.Name())
-		if e.Name() == "metadata.json" {
-			// Merge metadata maps; new wins on key collision.
-			a.mergeStatementMetadata(oldFolder, newFolder)
-			_ = os.Remove(src)
-			continue
-		}
-		if _, err := os.Stat(dst); err == nil {
-			if a.logger != nil {
-				a.logger.Warn("Skip migrating %s — %s already exists", src, dst)
-			}
-			continue
-		}
-		if err := os.Rename(src, dst); err != nil && a.logger != nil {
-			a.logger.Warn("Move %s → %s failed: %v", src, dst, err)
-		}
-	}
-	_ = os.Remove(oldFolder) // only succeeds if empty
-}
-
-// mergeStatementMetadata merges oldFolder/metadata.json into the one
-// in newFolder. Existing entries in newFolder win.
-func (a *App) mergeStatementMetadata(oldFolder, newFolder string) {
-	oldMap, err := core.LoadStatementMeta(oldFolder)
-	if err != nil || len(oldMap) == 0 {
-		return
-	}
-	newMap, _ := core.LoadStatementMeta(newFolder)
-	if newMap == nil {
-		newMap = core.StatementMetadataMap{}
-	}
-	for k, v := range oldMap {
-		if _, exists := newMap[k]; !exists {
-			newMap[k] = v
-		}
-	}
-	if err := core.SaveStatementMeta(newFolder, newMap); err != nil && a.logger != nil {
-		a.logger.Warn("Merging metadata.json failed: %v", err)
+	if err := core.MoveStatementFolder(oldFolder, newFolder); err != nil && a.logger != nil {
+		a.logger.Warn("Renaming %s → %s failed: %v", oldFolder, newFolder, err)
 	}
 }
 
