@@ -17,6 +17,26 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+// confirmSwitchProfile asks before switching to another company profile and
+// saves the current profile's settings first, so an in-session switch (from the
+// Datei menu) doesn't lose the current state (e.g. window layout).
+func (a *App) confirmSwitchProfile(target string) {
+	dialog.ShowConfirm(
+		a.bundle.T("profile.switch.title"),
+		a.bundle.T("profile.switch.message", target),
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			if a.settingsMgr != nil {
+				if err := a.settingsMgr.Save(a.settings); err != nil && a.logger != nil {
+					a.logger.Warn("Saving settings before profile switch failed: %v", err)
+				}
+			}
+			a.startProfile(target)
+		}, a.window)
+}
+
 // showProfilePicker shows the profile-selection screen as the window
 // content. Window size scales with the persisted UI zoom so the picker
 // doesn't end up cramped after the user has bumped the theme scale.

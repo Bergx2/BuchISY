@@ -62,7 +62,7 @@ func (a *App) profileMenuItem() *fyne.MenuItem {
 			p := name
 			mi := fyne.NewMenuItem(p, func() {
 				if p != a.profile {
-					a.startProfile(p)
+					a.confirmSwitchProfile(p)
 				}
 			})
 			mi.Checked = p == a.profile

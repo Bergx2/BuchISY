@@ -445,6 +445,8 @@
   "menu.file": "Datei",
   "menu.switchProfile": "Profil wechseln",
   "menu.profileManage": "Profile verwalten …",
+  "profile.switch.title": "Profil wechseln",
+  "profile.switch.message": "Zu „%s“ wechseln? Der aktuelle Stand wird zuvor gespeichert.",
   "menu.edit": "Bearbeiten",
   "menu.export": "Export",
   "menu.view": "Ansicht",
