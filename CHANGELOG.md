@@ -33,7 +33,27 @@ and this project uses [semantic-ish versioning](https://semver.org/) via git tag
   algorithms) detailed enough to rebuild BuchISY on another stack with identical behavior.
 - Added this CHANGELOG.
 
+### Added
+- **Kassenbuch polish:** a newly saved cash receipt now appears immediately (the
+  view auto-refreshes and the row blinks once); a linked Belegnummer column;
+  Bar-Ausgaben laid out as aligned columns with headers; monthly Einnahmen/Ausgaben
+  totals; EUR shown on all balances; Anfangsbestand editable only behind an
+  explicit "Ändern" click; "Kassenbericht PDF" now opens the generated report.
+- **Table UX:** whole-row hover highlight with a blue outline (Belege + Konten);
+  the selected/edited row is marked; column widths are remembered across restarts.
+- **Datei → Profil wechseln:** switch company profiles from the menu (with a
+  confirm + save of the current profile).
+- **Hilfe → Über BuchISY** now shows the build's commit + date, Go version,
+  active profile and storage location.
+
 ### Fixed
+- **Bank-statement parsing:** ignore date lines outside the left date column
+  (wrapped description rows are no longer counted as bookings); pick the amount
+  column rather than a same-row running balance.
+- **Statement links** re-attach by stable identity (amount + date) instead of the
+  line index, so a parser improvement can't move a link to the wrong booking; the
+  booking cache is versioned so parser fixes reach already-imported statements.
+- **Account rename** no longer orphans a Zahlungskonto's statement folder.
 - **PDF upload freeze:** some PDFs drove the `ledongthuc/pdf` text parser into an
   unbounded-allocation loop that exhausted memory and froze the whole machine.
   Text extraction now uses go-fitz (MuPDF) only; the highlight-rectangle parse
