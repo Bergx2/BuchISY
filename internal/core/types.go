@@ -89,7 +89,8 @@ type BankAccount struct {
 	AccountType       string `json:"account_type"`       // bank | creditcard | cash
 	SettlementAccount string `json:"settlement_account"` // account that settles a credit card monthly
 	SKR04Konto        int    `json:"skr04_konto,omitempty"`
-	IsCreditCard      bool   `json:"is_credit_card"` // legacy flag, kept only for migration
+	IsCreditCard      bool   `json:"is_credit_card"`               // legacy flag, kept only for migration
+	FolderName        string `json:"folder_name,omitempty"`        // folder currently holding this account's statements ("" = uninitialised)
 }
 
 // Settings represents the application settings.
