@@ -155,6 +155,12 @@ func New(assetsDir string) (*App, error) {
 // startProfile initializes the application for the chosen profile and
 // replaces the window content with the main UI.
 func (a *App) startProfile(profile string) {
+	// Switching profiles mid-session: release the previous profile's database
+	// handle before opening the new one (no-op on first launch).
+	if a.dbRepo != nil {
+		_ = a.dbRepo.Close()
+		a.dbRepo = nil
+	}
 	a.profile = profile
 
 	configDir, err := core.GetProfileConfigDir(profile)

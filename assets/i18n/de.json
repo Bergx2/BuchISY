@@ -443,6 +443,8 @@
   "nav.verfahrensdoku": "Verfahrensdoku.",
   "nav.gobdexport": "DATEV/GoBD-Export",
   "menu.file": "Datei",
+  "menu.switchProfile": "Profil wechseln",
+  "menu.profileManage": "Profile verwalten …",
   "menu.edit": "Bearbeiten",
   "menu.export": "Export",
   "menu.view": "Ansicht",
