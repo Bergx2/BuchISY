@@ -780,6 +780,33 @@ func (it *InvoiceTable) captureColumnWidths() {
 	}
 }
 
+// applyTableWidths sets each column's width from saved settings (keyed by the
+// per-column keys), falling back to the given defaults. Shared by any table that
+// wants persisted, drag-resizable column widths.
+func applyTableWidths(t *widget.Table, keys []string, defaults []float32, saved map[string]float32) {
+	for i, k := range keys {
+		w := defaults[i]
+		if v, ok := saved[k]; ok && v > 0 {
+			w = v
+		}
+		t.SetColumnWidth(i, w)
+	}
+}
+
+// captureTableWidths reads a table's current (possibly dragged) column widths and
+// stores them into dst keyed by the per-column keys. No-op on any failure.
+func captureTableWidths(t *widget.Table, keys []string, dst map[string]float32) {
+	if t == nil || dst == nil {
+		return
+	}
+	w := readTableColumnWidths(t)
+	for i, k := range keys {
+		if v, ok := w[i]; ok && v > 0 {
+			dst[k] = v
+		}
+	}
+}
+
 // readTableColumnWidths returns a copy of a Fyne table's per-column width map
 // (keyed by column index). Fyne exposes no public getter, so it reads the
 // unexported field via reflection; it returns nil on any failure so a future

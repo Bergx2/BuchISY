@@ -67,14 +67,15 @@ type App struct {
 	// Main-view mode: "" / "belege" → invoice table (default), "konten"
 	// → bank-statement browser per Zahlungskonto, "kassenbuch" → cash book.
 	viewMode      string
-	kontenAccount string // currently selected Zahlungskonto in Konten view
-	kontenSortCol string // sort column key for the Konten table
-	kontenSortAsc bool   // sort direction
-	cashWholeYear bool   // Kassenbuch view: true → year overview, false → single month
-	cashFlash     string // Dateiname of a just-saved cash receipt to blink once in the cash book
-	cashAccount   string // selected Barkasse in the cash book, preserved across rebuilds
-	cashSortCol   string // Kassenbuch Bar-Ausgaben sort column: belegnr|datum|beschreibung|ausgabe
-	cashSortAsc   bool   // Kassenbuch Bar-Ausgaben sort direction
+	kontenAccount string        // currently selected Zahlungskonto in Konten view
+	kontenSortCol string        // sort column key for the Konten table
+	kontenSortAsc bool          // sort direction
+	cashWholeYear bool          // Kassenbuch view: true → year overview, false → single month
+	cashFlash     string        // Dateiname of a just-saved cash receipt to blink once in the cash book
+	cashAccount   string        // selected Barkasse in the cash book, preserved across rebuilds
+	cashSortCol   string        // Kassenbuch Bar-Ausgaben sort column: belegnr|datum|beschreibung|buchungskonto|ausgabe
+	cashSortAsc   bool          // Kassenbuch Bar-Ausgaben sort direction
+	cashTable     *widget.Table // current Bar-Ausgaben table, for column-width capture
 
 	// Batch entry queue (E17.3): sequential processing of multiple files.
 	pendingFiles    []string
@@ -675,6 +676,12 @@ func (a *App) saveWindowState() {
 	a.settings.WindowWidth = int(size.Width)
 	a.settings.WindowHeight = int(size.Height)
 	a.invoiceTable.captureColumnWidths() // persist any dragged column widths
+	if a.cashTable != nil {              // same for the Kassenbuch table
+		if a.settings.ColumnWidths == nil {
+			a.settings.ColumnWidths = map[string]float32{}
+		}
+		captureTableWidths(a.cashTable, cashColKeys, a.settings.ColumnWidths)
+	}
 
 	if err := a.settingsMgr.Save(a.settings); err != nil {
 		a.logger.Warn("Failed to save window state: %v", err)
