@@ -96,6 +96,26 @@ func TestBookingsFromPageHTML_SkipsDetailColumnDates(t *testing.T) {
 	}
 }
 
+// balanceColumnPageHTML has a transaction row carrying BOTH the amount and a
+// running balance further right. The parser must pick the amount (leftmost money
+// run in the right region), not the balance.
+const balanceColumnPageHTML = `<!DOCTYPE html><html><body>
+<div id="page0" style="width:595.3pt;height:841.9pt">
+<p style="top:351.9pt;left:69.9pt"><span>02.01.2025 Zahlungseingang</span></p>
+<p style="top:351.9pt;left:450.0pt"><span>1.520,25</span></p>
+<p style="top:351.9pt;left:520.0pt"><span>34.337,91</span></p>
+</div></body></html>`
+
+func TestBookingsFromPageHTML_PicksAmountNotBalance(t *testing.T) {
+	got := bookingsFromPageHTML(balanceColumnPageHTML, 0)
+	if len(got) != 1 {
+		t.Fatalf("want 1 booking, got %d: %+v", len(got), got)
+	}
+	if got[0].Betrag != 1520.25 {
+		t.Errorf("betrag = %.2f, want 1520.25 (amount, not the 34337.91 balance)", got[0].Betrag)
+	}
+}
+
 func TestBookingsFromPageHTML_AmountOnSeparateRun(t *testing.T) {
 	got := bookingsFromPageHTML(amountRunPageHTML, 0)
 	if len(got) != 2 {

@@ -321,10 +321,11 @@ func bookingsFromPageHTML(pageHTML string, page int) []StatementBooking {
 		credit := ParseLineIsCredit(ln.text)
 		// Many statements (e.g. Sparkasse) print the amount as a separate
 		// right-aligned run on the SAME row as the date line, so the date line's
-		// own text carries no amount. When that's the case, adopt the rightmost
-		// money run sharing this row (running-balance rows sit on their own,
-		// Kontostand-labelled rows, so they don't collide). The amount's leading
-		// "-" marks a debit; a trailing H/+ (or a credit keyword) marks a credit.
+		// own text carries no amount. When that's the case, adopt the LEFTMOST
+		// money run to the right of the description: the transaction amount sits
+		// in the amount column; a running balance, when a statement prints one on
+		// the same row, sits further right and must be ignored. The amount's
+		// leading "-" marks a debit; a trailing H/+ (or a credit keyword) a credit.
 		if betrag == 0 {
 			bestLeft := -1.0
 			for _, ar := range lines {
@@ -334,8 +335,8 @@ func bookingsFromPageHTML(pageHTML string, page int) []StatementBooking {
 				if ar.left <= ln.left+100 {
 					continue // must sit well to the right of the date/description
 				}
-				if !lineAmountRe.MatchString(ar.text) || ar.left <= bestLeft {
-					continue
+				if !lineAmountRe.MatchString(ar.text) || (bestLeft >= 0 && ar.left >= bestLeft) {
+					continue // keep the leftmost qualifying money run
 				}
 				if v := ParseLineAmount(ar.text); v != 0 {
 					bestLeft = ar.left
